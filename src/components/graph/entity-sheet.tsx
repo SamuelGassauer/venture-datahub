@@ -267,19 +267,6 @@ type RoundRow = {
   articles: { url: string | null; title: string | null; publishedAt: unknown }[];
 };
 
-function InfoRow({ label, value, missing }: { label: string; value: React.ReactNode; missing?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-2 py-1.5 text-sm">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      {missing ? (
-        <span className="text-muted-foreground/40 text-xs italic">missing</span>
-      ) : (
-        <span className="text-right font-medium">{value}</span>
-      )}
-    </div>
-  );
-}
-
 function LockableInfoRow({
   label,
   field,

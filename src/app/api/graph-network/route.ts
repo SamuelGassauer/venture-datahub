@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       nodes: Array.from(nodesMap.values()),
       edges,
     } satisfies GraphNetworkResponse);
-  } catch (error) {
+  } catch {
     // Fallback: if APOC is not available, use simple queries
     try {
       const fallbackResult = await session.run(`
