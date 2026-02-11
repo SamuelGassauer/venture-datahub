@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rss
+      POSTGRES_PASSWORD: rss_secret
+      POSTGRES_DB: rss_scraper
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rss -d rss_scraper"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://rss:rss_secret@db:5432/rss_scraper
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://rss:rss_secret@db:5432/rss_scraper
+      NODE_ENV: production
+      SYNC_INTERVAL_MINUTES: "30"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

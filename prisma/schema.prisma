@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now()) @map("created_at")
+  feeds     Feed[]
+
+  @@map("categories")
+}
+
+model Feed {
+  id            String    @id @default(cuid())
+  title         String
+  url           String    @unique
+  siteUrl       String?   @map("site_url")
+  description   String?
+  categoryId    String?   @map("category_id")
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  isActive      Boolean   @default(true) @map("is_active")
+  syncInterval  Int       @default(30) @map("sync_interval")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  lastSyncError String?   @map("last_sync_error")
+  articleCount  Int       @default(0) @map("article_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  articles      Article[]
+  syncLogs      SyncLog[]
+
+  @@map("feeds")
+}
+
+model Article {
+  id           String        @id @default(cuid())
+  feedId       String        @map("feed_id")
+  feed         Feed          @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  title        String
+  url          String        @unique
+  author       String?
+  content      String?
+  summary      String?
+  imageUrl     String?       @map("image_url")
+  publishedAt  DateTime?     @map("published_at")
+  isRead       Boolean       @default(false) @map("is_read")
+  isBookmarked Boolean       @default(false) @map("is_bookmarked")
+  guid         String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  fundingRound FundingRound?
+
+  @@index([feedId, publishedAt(sort: Desc)])
+  @@index([isBookmarked])
+  @@index([publishedAt(sort: Desc)])
+  @@map("articles")
+}
+
+model FundingRound {
+  id          String   @id @default(cuid())
+  articleId   String   @unique @map("article_id")
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  companyName String   @map("company_name")
+  amount      Float?
+  currency    String   @default("USD")
+  amountUsd   Float?   @map("amount_usd")
+  stage       String?
+  investors   String[]
+  leadInvestor String? @map("lead_investor")
+  country     String?
+  confidence  Float    @default(0)
+  rawExcerpt  String?  @map("raw_excerpt")
+  ingestedAt  DateTime? @map("ingested_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([stage])
+  @@index([country])
+  @@index([createdAt(sort: Desc)])
+  @@map("funding_rounds")
+}
+
+model SyncLog {
+  id            String   @id @default(cuid())
+  feedId        String   @map("feed_id")
+  feed          Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  status        String   // "success" | "error"
+  articlesFound Int      @default(0) @map("articles_found")
+  articlesNew   Int      @default(0) @map("articles_new")
+  fundingFound  Int      @default(0) @map("funding_found")
+  errorMessage  String?  @map("error_message")
+  durationMs    Int      @default(0) @map("duration_ms")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([feedId, createdAt(sort: Desc)])
+  @@map("sync_logs")
+}
+
+model AppSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  @@map("app_settings")
+}
+
+model Post {
+  id              String   @id @default(cuid())
+  fundingRoundKey String   @unique @map("funding_round_key")
+  companyName     String   @map("company_name")
+  amountEur       Float?   @map("amount_eur")
+  stage           String?
+  content         String
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([companyName])
+  @@index([createdAt(sort: Desc)])
+  @@map("posts")
+}
