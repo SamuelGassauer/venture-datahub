@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>EU Startup Funding Feeds</title>
+    <dateCreated>2026-02-11</dateCreated>
+  </head>
+  <body>
+    <outline text="EU Funding Rounds" title="EU Funding Rounds">
+
+      <!-- Major Tech/VC News -->
+      <outline type="rss" text="TechCrunch" title="TechCrunch" xmlUrl="https://techcrunch.com/feed/" htmlUrl="https://techcrunch.com"/>
+      <outline type="rss" text="TechCrunch - Venture" title="TechCrunch - Venture" xmlUrl="https://techcrunch.com/category/venture/feed/" htmlUrl="https://techcrunch.com/category/venture/"/>
+      <outline type="rss" text="Sifted" title="Sifted" xmlUrl="https://sifted.eu/feed" htmlUrl="https://sifted.eu"/>
+      <outline type="rss" text="Tech.eu" title="Tech.eu" xmlUrl="https://tech.eu/feed" htmlUrl="https://tech.eu"/>
+      <outline type="rss" text="EU-Startups" title="EU-Startups" xmlUrl="https://www.eu-startups.com/feed/" htmlUrl="https://www.eu-startups.com"/>
+      <outline type="rss" text="ArcticStartup" title="ArcticStartup" xmlUrl="https://arcticstartup.com/feed/" htmlUrl="https://arcticstartup.com"/>
+      <outline type="rss" text="Silicon Canals" title="Silicon Canals" xmlUrl="https://siliconcanals.com/feed/" htmlUrl="https://siliconcanals.com"/>
+      <outline type="rss" text="UKTN" title="UKTN" xmlUrl="https://www.uktech.news/feed" htmlUrl="https://www.uktech.news"/>
+      <outline type="rss" text="Tech Funding News" title="Tech Funding News" xmlUrl="https://techfundingnews.com/feed/" htmlUrl="https://techfundingnews.com"/>
+
+      <!-- DACH Region -->
+      <outline type="rss" text="Deutsche Startups" title="Deutsche Startups" xmlUrl="https://www.deutsche-startups.de/feed/" htmlUrl="https://www.deutsche-startups.de"/>
+      <outline type="rss" text="Gruenderszene" title="Gruenderszene" xmlUrl="https://www.businessinsider.de/gruenderszene/feed/" htmlUrl="https://www.businessinsider.de/gruenderszene/"/>
+      <outline type="rss" text="t3n" title="t3n" xmlUrl="https://t3n.de/rss.xml" htmlUrl="https://t3n.de"/>
+      <outline type="rss" text="Trending Topics" title="Trending Topics" xmlUrl="https://www.trendingtopics.eu/feed/" htmlUrl="https://www.trendingtopics.eu"/>
+      <outline type="rss" text="Startupticker.ch" title="Startupticker.ch" xmlUrl="https://www.startupticker.ch/index/rss.xml" htmlUrl="https://www.startupticker.ch"/>
+      <outline type="rss" text="Berlin Valley" title="Berlin Valley" xmlUrl="https://berlinvalley.com/feed/" htmlUrl="https://berlinvalley.com"/>
+
+      <!-- France -->
+      <outline type="rss" text="Maddyness" title="Maddyness" xmlUrl="https://www.maddyness.com/feed/" htmlUrl="https://www.maddyness.com"/>
+      <outline type="rss" text="La French Tech Journal" title="La French Tech Journal" xmlUrl="https://lafrenchtech.com/en/feed/" htmlUrl="https://lafrenchtech.com"/>
+
+      <!-- Nordics -->
+      <outline type="rss" text="The Nordic Web" title="The Nordic Web" xmlUrl="https://thenordicweb.com/feed/" htmlUrl="https://thenordicweb.com"/>
+
+      <!-- Spain / Southern Europe -->
+      <outline type="rss" text="Novobrief" title="Novobrief" xmlUrl="https://novobrief.com/feed/" htmlUrl="https://novobrief.com"/>
+
+      <!-- CEE -->
+      <outline type="rss" text="The Recursive" title="The Recursive" xmlUrl="https://therecursive.com/feed/" htmlUrl="https://therecursive.com"/>
+
+      <!-- Global VC / Deals -->
+      <outline type="rss" text="Crunchbase News" title="Crunchbase News" xmlUrl="https://news.crunchbase.com/feed/" htmlUrl="https://news.crunchbase.com"/>
+      <outline type="rss" text="PitchBook Blog" title="PitchBook Blog" xmlUrl="https://pitchbook.com/blog/rss" htmlUrl="https://pitchbook.com/blog"/>
+      <outline type="rss" text="Dealroom Blog" title="Dealroom Blog" xmlUrl="https://dealroom.co/blog/feed" htmlUrl="https://dealroom.co/blog"/>
+      <outline type="rss" text="FinSMEs" title="FinSMEs" xmlUrl="https://www.finsmes.com/feed" htmlUrl="https://www.finsmes.com"/>
+      <outline type="rss" text="FINSIDER" title="FINSIDER" xmlUrl="https://finsider.de/feed/" htmlUrl="https://finsider.de"/>
+      <outline type="rss" text="AltFi" title="AltFi" xmlUrl="https://www.altfi.com/rss" htmlUrl="https://www.altfi.com"/>
+
+      <!-- Sector-Specific -->
+      <outline type="rss" text="HealthTech Nordic" title="HealthTech Nordic" xmlUrl="https://healthtechnordic.com/feed/" htmlUrl="https://healthtechnordic.com"/>
+      <outline type="rss" text="FinTech Futures" title="FinTech Futures" xmlUrl="https://www.fintechfutures.com/feed/" htmlUrl="https://www.fintechfutures.com"/>
+      <outline type="rss" text="CleanTechnica" title="CleanTechnica" xmlUrl="https://cleantechnica.com/feed/" htmlUrl="https://cleantechnica.com"/>
+      <outline type="rss" text="Charged EVs" title="Charged EVs" xmlUrl="https://chargedevs.com/feed/" htmlUrl="https://chargedevs.com"/>
+      <outline type="rss" text="CTVC (Climate Tech VC)" title="CTVC (Climate Tech VC)" xmlUrl="https://www.ctvc.co/rss/" htmlUrl="https://www.ctvc.co"/>
+      <outline type="rss" text="Atomico Blog" title="Atomico Blog" xmlUrl="https://atomico.com/insights/rss.xml" htmlUrl="https://atomico.com/insights"/>
+      <outline type="rss" text="Speedinvest Blog" title="Speedinvest Blog" xmlUrl="https://www.speedinvest.com/blog/rss.xml" htmlUrl="https://www.speedinvest.com/blog"/>
+
+    </outline>
+  </body>
+</opml>

@@ -16,6 +16,7 @@ import {
   Users,
   CircleDollarSign,
   FileText,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/ontology", label: "Ontology", icon: GitFork },
       { href: "/graphrag", label: "GraphRAG Guide", icon: BookOpen },
+      { href: "/algorithms", label: "Algorithmen", icon: Shield },
     ],
   },
 ];
