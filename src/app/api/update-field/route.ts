@@ -3,6 +3,7 @@ import driver from "@/lib/neo4j";
 import { requireAdmin } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const ALLOWED_FIELDS = new Set([
   "description",

@@ -3,6 +3,8 @@ import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
 
+export const dynamic = "force-dynamic";
+
 const INVENTURE_API_URL =
   process.env.INVENTURE_API_URL || "https://www.inventure.capital";
 const INVENTURE_API_KEY = process.env.INVENTURE_API_KEY || "";

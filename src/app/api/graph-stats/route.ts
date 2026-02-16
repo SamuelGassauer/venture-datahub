@@ -3,6 +3,8 @@ import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/api-auth";
 
+export const dynamic = "force-dynamic";
+
 function toNumber(value: unknown): unknown {
   return typeof value === "object" && value !== null && "toNumber" in value
     ? (value as { toNumber(): number }).toNumber()

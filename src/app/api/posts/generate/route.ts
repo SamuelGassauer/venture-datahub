@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { generatePost, fmtEur, convertToEur } from "@/lib/post-generator";
 import { requireAdmin } from "@/lib/api-auth";
 
+export const dynamic = "force-dynamic";
+
 function toNumber(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === "number") return value;
