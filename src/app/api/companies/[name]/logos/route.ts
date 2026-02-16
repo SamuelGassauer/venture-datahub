@@ -9,6 +9,7 @@ import {
 } from "@/lib/company-enricher";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function POST(request: NextRequest, _ctx: { params: Promise<{ name: string }> }) {
