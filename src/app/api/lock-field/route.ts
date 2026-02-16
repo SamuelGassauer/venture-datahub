@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     const label = entityType === "investor" ? "InvestorOrg" : "Company";
-    const session = driver.session();
+    const session = driver().session();
 
     try {
       if (locked) {

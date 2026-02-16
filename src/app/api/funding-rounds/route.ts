@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status") ?? "all";
   const since = searchParams.get("since");
 
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)

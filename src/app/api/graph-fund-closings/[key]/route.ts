@@ -14,7 +14,7 @@ export async function DELETE(
   const { key } = await params;
   const fundKey = decodeURIComponent(key);
 
-  const session = driver.session();
+  const session = driver().session();
   try {
     const result = await session.run(
       `MATCH (f:Fund { fundKey: $key }) DETACH DELETE f RETURN count(f) AS deleted`,

@@ -57,7 +57,7 @@ function getClient(): Anthropic {
 // ---------------------------------------------------------------------------
 
 async function loadArticles(normalizedName: string): Promise<ArticleRow[]> {
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(
       `MATCH (inv:InvestorOrg {normalizedName: $norm})-[:PARTICIPATED_IN]->(fr:FundingRound)-[:SOURCED_FROM]->(a:Article)
@@ -403,7 +403,7 @@ async function saveToGraph(
   articles: ArticleRow[],
   logoUrl: string | null
 ): Promise<string[]> {
-  const session = driver.session();
+  const session = driver().session();
   const updated: string[] = [];
 
   try {
@@ -531,7 +531,7 @@ export async function enrichInvestor(
 
   // Skip if recently enriched with key fields populated
   {
-    const checkSession = driver.session({ defaultAccessMode: "READ" });
+    const checkSession = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await checkSession.run(
         `MATCH (inv:InvestorOrg {normalizedName: $norm})
@@ -586,7 +586,7 @@ export async function enrichInvestor(
   onProgress({ stage: "website", message: "Checking investor website..." });
 
   let websiteUrl: string | null = null;
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(
       `MATCH (inv:InvestorOrg {normalizedName: $norm}) RETURN inv.website AS website LIMIT 1`,
@@ -622,7 +622,7 @@ export async function enrichInvestor(
       } else {
         onProgress({ stage: "website", message: `${getDomain(websiteUrl)} doesn't match — re-discovering...`, detail: `Stored website rejected: ${verification.reason}. Clearing from Neo4j.` });
         websiteUrl = null;
-        const clearSession = driver.session();
+        const clearSession = driver().session();
         try {
           await clearSession.run(
             `MATCH (inv:InvestorOrg {normalizedName: $norm})

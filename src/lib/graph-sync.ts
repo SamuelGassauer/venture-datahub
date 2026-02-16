@@ -103,7 +103,7 @@ export type SingleRoundData = {
 };
 
 export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<GraphSyncSummary> {
-  const session = driver.session();
+  const session = driver().session();
   const nodes: string[] = [];
   const edgeLabels: string[] = [];
 
@@ -262,7 +262,7 @@ export type SingleFundEventData = {
 };
 
 export async function syncSingleFundEventToGraph(data: SingleFundEventData): Promise<GraphSyncSummary> {
-  const session = driver.session();
+  const session = driver().session();
   const nodes: string[] = [];
   const edgeLabels: string[] = [];
 
@@ -365,7 +365,7 @@ export type SingleValueData = {
 };
 
 export async function syncSingleValueToGraph(data: SingleValueData): Promise<GraphSyncSummary> {
-  const session = driver.session();
+  const session = driver().session();
   const nodes: string[] = [];
   const edgeLabels: string[] = [];
 
@@ -496,7 +496,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
     }
   }
 
-  const session = driver.session();
+  const session = driver().session();
   let edgeCount = 0;
 
   try {

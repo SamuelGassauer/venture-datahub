@@ -33,7 +33,7 @@ export type GraphNetworkResponse = {
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const { searchParams } = request.nextUrl;
     const center = searchParams.get("center");

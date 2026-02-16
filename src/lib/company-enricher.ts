@@ -50,7 +50,7 @@ function getClient(): Anthropic {
 // ---------------------------------------------------------------------------
 
 async function loadArticles(normalizedName: string): Promise<ArticleRow[]> {
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(
       `MATCH (c:Company {normalizedName: $norm})-[:RAISED]->(fr:FundingRound)-[:SOURCED_FROM]->(a:Article)
@@ -1686,7 +1686,7 @@ async function saveToGraph(
   articles: ArticleRow[],
   logoUrl: string | null
 ): Promise<string[]> {
-  const session = driver.session();
+  const session = driver().session();
   const updated: string[] = [];
 
   try {
@@ -1807,7 +1807,7 @@ export async function enrichCompany(
 
   // Skip if recently enriched with key fields populated
   {
-    const checkSession = driver.session({ defaultAccessMode: "READ" });
+    const checkSession = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await checkSession.run(
         `MATCH (c:Company {normalizedName: $norm})
@@ -1863,7 +1863,7 @@ export async function enrichCompany(
 
   // Get current website from Neo4j
   let websiteUrl: string | null = null;
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(
       `MATCH (c:Company {normalizedName: $norm}) RETURN c.website AS website LIMIT 1`,
@@ -1918,7 +1918,7 @@ export async function enrichCompany(
         });
         websiteUrl = null;
         // Clear wrong website from Neo4j
-        const clearSession = driver.session();
+        const clearSession = driver().session();
         try {
           await clearSession.run(
             `MATCH (c:Company {normalizedName: $norm})
@@ -1933,7 +1933,7 @@ export async function enrichCompany(
       // Website unreachable — clear from Neo4j and re-discover
       onProgress({ stage: "website", message: `${getDomain(websiteUrl)} unreachable — re-discovering...` });
       websiteUrl = null;
-      const clearSession = driver.session();
+      const clearSession = driver().session();
       try {
         await clearSession.run(
           `MATCH (c:Company {normalizedName: $norm})

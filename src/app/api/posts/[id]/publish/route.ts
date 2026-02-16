@@ -30,7 +30,7 @@ export async function POST(
     const neo4jId = parseInt(parts[parts.length - 1], 10);
 
     // Fetch company + investor data from Neo4j
-    const session = driver.session({ defaultAccessMode: "READ" });
+    const session = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await session.run(
         `

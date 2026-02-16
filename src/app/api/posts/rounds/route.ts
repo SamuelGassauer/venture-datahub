@@ -36,7 +36,7 @@ export type RoundWithPostStatus = {
 export async function GET() {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)

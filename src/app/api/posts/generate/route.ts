@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const parts = roundKey.split("_");
     const neo4jId = parseInt(parts[parts.length - 1], 10);
 
-    const session = driver.session({ defaultAccessMode: "READ" });
+    const session = driver().session({ defaultAccessMode: "READ" });
     try {
       // Fetch the specific funding round + company data
       const result = await session.run(

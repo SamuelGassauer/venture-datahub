@@ -14,7 +14,7 @@ export async function DELETE(
   const { name } = await params;
   const companyName = decodeURIComponent(name);
 
-  const session = driver.session();
+  const session = driver().session();
   try {
     // Delete the company node and all its relationships
     const result = await session.run(

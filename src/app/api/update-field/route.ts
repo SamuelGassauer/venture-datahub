@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     const label = entityType === "investor" ? "InvestorOrg" : "Company";
     const isEmpty = value === null || value === undefined || value === "";
-    const session = driver.session();
+    const session = driver().session();
 
     try {
       if (isEmpty) {

@@ -24,7 +24,7 @@ function parseRecords(records: import("neo4j-driver").Record[]) {
 export async function GET() {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
       MATCH (inv:InvestorOrg)-[p:PARTICIPATED_IN]->(fr:FundingRound)

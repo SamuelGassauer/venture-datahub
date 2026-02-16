@@ -22,7 +22,7 @@ function parseRecords(records: import("neo4j-driver").Record[]) {
 }
 
 async function runQuery(query: string, params?: Record<string, unknown>) {
-  const session = driver.session({ defaultAccessMode: "READ" });
+  const session = driver().session({ defaultAccessMode: "READ" });
   try {
     return await session.run(query, params);
   } finally {

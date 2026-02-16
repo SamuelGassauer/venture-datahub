@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = driver.session({ defaultAccessMode: "READ" });
+    const session = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await session.run(query);
       const records = result.records.map((record) => {
