@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { extractFunding } from "@/lib/funding-extractor";
+import { requireAdmin } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     // Delete all existing funding rounds
     await prisma.fundingRound.deleteMany();

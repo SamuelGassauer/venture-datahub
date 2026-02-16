@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const [
     totalFeeds,
     totalArticles,

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -22,6 +23,7 @@ import {
   Check,
   Loader2,
   Upload,
+  Ban,
 } from "lucide-react";
 import type { GroupedRound } from "@/app/api/funding/grouped/route";
 
@@ -123,6 +125,9 @@ export default function FundingPage() {
   const [ingesting, setIngesting] = useState<Set<string>>(new Set());
   const [ingestResults, setIngestResults] = useState<Map<string, PipelineResult>>(new Map());
   const [ingestErrors, setIngestErrors] = useState<Map<string, string>>(new Map());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkIngesting, setBulkIngesting] = useState(false);
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set());
 
   const loadRounds = useCallback(async () => {
     setLoading(true);
@@ -166,6 +171,24 @@ export default function FundingPage() {
     });
   }
 
+  function toggleSelect(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const pending = rounds.filter((r) => !r.ingestedAt && !r.dismissedAt);
+    if (selected.size === pending.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(pending.map((r) => r.key)));
+    }
+  }
+
   async function handleIngest(round: GroupedRound) {
     setIngesting((prev) => new Set(prev).add(round.key));
     setIngestErrors((prev) => { const next = new Map(prev); next.delete(round.key); return next; });
@@ -189,7 +212,17 @@ export default function FundingPage() {
         setIngestResults((prev) => new Map(prev).set(round.key, json.pipeline as PipelineResult));
         setExpanded((prev) => new Set(prev).add(round.key));
       }
-      await loadRounds();
+      // Update local state instead of reloading
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.key === round.key ? { ...r, ingestedAt: new Date().toISOString() } : r
+        )
+      );
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(round.key);
+        return next;
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Network error";
       console.error("Ingest error:", e);
@@ -200,6 +233,51 @@ export default function FundingPage() {
         next.delete(round.key);
         return next;
       });
+    }
+  }
+
+  async function handleBulkIngest() {
+    setBulkIngesting(true);
+    const selectedRounds = rounds.filter((r) => selected.has(r.key) && !r.ingestedAt);
+    for (const round of selectedRounds) {
+      await handleIngest(round);
+    }
+    setBulkIngesting(false);
+  }
+
+  async function handleDismiss(round: GroupedRound) {
+    setDismissing((prev) => new Set(prev).add(round.key));
+    try {
+      const articleIds = round.sources.map((s) => s.articleId);
+      const res = await fetch("/api/funding/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleIds }),
+      });
+      if (!res.ok) {
+        console.error("Dismiss failed:", await res.text());
+        return;
+      }
+      // Remove from local state instead of reloading
+      setRounds((prev) => prev.filter((r) => r.key !== round.key));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(round.key);
+        return next;
+      });
+    } finally {
+      setDismissing((prev) => {
+        const next = new Set(prev);
+        next.delete(round.key);
+        return next;
+      });
+    }
+  }
+
+  async function handleBulkDismiss() {
+    const selectedRounds = rounds.filter((r) => selected.has(r.key) && !r.dismissedAt);
+    for (const round of selectedRounds) {
+      await handleDismiss(round);
     }
   }
 
@@ -219,6 +297,9 @@ export default function FundingPage() {
       }`}
     />
   );
+
+  const pendingRounds = rounds.filter((r) => !r.ingestedAt && !r.dismissedAt);
+  const allPendingSelected = pendingRounds.length > 0 && selected.size === pendingRounds.length;
 
   return (
     <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
@@ -262,7 +343,7 @@ export default function FundingPage() {
         </div>
       </div>
 
-      {/* Status-Bar */}
+      {/* Status-Bar + Bulk Actions */}
       {!loading && rounds.length > 0 && (
         <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 px-1">
           <span className="tabular-nums">
@@ -277,6 +358,30 @@ export default function FundingPage() {
             </div>
             <span className="tabular-nums text-[10px]">{ingestPct}%</span>
           </div>
+          {selected.size > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-foreground font-medium">{selected.size} selected</span>
+              <button
+                onClick={handleBulkIngest}
+                disabled={bulkIngesting}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+              >
+                {bulkIngesting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Upload className="h-3 w-3" />
+                )}
+                Sync to Neo4j
+              </button>
+              <button
+                onClick={handleBulkDismiss}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+              >
+                <Ban className="h-3 w-3" />
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -296,6 +401,13 @@ export default function FundingPage() {
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[32px] text-xs px-1">
+                  <Checkbox
+                    checked={allPendingSelected}
+                    onCheckedChange={toggleSelectAll}
+                    className="h-3.5 w-3.5"
+                  />
+                </TableHead>
                 <TableHead className="w-[24px] text-xs"></TableHead>
                 <TableHead
                   className="cursor-pointer text-xs font-semibold"
@@ -330,23 +442,33 @@ export default function FundingPage() {
                 >
                   Seen <SortIcon field="lastSeen" />
                 </TableHead>
-                <TableHead className="w-[52px] text-xs font-semibold text-center">Neo4j</TableHead>
+                <TableHead className="w-[72px] text-xs font-semibold text-center">Neo4j</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rounds.map((round) => {
                 const isExpanded = expanded.has(round.key);
+                const isSelected = selected.has(round.key);
                 const pipelineResult = ingestResults.get(round.key);
                 return (
                   <Fragment key={round.key}>
                     <TableRow
                       className={`cursor-pointer text-xs ${
-                        round.sourceCount > 1 ? "bg-emerald-500/[0.04]" : ""
+                        isSelected ? "bg-blue-500/10" : round.sourceCount > 1 ? "bg-emerald-500/[0.04]" : ""
                       } ${isExpanded ? "bg-accent/50" : ""} ${
                         round.ingestedAt ? "opacity-45" : ""
                       }`}
                       onClick={() => toggleExpand(round.key)}
                     >
+                      <TableCell className="py-1.5 px-1 text-center" onClick={(e) => e.stopPropagation()}>
+                        {!round.ingestedAt && !round.dismissedAt && (
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelect(round.key)}
+                            className="h-3.5 w-3.5"
+                          />
+                        )}
+                      </TableCell>
                       <TableCell className="py-1.5 px-1 text-center">
                         {round.sourceCount > 1 || ingestResults.has(round.key) ? (
                           isExpanded ? (
@@ -399,28 +521,43 @@ export default function FundingPage() {
                       <TableCell className="py-1.5 px-2 tabular-nums text-muted-foreground whitespace-nowrap">
                         {fmtTime(round.lastSeen)}
                       </TableCell>
-                      <TableCell className="py-1.5 px-2 text-center">
-                        {round.ingestedAt ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
-                        ) : ingesting.has(round.key) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground mx-auto" />
-                        ) : ingestErrors.has(round.key) ? (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleIngest(round); }}
-                            className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                            title={ingestErrors.get(round.key)}
-                          >
-                            <Upload className="h-3 w-3" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleIngest(round); }}
-                            className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                            title="Einlesen in Neo4j"
-                          >
-                            <Upload className="h-3 w-3" />
-                          </button>
-                        )}
+                      <TableCell className="py-1.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          {round.ingestedAt ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+                          ) : ingesting.has(round.key) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          ) : ingestErrors.has(round.key) ? (
+                            <button
+                              onClick={() => handleIngest(round)}
+                              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                              title={ingestErrors.get(round.key)}
+                            >
+                              <Upload className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleIngest(round)}
+                              className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                              title="Sync to Neo4j"
+                            >
+                              <Upload className="h-3 w-3" />
+                            </button>
+                          )}
+                          {!round.ingestedAt && !round.dismissedAt && (
+                            dismissing.has(round.key) ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                            ) : (
+                              <button
+                                onClick={() => handleDismiss(round)}
+                                className="inline-flex items-center rounded p-0.5 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Dismiss"
+                              >
+                                <Ban className="h-3 w-3" />
+                              </button>
+                            )
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                     {/* Expanded source rows */}
@@ -429,6 +566,7 @@ export default function FundingPage() {
                         key={`${round.key}-${i}`}
                         className="text-xs bg-muted/30 hover:bg-muted/50"
                       >
+                        <TableCell className="py-1 px-1"></TableCell>
                         <TableCell className="py-1 px-1"></TableCell>
                         <TableCell className="py-1 px-2 pl-6" colSpan={2}>
                           <div className="flex items-center gap-2">
@@ -463,7 +601,7 @@ export default function FundingPage() {
                     {/* Pipeline Panel */}
                     {isExpanded && pipelineResult && (
                       <TableRow key={`${round.key}-pipeline`} className="text-xs hover:bg-transparent">
-                        <TableCell colSpan={10} className="py-2 px-2">
+                        <TableCell colSpan={11} className="py-2 px-2">
                           <div className="flex items-start gap-2">
                             {/* Input Card */}
                             <div className="flex-1 rounded border border-border bg-muted/40 p-2 min-w-0">

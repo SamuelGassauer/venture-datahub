@@ -48,8 +48,11 @@ async function ensureConstraints(session: Session) {
     "CREATE CONSTRAINT company_name IF NOT EXISTS FOR (c:Company) REQUIRE c.normalizedName IS UNIQUE",
     "CREATE CONSTRAINT investor_name IF NOT EXISTS FOR (i:InvestorOrg) REQUIRE i.normalizedName IS UNIQUE",
     "CREATE CONSTRAINT funding_round_key IF NOT EXISTS FOR (f:FundingRound) REQUIRE f.roundKey IS UNIQUE",
+    "CREATE CONSTRAINT fund_key IF NOT EXISTS FOR (f:Fund) REQUIRE f.fundKey IS UNIQUE",
+    "CREATE CONSTRAINT valuation_key IF NOT EXISTS FOR (v:Valuation) REQUIRE v.valuationKey IS UNIQUE",
     "CREATE CONSTRAINT article_url IF NOT EXISTS FOR (a:Article) REQUIRE a.url IS UNIQUE",
     "CREATE CONSTRAINT location_name IF NOT EXISTS FOR (l:Location) REQUIRE l.name IS UNIQUE",
+    "CREATE INDEX company_sector IF NOT EXISTS FOR (c:Company) ON (c.sector)",
   ];
   for (const cypher of constraints) {
     await session.run(cypher);
@@ -229,6 +232,201 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
 
     if (participatedCount > 0) {
       edgeLabels.push(`PARTICIPATED_IN x${participatedCount}`);
+    }
+  } finally {
+    await session.close();
+  }
+
+  return { nodes, edges: edgeLabels };
+}
+
+// ============================================================================
+// SINGLE FUND-EVENT SYNC (for per-event ingest button)
+// ============================================================================
+
+export type SingleFundEventData = {
+  firmName: string;
+  fundName: string;
+  amountUsd: number | null;
+  fundType: string | null;
+  vintage: string | null;
+  country: string | null;
+  confidence: number;
+  articles: {
+    id: string;
+    url: string;
+    title: string;
+    publishedAt: string | null;
+    author: string | null;
+  }[];
+};
+
+export async function syncSingleFundEventToGraph(data: SingleFundEventData): Promise<GraphSyncSummary> {
+  const session = driver.session();
+  const nodes: string[] = [];
+  const edgeLabels: string[] = [];
+
+  try {
+    await ensureConstraints(session);
+
+    const firmNorm = normalizeInvestor(data.firmName);
+    const fundKey = `${firmNorm}::${data.fundName.toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+    // InvestorOrg (the firm)
+    await session.run(
+      `MERGE (i:InvestorOrg {normalizedName: $firmNorm}) SET i.name = $name`,
+      { firmNorm, name: data.firmName }
+    );
+    nodes.push(`InvestorOrg: ${data.firmName}`);
+
+    // Fund
+    await session.run(
+      `MERGE (f:Fund {fundKey: $fundKey})
+       SET f.name = $name, f.sizeUsd = $sizeUsd, f.type = $type,
+           f.vintage = $vintage, f.status = COALESCE(f.status, 'closed')`,
+      {
+        fundKey,
+        name: data.fundName,
+        sizeUsd: data.amountUsd,
+        type: data.fundType,
+        vintage: data.vintage,
+      }
+    );
+    nodes.push(`Fund: ${data.fundName}`);
+
+    // MANAGES: InvestorOrg → Fund
+    await session.run(
+      `MATCH (i:InvestorOrg {normalizedName: $firmNorm})
+       MATCH (f:Fund {fundKey: $fundKey})
+       MERGE (i)-[:MANAGES]->(f)`,
+      { firmNorm, fundKey }
+    );
+    edgeLabels.push("MANAGES");
+
+    // Location (optional)
+    if (data.country) {
+      await session.run(
+        `MERGE (l:Location {name: $name}) SET l.type = 'country'`,
+        { name: data.country }
+      );
+      nodes.push(`Location: ${data.country}`);
+      await session.run(
+        `MATCH (i:InvestorOrg {normalizedName: $firmNorm})
+         MATCH (l:Location {name: $country})
+         MERGE (i)-[:HQ_IN]->(l)`,
+        { firmNorm, country: data.country }
+      );
+      edgeLabels.push("HQ_IN");
+    }
+
+    // Articles + SOURCED_FROM edges
+    for (const article of data.articles) {
+      await session.run(
+        `MERGE (a:Article {url: $url})
+         SET a.title = $title, a.publishedAt = $publishedAt, a.author = $author`,
+        { url: article.url, title: article.title, publishedAt: article.publishedAt, author: article.author }
+      );
+      nodes.push(`Article: ${article.title}`);
+
+      await session.run(
+        `MATCH (f:Fund {fundKey: $fundKey})
+         MATCH (a:Article {url: $url})
+         MERGE (f)-[rel:SOURCED_FROM]->(a)
+         SET rel.confidence = $confidence`,
+        { fundKey, url: article.url, confidence: data.confidence }
+      );
+      edgeLabels.push("SOURCED_FROM");
+    }
+  } finally {
+    await session.close();
+  }
+
+  return { nodes, edges: edgeLabels };
+}
+
+// ============================================================================
+// SINGLE VALUE INDICATOR SYNC (for per-indicator ingest button)
+// ============================================================================
+
+export type SingleValueData = {
+  companyName: string;
+  metricType: string;
+  valueUsd: number | null;
+  unit: string | null;
+  period: string | null;
+  confidence: number;
+  articles: {
+    id: string;
+    url: string;
+    title: string;
+    publishedAt: string | null;
+    author: string | null;
+  }[];
+};
+
+export async function syncSingleValueToGraph(data: SingleValueData): Promise<GraphSyncSummary> {
+  const session = driver.session();
+  const nodes: string[] = [];
+  const edgeLabels: string[] = [];
+
+  try {
+    await ensureConstraints(session);
+
+    const compNorm = normalizeCompany(data.companyName);
+    const valuationKey = `${compNorm}::${data.metricType}::${data.period || "latest"}`;
+
+    // Company
+    await session.run(
+      `MERGE (c:Company {normalizedName: $compNorm})
+       SET c.name = $name,
+           c.status = COALESCE(c.status, 'active')`,
+      { compNorm, name: data.companyName }
+    );
+    nodes.push(`Company: ${data.companyName}`);
+
+    // Valuation node
+    await session.run(
+      `MERGE (v:Valuation {valuationKey: $valuationKey})
+       SET v.valueUsd = $valueUsd, v.metricType = $metricType,
+           v.unit = $unit, v.period = $period,
+           v.confidence = $confidence`,
+      {
+        valuationKey,
+        valueUsd: data.valueUsd,
+        metricType: data.metricType,
+        unit: data.unit,
+        period: data.period,
+        confidence: data.confidence,
+      }
+    );
+    nodes.push(`Valuation: ${data.metricType} ${data.period || "latest"}`);
+
+    // HAS_METRIC: Company → Valuation
+    await session.run(
+      `MATCH (c:Company {normalizedName: $compNorm})
+       MATCH (v:Valuation {valuationKey: $valuationKey})
+       MERGE (c)-[:HAS_METRIC]->(v)`,
+      { compNorm, valuationKey }
+    );
+    edgeLabels.push("HAS_METRIC");
+
+    // Articles + SOURCED_FROM edges
+    for (const article of data.articles) {
+      await session.run(
+        `MERGE (a:Article {url: $url})
+         SET a.title = $title, a.publishedAt = $publishedAt, a.author = $author`,
+        { url: article.url, title: article.title, publishedAt: article.publishedAt, author: article.author }
+      );
+      nodes.push(`Article: ${article.title}`);
+
+      await session.run(
+        `MATCH (v:Valuation {valuationKey: $valuationKey})
+         MATCH (a:Article {url: $url})
+         MERGE (v)-[rel:SOURCED_FROM]->(a)
+         SET rel.confidence = $confidence`,
+        { valuationKey, url: article.url, confidence: data.confidence }
+      );
+      edgeLabels.push("SOURCED_FROM");
     }
   } finally {
     await session.close();

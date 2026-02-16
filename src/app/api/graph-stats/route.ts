@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/api-auth";
 
 function toNumber(value: unknown): unknown {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -28,6 +29,8 @@ async function runQuery(query: string, params?: Record<string, unknown>) {
 }
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const [
       summaryResult,
@@ -41,6 +44,17 @@ export async function GET() {
       fundingTimelineResult,
       totalInDb,
       ingestedCount,
+      // Pipeline: FundEvent counts
+      fundEventsTotal,
+      fundEventsIngested,
+      fundEventsDismissed,
+      // Pipeline: CompanyValueIndicator counts
+      valueIndicatorsTotal,
+      valueIndicatorsIngested,
+      // Sector breakdown
+      sectorResult,
+      // Fund summary
+      fundSummaryResult,
     ] = await Promise.all([
       // --- summary: aggregate metrics ---
       runQuery(`
@@ -169,14 +183,46 @@ export async function GET() {
         ORDER BY month ASC
       `),
 
-      // --- ingestion from Prisma ---
+      // --- ingestion from Prisma: FundingRound ---
       prisma.fundingRound.count(),
       prisma.fundingRound.count({ where: { ingestedAt: { not: null } } }),
+
+      // --- Pipeline: FundEvent counts ---
+      prisma.fundEvent.count(),
+      prisma.fundEvent.count({ where: { ingestedAt: { not: null } } }),
+      prisma.fundEvent.count({ where: { dismissedAt: { not: null } } }),
+
+      // --- Pipeline: CompanyValueIndicator counts ---
+      prisma.companyValueIndicator.count(),
+      prisma.companyValueIndicator.count({ where: { ingestedAt: { not: null } } }),
+
+      // --- Sector breakdown from Neo4j ---
+      runQuery(`
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.sector IS NOT NULL
+        WITH c.sector AS sector, fr, c
+        RETURN sector,
+               sum(fr.amountUsd) AS totalAmount,
+               count(fr) AS dealCount,
+               count(DISTINCT c) AS companyCount
+        ORDER BY totalAmount DESC
+        LIMIT 15
+      `),
+
+      // --- Fund summary from Neo4j ---
+      runQuery(`
+        OPTIONAL MATCH (f:Fund)
+        WITH count(f) AS totalFunds, sum(f.sizeUsd) AS totalAum
+        OPTIONAL MATCH (f2:Fund)-[:MANAGED_BY]->(firm)
+        RETURN totalFunds, totalAum, count(DISTINCT firm) AS managingFirms
+      `),
     ]);
 
     const summaryRow = summaryResult.records[0];
     const totalEdges = toNumber(edgesResult.records[0]?.get("totalEdges")) as number ?? 0;
     const medianDealSize = toNumber(medianResult.records[0]?.get("medianDealSize")) as number ?? null;
+
+    const fundSummaryRow = fundSummaryResult.records[0];
 
     return NextResponse.json({
       summary: {
@@ -194,6 +240,30 @@ export async function GET() {
         totalInDb,
         ingested: ingestedCount,
         pending: totalInDb - ingestedCount,
+      },
+      pipeline: {
+        fundingRounds: {
+          total: totalInDb,
+          ingested: ingestedCount,
+          pending: totalInDb - ingestedCount,
+        },
+        fundEvents: {
+          total: fundEventsTotal,
+          ingested: fundEventsIngested,
+          dismissed: fundEventsDismissed,
+          pending: fundEventsTotal - fundEventsIngested - fundEventsDismissed,
+        },
+        valueIndicators: {
+          total: valueIndicatorsTotal,
+          ingested: valueIndicatorsIngested,
+          pending: valueIndicatorsTotal - valueIndicatorsIngested,
+        },
+      },
+      fundingBySector: parseRecords(sectorResult.records),
+      fundSummary: {
+        totalFunds: toNumber(fundSummaryRow?.get("totalFunds")) ?? 0,
+        totalAum: toNumber(fundSummaryRow?.get("totalAum")) ?? 0,
+        managingFirms: toNumber(fundSummaryRow?.get("managingFirms")) ?? 0,
       },
       recentDeals: parseRecords(recentDealsResult.records),
       topCompanies: parseRecords(topCompaniesResult.records),

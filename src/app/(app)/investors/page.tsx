@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
 import {
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowUpDown, Search, Users } from "lucide-react";
+import { SmartLogo } from "@/components/ui/smart-logo";
 import { EntitySheet } from "@/components/graph/entity-sheet";
 
 type Investor = {
@@ -23,6 +25,10 @@ type Investor = {
   portfolioCompanies: string[];
   logoUrl: string | null;
   enrichScore: number;
+  hq: string | null;
+  stageFocus: string[];
+  geoFocus: string[];
+  sectorFocus: string[];
 };
 
 const INVESTOR_MAX_SCORE = 12;
@@ -45,6 +51,7 @@ export default function InvestorsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState<string | null>(null);
+  const { filters } = useGlobalFilters();
 
   useEffect(() => {
     fetch("/api/investors")
@@ -64,6 +71,28 @@ export default function InvestorsPage() {
 
   const filtered = useMemo(() => {
     let list = investors;
+    const geo = resolveGeoFilter(filters);
+    if (geo) {
+      list = list.filter((inv) => {
+        // Match by HQ country
+        if (inv.hq && geo.countries.has(inv.hq.toLowerCase())) return true;
+        // Match by geoFocus
+        if (inv.geoFocus?.some((g) => geo.countries.has(g.toLowerCase()))) return true;
+        return false;
+      });
+    }
+    if (filters.stages.length > 0) {
+      const stagesLower = new Set(filters.stages.map((s) => s.toLowerCase()));
+      list = list.filter((inv) =>
+        inv.stageFocus?.some((s) => stagesLower.has(s.toLowerCase()))
+      );
+    }
+    if (filters.sectors.length > 0) {
+      const sectorsLower = new Set(filters.sectors.map((s) => s.toLowerCase()));
+      list = list.filter((inv) =>
+        inv.sectorFocus?.some((s) => sectorsLower.has(s.toLowerCase()))
+      );
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -83,7 +112,7 @@ export default function InvestorsPage() {
         : (aVal as number) - (bVal as number);
       return sortOrder === "asc" ? cmp : -cmp;
     });
-  }, [investors, search, sortBy, sortOrder]);
+  }, [investors, search, sortBy, sortOrder, filters]);
 
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
@@ -178,7 +207,7 @@ export default function InvestorsPage() {
                   >
                     <TableCell className="py-1.5 px-1">
                       {inv.logoUrl ? (
-                        <img src={inv.logoUrl} alt="" className="h-5 w-5 rounded object-contain" />
+                        <SmartLogo src={inv.logoUrl} alt={inv.name} className="h-5 w-5 rounded" fallback={<div className="h-5 w-5 rounded bg-muted" />} />
                       ) : (
                         <div className="h-5 w-5 rounded bg-muted" />
                       )}

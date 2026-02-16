@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Check,
   Loader2,
   Sparkles,
@@ -23,11 +24,26 @@ import {
   RefreshCw,
   Save,
   FileText,
+  Upload,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SmartLogo } from "@/components/ui/smart-logo";
 import type { RoundWithPostStatus } from "@/app/api/posts/rounds/route";
+import {
+  REGION_COUNTRIES,
+  REGION_PRESETS,
+  STAGES,
+  STAGE_COLORS,
+} from "@/lib/global-filters";
 
-type Filter = "all" | "with" | "without";
+type PostFilter = "all" | "with" | "without";
+type SortKey = "companyName" | "amountEur" | "stage" | "country" | "articleDate";
+type SortDir = "asc" | "desc";
+
+const PAGE_SIZE = 25;
 
 function fmtEur(n: number | null | undefined): string {
   if (!n) return "\u2014";
@@ -37,16 +53,49 @@ function fmtEur(n: number | null | undefined): string {
   return `${n.toFixed(0)} \u20AC`;
 }
 
+function fmtDate(dateStr: string | null): string {
+  if (!dateStr) return "\u2014";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+// Build region filter options
+const REGION_OPTIONS: { label: string; countries: Set<string> }[] = [
+  {
+    label: "Europa",
+    countries: new Set(
+      (REGION_COUNTRIES["Europe"] ?? []).map((c) => c.toLowerCase())
+    ),
+  },
+  ...REGION_PRESETS.map((p) => ({
+    label: p.label,
+    countries: new Set(p.countries.map((c) => c.toLowerCase())),
+  })),
+];
+
 export default function PostsPage() {
   const [rounds, setRounds] = useState<RoundWithPostStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [postFilter, setPostFilter] = useState<PostFilter>("all");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("articleDate");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState<Set<string>>(new Set());
-  const [editedContent, setEditedContent] = useState<Map<string, string>>(new Map());
+  const [editedContent, setEditedContent] = useState<Map<string, string>>(
+    new Map()
+  );
   const [saving, setSaving] = useState<Set<string>>(new Set());
+  const [publishing, setPublishing] = useState<Set<string>>(new Set());
 
   const loadRounds = useCallback(async () => {
     setLoading(true);
@@ -70,22 +119,96 @@ export default function PostsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const filtered = rounds.filter((r) => {
-    if (filter === "with" && !r.hasPost) return false;
-    if (filter === "without" && r.hasPost) return false;
-    if (searchDebounced) {
-      const q = searchDebounced.toLowerCase();
-      return (
-        r.companyName.toLowerCase().includes(q) ||
-        r.leadInvestor?.toLowerCase().includes(q) ||
-        r.stage?.toLowerCase().includes(q) ||
-        r.country?.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [searchDebounced, postFilter, regionFilter, stageFilter, sortKey, sortDir]);
 
+  // Resolve region filter to a country set
+  const regionCountries = useMemo(() => {
+    if (!regionFilter) return null;
+    const opt = REGION_OPTIONS.find((o) => o.label === regionFilter);
+    return opt?.countries ?? null;
+  }, [regionFilter]);
+
+  // Filter + sort
+  const filtered = useMemo(() => {
+    let list = rounds.filter((r) => {
+      if (postFilter === "with" && !r.hasPost) return false;
+      if (postFilter === "without" && r.hasPost) return false;
+      if (regionCountries && (!r.country || !regionCountries.has(r.country.toLowerCase()))) return false;
+      if (stageFilter && r.stage !== stageFilter) return false;
+      if (searchDebounced) {
+        const q = searchDebounced.toLowerCase();
+        return (
+          r.companyName.toLowerCase().includes(q) ||
+          r.leadInvestor?.toLowerCase().includes(q) ||
+          r.stage?.toLowerCase().includes(q) ||
+          r.country?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+
+    // Sort
+    list = [...list].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "companyName":
+          cmp = a.companyName.localeCompare(b.companyName);
+          break;
+        case "amountEur":
+          cmp = (a.amountEur ?? 0) - (b.amountEur ?? 0);
+          break;
+        case "stage":
+          cmp = (a.stage ?? "").localeCompare(b.stage ?? "");
+          break;
+        case "country":
+          cmp = (a.country ?? "").localeCompare(b.country ?? "");
+          break;
+        case "articleDate":
+          cmp =
+            new Date(a.articleDate ?? 0).getTime() -
+            new Date(b.articleDate ?? 0).getTime();
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return list;
+  }, [rounds, postFilter, regionCountries, stageFilter, searchDebounced, sortKey, sortDir]);
+
+  // Stats
+  const totalCapital = useMemo(
+    () => filtered.reduce((sum, r) => sum + (r.amountEur ?? 0), 0),
+    [filtered]
+  );
   const postCount = rounds.filter((r) => r.hasPost).length;
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageStart = page * PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + PAGE_SIZE, filtered.length);
+  const paged = filtered.slice(pageStart, pageEnd);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "articleDate" || key === "amountEur" ? "desc" : "asc");
+    }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col)
+      return <ArrowUpDown className="h-3 w-3 ml-0.5 opacity-40" />;
+    return sortDir === "asc" ? (
+      <ArrowUp className="h-3 w-3 ml-0.5" />
+    ) : (
+      <ArrowDown className="h-3 w-3 ml-0.5" />
+    );
+  }
 
   function toggleExpand(key: string) {
     setExpanded((prev) => {
@@ -109,7 +232,6 @@ export default function PostsPage() {
         toast.error(json.error || "Fehler beim Generieren");
         return;
       }
-      // Update the round in-place
       setRounds((prev) =>
         prev.map((r) =>
           r.roundKey === round.roundKey
@@ -122,13 +244,11 @@ export default function PostsPage() {
             : r
         )
       );
-      // Clear any edited content for this round
       setEditedContent((prev) => {
         const next = new Map(prev);
         next.delete(round.roundKey);
         return next;
       });
-      // Auto-expand to show result
       setExpanded((prev) => new Set(prev).add(round.roundKey));
       toast.success("Beitrag generiert");
     } catch {
@@ -184,6 +304,37 @@ export default function PostsPage() {
     toast.success("In Zwischenablage kopiert");
   }
 
+  async function handlePublish(round: RoundWithPostStatus) {
+    if (!round.postId) return;
+    setPublishing((prev) => new Set(prev).add(round.roundKey));
+    try {
+      const res = await fetch(`/api/posts/${round.postId}/publish`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Fehler beim Publishen");
+        return;
+      }
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.roundKey === round.roundKey
+            ? { ...r, publishedAt: json.publishedAt }
+            : r
+        )
+      );
+      toast.success("Erfolgreich veröffentlicht");
+    } catch {
+      toast.error("Fehler beim Publishen");
+    } finally {
+      setPublishing((prev) => {
+        const next = new Set(prev);
+        next.delete(round.roundKey);
+        return next;
+      });
+    }
+  }
+
   function getDisplayContent(round: RoundWithPostStatus): string {
     return editedContent.get(round.roundKey) ?? round.postContent ?? "";
   }
@@ -193,13 +344,15 @@ export default function PostsPage() {
     return edited != null && edited !== round.postContent;
   }
 
+  const colSpan = 9; // expand + logo + firma + betrag + stage + land + datum + lead + status
+
   return (
     <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
       {/* Header */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
         <FileText className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Beitr&auml;ge</h1>
-        <div className="relative ml-4 max-w-xs flex-1">
+        <div className="relative ml-4 max-w-xs flex-1 min-w-[140px]">
           <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Suchen..."
@@ -208,24 +361,61 @@ export default function PostsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {/* Filter tabs */}
+
+        {/* Region dropdown */}
+        <select
+          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={regionFilter}
+          onChange={(e) => setRegionFilter(e.target.value)}
+        >
+          <option value="">Alle Regionen</option>
+          {REGION_OPTIONS.map((o) => (
+            <option key={o.label} value={o.label}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Stage dropdown */}
+        <select
+          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+        >
+          <option value="">Alle Stages</option>
+          {STAGES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+
+        {/* Post filter tabs */}
         <div className="flex items-center gap-1 ml-2">
-          {(["all", "with", "without"] as Filter[]).map((f) => (
+          {(["all", "with", "without"] as PostFilter[]).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => setPostFilter(f)}
               className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                filter === f
+                postFilter === f
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent"
               }`}
             >
-              {f === "all" ? "Alle" : f === "with" ? "Mit Beitrag" : "Ohne Beitrag"}
+              {f === "all"
+                ? "Alle"
+                : f === "with"
+                  ? "Mit Beitrag"
+                  : "Ohne Beitrag"}
             </button>
           ))}
         </div>
+
+        {/* Stats */}
         <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-          <span>{rounds.length} Runden</span>
+          <span>
+            {filtered.length} Runden &middot; {fmtEur(totalCapital)}
+          </span>
           <span>&middot;</span>
           <span className="text-emerald-600 dark:text-emerald-400">
             {postCount} Beitr&auml;ge
@@ -251,24 +441,69 @@ export default function PostsPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-[24px] text-xs" />
                 <TableHead className="w-[32px] text-xs" />
-                <TableHead className="text-xs font-semibold">Firma</TableHead>
-                <TableHead className="w-[100px] text-right text-xs font-semibold">
-                  Betrag (&euro;)
+                <TableHead
+                  className="text-xs font-semibold cursor-pointer select-none"
+                  onClick={() => handleSort("companyName")}
+                >
+                  <span className="inline-flex items-center">
+                    Firma
+                    <SortIcon col="companyName" />
+                  </span>
                 </TableHead>
-                <TableHead className="w-[80px] text-xs font-semibold">Stage</TableHead>
-                <TableHead className="w-[60px] text-xs font-semibold">Land</TableHead>
-                <TableHead className="w-[150px] text-xs font-semibold">Lead</TableHead>
+                <TableHead
+                  className="w-[100px] text-right text-xs font-semibold cursor-pointer select-none"
+                  onClick={() => handleSort("amountEur")}
+                >
+                  <span className="inline-flex items-center justify-end">
+                    Betrag (&euro;)
+                    <SortIcon col="amountEur" />
+                  </span>
+                </TableHead>
+                <TableHead
+                  className="w-[80px] text-xs font-semibold cursor-pointer select-none"
+                  onClick={() => handleSort("stage")}
+                >
+                  <span className="inline-flex items-center">
+                    Stage
+                    <SortIcon col="stage" />
+                  </span>
+                </TableHead>
+                <TableHead
+                  className="w-[60px] text-xs font-semibold cursor-pointer select-none"
+                  onClick={() => handleSort("country")}
+                >
+                  <span className="inline-flex items-center">
+                    Land
+                    <SortIcon col="country" />
+                  </span>
+                </TableHead>
+                <TableHead
+                  className="w-[85px] text-xs font-semibold cursor-pointer select-none"
+                  onClick={() => handleSort("articleDate")}
+                >
+                  <span className="inline-flex items-center">
+                    Datum
+                    <SortIcon col="articleDate" />
+                  </span>
+                </TableHead>
+                <TableHead className="w-[150px] text-xs font-semibold">
+                  Lead
+                </TableHead>
                 <TableHead className="w-[80px] text-center text-xs font-semibold">
                   Status
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((round) => {
+              {paged.map((round) => {
                 const isExpanded = expanded.has(round.roundKey);
                 const isGenerating = generating.has(round.roundKey);
                 const content = getDisplayContent(round);
                 const unsaved = hasUnsavedChanges(round);
+                const stageColor =
+                  round.stage && STAGE_COLORS[round.stage]
+                    ? STAGE_COLORS[round.stage]
+                    : "bg-muted";
 
                 return (
                   <Fragment key={round.roundKey}>
@@ -287,10 +522,13 @@ export default function PostsPage() {
                       </TableCell>
                       <TableCell className="py-1.5 px-1">
                         {round.logoUrl ? (
-                          <img
+                          <SmartLogo
                             src={round.logoUrl}
                             alt=""
-                            className="h-5 w-5 rounded object-contain"
+                            className="h-5 w-5 rounded"
+                            fallback={
+                              <div className="h-5 w-5 rounded bg-muted" />
+                            }
                           />
                         ) : (
                           <div className="h-5 w-5 rounded bg-muted" />
@@ -304,24 +542,35 @@ export default function PostsPage() {
                       </TableCell>
                       <TableCell className="py-1.5 px-2">
                         {round.stage ? (
-                          <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium">
+                          <span
+                            className={`rounded border px-1 py-0.5 text-[10px] font-medium ${stageColor}`}
+                          >
                             {round.stage}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground/40">&mdash;</span>
+                          <span className="text-muted-foreground/40">
+                            &mdash;
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="py-1.5 px-2 text-[10px]">
                         {round.country ?? (
-                          <span className="text-muted-foreground/40">&mdash;</span>
+                          <span className="text-muted-foreground/40">
+                            &mdash;
+                          </span>
                         )}
+                      </TableCell>
+                      <TableCell className="py-1.5 px-2 text-[10px] tabular-nums whitespace-nowrap">
+                        {fmtDate(round.articleDate)}
                       </TableCell>
                       <TableCell
                         className="py-1.5 px-2 truncate max-w-[150px]"
                         title={round.leadInvestor || ""}
                       >
                         {round.leadInvestor ?? (
-                          <span className="text-muted-foreground/40">&mdash;</span>
+                          <span className="text-muted-foreground/40">
+                            &mdash;
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="py-1.5 px-2 text-center">
@@ -350,9 +599,23 @@ export default function PostsPage() {
                         key={`${round.roundKey}-expand`}
                         className="text-xs hover:bg-transparent"
                       >
-                        <TableCell colSpan={8} className="py-3 px-4">
+                        <TableCell colSpan={colSpan} className="py-3 px-4">
                           {round.hasPost ? (
                             <div className="space-y-2 max-w-2xl">
+                              {round.publishedAt && (
+                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                  Ver&ouml;ffentlicht am{" "}
+                                  {new Date(
+                                    round.publishedAt
+                                  ).toLocaleDateString("de-DE", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                              )}
                               <textarea
                                 className="w-full rounded border border-input bg-transparent p-2 text-sm leading-relaxed resize-y min-h-[120px] focus:outline-none focus:ring-1 focus:ring-ring"
                                 value={content}
@@ -404,6 +667,24 @@ export default function PostsPage() {
                                     Speichern
                                   </Button>
                                 )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 ml-auto"
+                                  disabled={
+                                    publishing.has(round.roundKey) || unsaved
+                                  }
+                                  onClick={() => handlePublish(round)}
+                                >
+                                  {publishing.has(round.roundKey) ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Upload className="h-3 w-3" />
+                                  )}
+                                  {round.publishedAt
+                                    ? "Erneut publishen"
+                                    : "Publish"}
+                                </Button>
                               </div>
                             </div>
                           ) : (
@@ -437,6 +718,38 @@ export default function PostsPage() {
           </Table>
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && filtered.length > 0 && (
+        <div className="flex items-center justify-between shrink-0 text-xs text-muted-foreground px-1">
+          <span className="tabular-nums">
+            {pageStart + 1}&ndash;{pageEnd} von {filtered.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="px-2 tabular-nums">
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

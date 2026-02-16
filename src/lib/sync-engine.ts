@@ -1,10 +1,12 @@
 import Parser from "rss-parser";
 import { prisma } from "./db";
 import { extractFunding } from "./funding-extractor";
+import { extractFundEvent, isFundEvent } from "./fund-event-extractor";
+import { extractValueIndicators } from "./value-indicator-extractor";
 
 
 const parser = new Parser({
-  timeout: 15000,
+  timeout: 10000,
   headers: {
     "User-Agent": "RSS-Scraper/1.0",
     Accept: "application/rss+xml, application/xml, text/xml",
@@ -30,55 +32,97 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
 
     let articlesNew = 0;
     let fundingFound = 0;
-    const items = parsed.items || [];
+    const items = (parsed.items || []).filter((item) => item.link);
 
-    for (const item of items) {
-      if (!item.link) continue;
+    // Batch check: which URLs already exist? (1 query instead of N)
+    const urls = items.map((item) => item.link!);
+    const existing = await prisma.article.findMany({
+      where: { url: { in: urls } },
+      select: { url: true },
+    });
+    const existingUrls = new Set(existing.map((a) => a.url));
 
-      const existingArticle = await prisma.article.findUnique({
-        where: { url: item.link },
-      });
+    const newItems = items.filter((item) => !existingUrls.has(item.link!));
 
-      if (existingArticle) continue;
-
+    for (const item of newItems) {
       const article = await prisma.article.create({
         data: {
           feedId: feed.id,
           title: item.title || "Untitled",
-          url: item.link,
+          url: item.link!,
           author: item.creator || item["dc:creator"] || null,
           content: item["content:encoded"] || item.content || null,
           summary: item.contentSnippet || item.summary || null,
           imageUrl: extractImageUrl(item),
           publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-          guid: item.guid || item.link,
+          guid: item.guid || item.link!,
         },
       });
 
       articlesNew++;
 
-      const fundingData = await extractFunding(
-        article.title,
-        article.content || article.summary || ""
-      );
+      const articleText = article.content || article.summary || "";
 
-      if (fundingData) {
-        await prisma.fundingRound.create({
+      // Try fund event FIRST — fund closings take priority over funding rounds
+      const fundEventData = isFundEvent(article.title, articleText)
+        ? extractFundEvent(article.title, articleText)
+        : null;
+
+      if (fundEventData) {
+        await prisma.fundEvent.create({
           data: {
             articleId: article.id,
-            companyName: fundingData.companyName,
-            amount: fundingData.amount,
-            currency: fundingData.currency,
-            amountUsd: fundingData.amountUsd,
-            stage: fundingData.stage,
-            investors: fundingData.investors,
-            leadInvestor: fundingData.leadInvestor,
-            country: fundingData.country,
-            confidence: fundingData.confidence,
-            rawExcerpt: fundingData.rawExcerpt,
+            fundName: fundEventData.fundName,
+            firmName: fundEventData.firmName,
+            amount: fundEventData.amount,
+            currency: fundEventData.currency,
+            amountUsd: fundEventData.amountUsd,
+            fundType: fundEventData.fundType,
+            vintage: fundEventData.vintage,
+            country: fundEventData.country,
+            confidence: fundEventData.confidence,
+            rawExcerpt: fundEventData.rawExcerpt,
           },
         });
-        fundingFound++;
+      } else {
+        const fundingData = await extractFunding(article.title, articleText);
+        if (fundingData) {
+          await prisma.fundingRound.create({
+            data: {
+              articleId: article.id,
+              companyName: fundingData.companyName,
+              amount: fundingData.amount,
+              currency: fundingData.currency,
+              amountUsd: fundingData.amountUsd,
+              stage: fundingData.stage,
+              investors: fundingData.investors,
+              leadInvestor: fundingData.leadInvestor,
+              country: fundingData.country,
+              confidence: fundingData.confidence,
+              rawExcerpt: fundingData.rawExcerpt,
+            },
+          });
+          fundingFound++;
+        }
+      }
+
+      // Value indicators run independently
+      const valueIndicators = extractValueIndicators(article.title, articleText);
+      if (valueIndicators.length > 0) {
+        await prisma.companyValueIndicator.createMany({
+          data: valueIndicators.map((vi) => ({
+            articleId: article.id,
+            companyName: vi.companyName,
+            metricType: vi.metricType,
+            value: vi.value,
+            currency: vi.currency,
+            valueUsd: vi.valueUsd,
+            unit: vi.unit,
+            period: vi.period,
+            confidence: vi.confidence,
+            rawExcerpt: vi.rawExcerpt,
+          })),
+        });
       }
     }
 
@@ -127,19 +171,34 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
   }
 }
 
-export async function syncAllFeeds(): Promise<SyncResult[]> {
+/**
+ * Sync all active feeds with configurable concurrency.
+ * Default: 10 feeds in parallel for ~8-10x speedup.
+ */
+export async function syncAllFeeds(concurrency = 10): Promise<SyncResult[]> {
   const feeds = await prisma.feed.findMany({
     where: { isActive: true },
     orderBy: { lastSyncAt: "asc" },
   });
 
   const results: SyncResult[] = [];
+  const queue = [...feeds];
 
-  for (const feed of feeds) {
-    const result = await syncFeed(feed.id);
-    results.push(result);
-    await new Promise((r) => setTimeout(r, 1000));
+  async function worker() {
+    while (queue.length > 0) {
+      const feed = queue.shift();
+      if (!feed) break;
+      const result = await syncFeed(feed.id);
+      results.push(result);
+    }
   }
+
+  // Launch N workers in parallel
+  const workers = Array.from(
+    { length: Math.min(concurrency, feeds.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
 
   return results;
 }

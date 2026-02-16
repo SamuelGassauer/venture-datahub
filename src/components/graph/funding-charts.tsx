@@ -20,7 +20,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatCompactAmount(value: number): string {
+export function formatCompactAmount(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) {
     return `$${(value / 1_000_000_000).toFixed(abs >= 10_000_000_000 ? 0 : 1)}B`;
@@ -43,9 +43,9 @@ function formatFullAmount(value: number): string {
 }
 
 // Shared axis / tooltip style tokens that respect dark mode via neutral colors.
-const AXIS_TICK_STYLE = { fontSize: 12, fill: "hsl(var(--muted-foreground, 215 20% 65%))" };
-const GRID_STROKE = "hsl(var(--border, 220 13% 91%))";
-const TOOLTIP_STYLE: React.CSSProperties = {
+export const AXIS_TICK_STYLE = { fontSize: 12, fill: "hsl(var(--muted-foreground, 215 20% 65%))" };
+export const GRID_STROKE = "hsl(var(--border, 220 13% 91%))";
+export const TOOLTIP_STYLE: React.CSSProperties = {
   backgroundColor: "hsl(var(--popover, 0 0% 100%))",
   color: "hsl(var(--popover-foreground, 222 47% 11%))",
   border: "1px solid hsl(var(--border, 220 13% 91%))",
@@ -250,6 +250,68 @@ type DealFlowChartProps = {
   data: { stage: string; count: number }[];
   height?: number;
 };
+
+// ---------------------------------------------------------------------------
+// 4. SectorChart — Horizontal bar chart of funding by sector
+// ---------------------------------------------------------------------------
+
+type SectorChartProps = {
+  data: {
+    sector: string;
+    totalAmount: number;
+    dealCount: number;
+    companyCount: number;
+  }[];
+  height?: number;
+};
+
+export function SectorChart({ data, height = 180 }: SectorChartProps) {
+  if (!data.length) return null;
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart
+        data={data}
+        layout="vertical"
+        margin={{ top: 4, right: 24, bottom: 4, left: 4 }}
+      >
+        <XAxis
+          type="number"
+          tickFormatter={formatCompactAmount}
+          tick={AXIS_TICK_STYLE}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          type="category"
+          dataKey="sector"
+          width={100}
+          tick={AXIS_TICK_STYLE}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          contentStyle={TOOLTIP_STYLE}
+          formatter={(value) => [formatFullAmount(value as number), "Total Amount"]}
+          labelFormatter={(label) => {
+            const item = data.find((d) => d.sector === String(label));
+            return `${String(label)} — ${item?.dealCount ?? 0} deals, ${item?.companyCount ?? 0} companies`;
+          }}
+          cursor={{ fill: "hsl(var(--accent, 210 40% 96%))", opacity: 0.5 }}
+        />
+        <Bar
+          dataKey="totalAmount"
+          fill="#f59e0b"
+          radius={[0, 4, 4, 0]}
+          barSize={14}
+        />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 5. DealFlowChart — Donut / pie chart of stage distribution by count
+// ---------------------------------------------------------------------------
 
 export function DealFlowChart({ data, height = 220 }: DealFlowChartProps) {
   return (

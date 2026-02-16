@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
+import { requireAuth } from "@/lib/api-auth";
 
 const FORBIDDEN_KEYWORDS = /\b(CREATE|DELETE|SET|MERGE|REMOVE|DROP|DETACH|CALL\s*\{)\b/i;
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const { query } = await request.json();
 

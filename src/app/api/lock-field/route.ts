@@ -1,9 +1,12 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
+import { requireAdmin } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const { entityType, entityName, field, locked } = await request.json();
 

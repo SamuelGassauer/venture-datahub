@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireAuth, requireAdmin } from "@/lib/api-auth";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const { id } = await params;
   const post = await prisma.post.findUnique({ where: { id } });
   if (!post) {
@@ -17,6 +20,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   const { id } = await params;
   const { content } = (await request.json()) as { content: string };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -32,7 +32,14 @@ import {
   ChevronRight,
   Lock,
   Unlock,
+  Pencil,
+  Check,
+  X,
+  Camera,
 } from "lucide-react";
+import { SECTORS, SECTOR_TAXONOMY } from "@/lib/taxonomy";
+import { SmartLogo } from "@/components/ui/smart-logo";
+import { LogoPicker } from "@/components/graph/logo-picker";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,7 +48,7 @@ import {
 type EntitySheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entityType: "company" | "investor" | "round" | null;
+  entityType: "company" | "investor" | "round" | "fund" | null;
   entityName: string | null;
 };
 
@@ -133,6 +140,8 @@ RETURN c.name AS name,
        c.linkedinUrl AS linkedinUrl,
        c.logoUrl AS logoUrl,
        c.lockedFields AS lockedFields,
+       c.sector AS sector,
+       c.subsector AS subsector,
        rounds
 `;
 }
@@ -181,6 +190,25 @@ RETURN c.name AS company,
        fr.confidence AS confidence,
        collect(DISTINCT {name: inv.name, role: p.role}) AS investors,
        collect(DISTINCT {url: a.url, title: a.title}) AS articles
+LIMIT 1
+`;
+}
+
+function fundQuery(fundKey: string): string {
+  const safe = escapeCypher(fundKey);
+  return `
+MATCH (i:InvestorOrg)-[:MANAGES]->(f:Fund {fundKey: '${safe}'})
+OPTIONAL MATCH (i)-[:HQ_IN]->(l:Location)
+OPTIONAL MATCH (f)-[:SOURCED_FROM]->(a:Article)
+RETURN f.name AS name,
+       f.fundKey AS fundKey,
+       f.sizeUsd AS sizeUsd,
+       f.type AS type,
+       f.vintage AS vintage,
+       f.status AS status,
+       i.name AS firmName,
+       collect(DISTINCT l.name)[0] AS country,
+       collect(DISTINCT {url: a.url, title: a.title, publishedAt: a.publishedAt}) AS articles
 LIMIT 1
 `;
 }
@@ -271,22 +299,35 @@ function LockableInfoRow({
   label,
   field,
   value,
+  rawValue,
   missing,
   locked,
   entityType,
   entityName,
   onLockChange,
+  editable = true,
+  fieldType = "text",
+  selectOptions,
+  onValueChange,
 }: {
   label: string;
   field: string;
   value: React.ReactNode;
+  rawValue?: string | number | null;
   missing?: boolean;
   locked: boolean;
   entityType: "company" | "investor";
   entityName: string;
   onLockChange: (field: string, locked: boolean) => void;
+  editable?: boolean;
+  fieldType?: "text" | "textarea" | "number" | "select";
+  selectOptions?: string[];
+  onValueChange?: (field: string, value: string | number | null) => void;
 }) {
   const [toggling, setToggling] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editValue, setEditValue] = useState("");
 
   const toggleLock = useCallback(async () => {
     setToggling(true);
@@ -306,6 +347,56 @@ function LockableInfoRow({
     }
   }, [entityType, entityName, field, locked, onLockChange]);
 
+  const startEditing = useCallback(() => {
+    setEditValue(rawValue != null ? String(rawValue) : "");
+    setEditing(true);
+  }, [rawValue]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+  }, []);
+
+  const saveValue = useCallback(async () => {
+    setSaving(true);
+    const trimmed = editValue.trim();
+    const newValue: string | number | null =
+      trimmed === ""
+        ? null
+        : fieldType === "number"
+          ? Number(trimmed) || null
+          : trimmed;
+
+    try {
+      const res = await fetch("/api/update-field", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityName, field, value: newValue }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        onValueChange?.(field, result.value ?? null);
+        onLockChange(field, result.locked);
+        setEditing(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  }, [editValue, fieldType, entityType, entityName, field, onValueChange, onLockChange]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && fieldType !== "textarea") {
+        e.preventDefault();
+        saveValue();
+      } else if (e.key === "Escape") {
+        cancelEditing();
+      }
+    },
+    [saveValue, cancelEditing, fieldType]
+  );
+
   return (
     <div className="flex items-center justify-between gap-2 py-1.5 text-sm px-1">
       <div className="flex items-center gap-2 shrink-0">
@@ -323,10 +414,80 @@ function LockableInfoRow({
         </button>
         <span className="text-muted-foreground">{label}</span>
       </div>
-      {missing ? (
-        <span className="text-muted-foreground/40 text-xs italic">missing</span>
+
+      {editing ? (
+        <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
+          {fieldType === "textarea" ? (
+            <textarea
+              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelEditing();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveValue();
+              }}
+              className="w-full max-w-[220px] rounded border bg-background px-2 py-1 text-xs resize-none h-16 focus:outline-none focus:ring-1 focus:ring-ring"
+              disabled={saving}
+            />
+          ) : fieldType === "select" ? (
+            <select
+              autoFocus
+              value={editValue}
+              onChange={(e) => {
+                setEditValue(e.target.value);
+              }}
+              onBlur={saveValue}
+              onKeyDown={handleKeyDown}
+              className="max-w-[180px] rounded border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              disabled={saving}
+            >
+              <option value="">— none —</option>
+              {selectOptions?.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              autoFocus
+              type={fieldType === "number" ? "number" : "text"}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={saveValue}
+              onKeyDown={handleKeyDown}
+              className="max-w-[180px] rounded border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              disabled={saving}
+            />
+          )}
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+          ) : fieldType === "textarea" ? (
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <button onClick={saveValue} className="p-0.5 rounded hover:bg-muted" title="Save (Cmd+Enter)">
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
+              </button>
+              <button onClick={cancelEditing} className="p-0.5 rounded hover:bg-muted" title="Cancel (Esc)">
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <span className="text-right font-medium">{value}</span>
+        <div className="flex items-center gap-1 min-w-0">
+          {missing ? (
+            <span className="text-muted-foreground/40 text-xs italic">missing</span>
+          ) : (
+            <span className="text-right font-medium truncate">{value}</span>
+          )}
+          {editable && (
+            <button
+              onClick={startEditing}
+              className="p-0.5 rounded-md text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0"
+              title={`Edit ${label}`}
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -503,18 +664,31 @@ function EnrichButton({
 // Company detail view
 // ---------------------------------------------------------------------------
 
-function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>; onEnrichComplete: () => void }) {
+function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Record<string, unknown>; onEnrichComplete: () => void; onOpenLogoPicker: () => void }) {
   const name = String(data.name ?? "");
-  const country = data.country ? String(data.country) : null;
-  const location = data.location ? String(data.location) : null;
+  const [editedFields, setEditedFields] = useState<Record<string, string | number | null>>({});
+  const get = (key: string, fallback: string | number | null = null) =>
+    key in editedFields ? editedFields[key] : (data[key] != null ? (typeof data[key] === "number" || typeof data[key] === "object" ? asNumber(data[key]) : String(data[key])) : fallback);
+
+  const country = get("country") as string | null;
+  const location = (("location" in editedFields) ? editedFields.location : (data.location ? String(data.location) : null)) as string | null;
   const totalFunding = asNumber(data.totalFunding);
-  const status = data.status ? String(data.status) : null;
-  const description = data.description ? String(data.description) : null;
-  const website = data.website ? String(data.website) : null;
-  const foundedYear = data.foundedYear ? asNumber(data.foundedYear) : null;
-  const employeeRange = data.employeeRange ? String(data.employeeRange) : null;
-  const linkedinUrl = data.linkedinUrl ? String(data.linkedinUrl) : null;
-  const logoUrl = data.logoUrl ? String(data.logoUrl) : null;
+  const status = get("status") as string | null;
+  const description = get("description") as string | null;
+  const website = get("website") as string | null;
+  const foundedYear = get("foundedYear") as number | null;
+  const employeeRange = get("employeeRange") as string | null;
+  const linkedinUrl = get("linkedinUrl") as string | null;
+  const logoUrl = get("logoUrl") as string | null;
+  const sector = get("sector") as string | null;
+  const subsector = get("subsector") as string | null;
+
+  // Compute subsector options dynamically based on selected sector
+  const subsectorOptions = useMemo(() => {
+    if (!sector) return [];
+    return [...(SECTOR_TAXONOMY[sector] ?? [])];
+  }, [sector]);
+
   const [lockedFields, setLockedFields] = useState<Set<string>>(
     new Set(Array.isArray(data.lockedFields) ? data.lockedFields as string[] : [])
   );
@@ -526,6 +700,10 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
       else next.delete(field);
       return next;
     });
+  }, []);
+
+  const handleValueChange = useCallback((field: string, value: string | number | null) => {
+    setEditedFields((prev) => ({ ...prev, [field]: value }));
   }, []);
 
   const rawRounds = (data.rounds as RoundRow[]) ?? [];
@@ -551,6 +729,8 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
   // Count filled vs total metadata fields
   const metaFields = [
     { label: "Status", value: status },
+    { label: "Sector", value: sector },
+    { label: "Subsector", value: subsector },
     { label: "Country", value: country },
     { label: "Location", value: location },
     { label: "Founded", value: foundedYear },
@@ -566,22 +746,32 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
       {/* Header */}
       <div className="space-y-1">
         <div className="flex items-center gap-3">
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={`${name} logo`}
-              className="h-8 w-8 rounded-md object-contain bg-white border"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : (
-            <Building2 className="h-5 w-5 text-blue-500" />
-          )}
+          <button
+            onClick={() => website && onOpenLogoPicker()}
+            disabled={!website}
+            className={`relative group shrink-0 ${website ? "cursor-pointer" : "cursor-default"}`}
+            title={website ? "Choose logo" : "Set a website first to pick a logo"}
+          >
+            {logoUrl ? (
+              <SmartLogo src={logoUrl} alt={`${name} logo`} className="h-8 w-8 rounded-md" fallback={<Building2 className="h-5 w-5 text-blue-500" />} />
+            ) : (
+              <Building2 className="h-5 w-5 text-blue-500" />
+            )}
+            {website && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-3.5 w-3.5 text-white" />
+              </div>
+            )}
+          </button>
           <h2 className="text-xl font-bold">{name}</h2>
           {status && (
             <Badge variant="outline" className="text-xs ml-1">
               {status}
+            </Badge>
+          )}
+          {sector && (
+            <Badge variant="secondary" className="text-xs ml-1">
+              {sector}
             </Badge>
           )}
         </div>
@@ -667,15 +857,18 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
           </div>
         </div>
         <div className="rounded-lg border divide-y">
-          <LockableInfoRow label="Status" field="status" value={status} missing={!status} locked={lockedFields.has("status")} entityType="company" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Country" field="country" value={country} missing={!country} locked={lockedFields.has("country")} entityType="company" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Location" field="location" value={location} missing={!location} locked={lockedFields.has("location")} entityType="company" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Founded" field="foundedYear" value={foundedYear} missing={!foundedYear} locked={lockedFields.has("foundedYear")} entityType="company" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Employees" field="employeeRange" value={employeeRange} missing={!employeeRange} locked={lockedFields.has("employeeRange")} entityType="company" entityName={name} onLockChange={handleLockChange} />
+          <LockableInfoRow label="Status" field="status" value={status} rawValue={status} missing={!status} locked={lockedFields.has("status")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="select" selectOptions={["active", "acquired", "closed"]} />
+          <LockableInfoRow label="Sector" field="sector" value={sector} rawValue={sector} missing={!sector} locked={lockedFields.has("sector")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="select" selectOptions={SECTORS} />
+          <LockableInfoRow label="Subsector" field="subsector" value={subsector} rawValue={subsector} missing={!subsector} locked={lockedFields.has("subsector")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="select" selectOptions={subsectorOptions} />
+          <LockableInfoRow label="Country" field="country" value={country} rawValue={country} missing={!country} locked={lockedFields.has("country")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} />
+          <LockableInfoRow label="Location" field="location" value={location} rawValue={location} missing={!location} locked={lockedFields.has("location")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} />
+          <LockableInfoRow label="Founded" field="foundedYear" value={foundedYear} rawValue={foundedYear} missing={!foundedYear} locked={lockedFields.has("foundedYear")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="number" />
+          <LockableInfoRow label="Employees" field="employeeRange" value={employeeRange} rawValue={employeeRange} missing={!employeeRange} locked={lockedFields.has("employeeRange")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="select" selectOptions={["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"]} />
           <LockableInfoRow
             label="Description" field="description"
             value={description ? <span className="text-xs max-w-[200px] truncate block">{description}</span> : null}
-            missing={!description} locked={lockedFields.has("description")} entityType="company" entityName={name} onLockChange={handleLockChange}
+            rawValue={description}
+            missing={!description} locked={lockedFields.has("description")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="textarea"
           />
           <LockableInfoRow
             label="Website" field="website"
@@ -684,14 +877,16 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
                 {website.replace(/^https?:\/\//, "")}
               </a>
             ) : null}
-            missing={!website} locked={lockedFields.has("website")} entityType="company" entityName={name} onLockChange={handleLockChange}
+            rawValue={website}
+            missing={!website} locked={lockedFields.has("website")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
           <LockableInfoRow
             label="LinkedIn" field="linkedinUrl"
             value={linkedinUrl ? (
               <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 text-xs">View profile</a>
             ) : null}
-            missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="company" entityName={name} onLockChange={handleLockChange}
+            rawValue={linkedinUrl}
+            missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
         </div>
       </div>
@@ -777,6 +972,7 @@ function CompanyView({ data, onEnrichComplete }: { data: Record<string, unknown>
           </div>
         </div>
       )}
+
     </div>
   );
 }
@@ -907,17 +1103,23 @@ type PortfolioRow = {
 
 function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown>; onEnrichComplete: () => void }) {
   const name = String(data.name ?? "");
-  const type = data.type ? String(data.type) : null;
+  const [editedFields, setEditedFields] = useState<Record<string, string | number | null>>({});
+  const getStr = (key: string) =>
+    key in editedFields ? (editedFields[key] != null ? String(editedFields[key]) : null) : (data[key] != null ? String(data[key]) : null);
+  const getNum = (key: string) =>
+    key in editedFields ? (editedFields[key] != null ? Number(editedFields[key]) : null) : (data[key] != null ? asNumber(data[key]) : null);
+
+  const type = getStr("type");
   const stageFocus = Array.isArray(data.stageFocus) ? data.stageFocus as string[] : null;
   const sectorFocus = Array.isArray(data.sectorFocus) ? data.sectorFocus as string[] : null;
   const geoFocus = Array.isArray(data.geoFocus) ? data.geoFocus as string[] : null;
   const checkSizeMinUsd = data.checkSizeMinUsd ? asNumber(data.checkSizeMinUsd) : null;
   const checkSizeMaxUsd = data.checkSizeMaxUsd ? asNumber(data.checkSizeMaxUsd) : null;
   const aum = data.aum ? asNumber(data.aum) : null;
-  const foundedYear = data.foundedYear ? asNumber(data.foundedYear) : null;
-  const website = data.website ? String(data.website) : null;
-  const linkedinUrl = data.linkedinUrl ? String(data.linkedinUrl) : null;
-  const logoUrl = data.logoUrl ? String(data.logoUrl) : null;
+  const foundedYear = getNum("foundedYear");
+  const website = getStr("website");
+  const linkedinUrl = getStr("linkedinUrl");
+  const logoUrl = getStr("logoUrl");
   const [lockedFields, setLockedFields] = useState<Set<string>>(
     new Set(Array.isArray(data.lockedFields) ? data.lockedFields as string[] : [])
   );
@@ -929,6 +1131,10 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
       else next.delete(field);
       return next;
     });
+  }, []);
+
+  const handleValueChange = useCallback((field: string, value: string | number | null) => {
+    setEditedFields((prev) => ({ ...prev, [field]: value }));
   }, []);
   const deals = asNumber(data.deals);
   const leads = asNumber(data.leads);
@@ -966,14 +1172,7 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={`${name} logo`}
-              className="h-8 w-8 rounded-md object-contain bg-white border"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
+            <SmartLogo src={logoUrl} alt={`${name} logo`} className="h-8 w-8 rounded-md" fallback={<Briefcase className="h-5 w-5 text-green-500" />} />
           ) : (
             <Briefcase className="h-5 w-5 text-green-500" />
           )}
@@ -1085,13 +1284,13 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
           </div>
         </div>
         <div className="rounded-lg border divide-y">
-          <LockableInfoRow label="Type" field="type" value={type} missing={!type} locked={lockedFields.has("type")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Stage Focus" field="stageFocus" value={stageFocus?.join(", ")} missing={!stageFocus} locked={lockedFields.has("stageFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Sector Focus" field="sectorFocus" value={sectorFocus?.join(", ")} missing={!sectorFocus} locked={lockedFields.has("sectorFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Geo Focus" field="geoFocus" value={geoFocus?.join(", ")} missing={!geoFocus} locked={lockedFields.has("geoFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Check Size" field="checkSizeMinUsd" value={checkSizeStr} missing={!checkSizeStr} locked={lockedFields.has("checkSizeMinUsd")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="AUM" field="aum" value={aum ? formatAmount(aum) : null} missing={!aum} locked={lockedFields.has("aum")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
-          <LockableInfoRow label="Founded" field="foundedYear" value={foundedYear} missing={!foundedYear} locked={lockedFields.has("foundedYear")} entityType="investor" entityName={name} onLockChange={handleLockChange} />
+          <LockableInfoRow label="Type" field="type" value={type} rawValue={type} missing={!type} locked={lockedFields.has("type")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Stage Focus" field="stageFocus" value={stageFocus?.join(", ")} missing={!stageFocus} locked={lockedFields.has("stageFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Sector Focus" field="sectorFocus" value={sectorFocus?.join(", ")} missing={!sectorFocus} locked={lockedFields.has("sectorFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Geo Focus" field="geoFocus" value={geoFocus?.join(", ")} missing={!geoFocus} locked={lockedFields.has("geoFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Check Size" field="checkSizeMinUsd" value={checkSizeStr} missing={!checkSizeStr} locked={lockedFields.has("checkSizeMinUsd")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="AUM" field="aum" value={aum ? formatAmount(aum) : null} missing={!aum} locked={lockedFields.has("aum")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Founded" field="foundedYear" value={foundedYear} rawValue={foundedYear} missing={!foundedYear} locked={lockedFields.has("foundedYear")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="number" />
           <LockableInfoRow
             label="Website" field="website"
             value={website ? (
@@ -1099,14 +1298,16 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
                 {website.replace(/^https?:\/\//, "")}
               </a>
             ) : null}
-            missing={!website} locked={lockedFields.has("website")} entityType="investor" entityName={name} onLockChange={handleLockChange}
+            rawValue={website}
+            missing={!website} locked={lockedFields.has("website")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
           <LockableInfoRow
             label="LinkedIn" field="linkedinUrl"
             value={linkedinUrl ? (
               <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 text-xs">View profile</a>
             ) : null}
-            missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="investor" entityName={name} onLockChange={handleLockChange}
+            rawValue={linkedinUrl}
+            missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
         </div>
       </div>
@@ -1251,6 +1452,157 @@ function RoundView({ data }: { data: Record<string, unknown> }) {
 }
 
 // ---------------------------------------------------------------------------
+// Fund detail view
+// ---------------------------------------------------------------------------
+
+function FundView({ data }: { data: Record<string, unknown> }) {
+  const name = String(data.name ?? "Unknown Fund");
+  const firmName = data.firmName ? String(data.firmName) : null;
+  const sizeUsd = asNumber(data.sizeUsd);
+  const fundType = data.type ? String(data.type) : null;
+  const vintage = data.vintage ? String(data.vintage) : null;
+  const status = data.status ? String(data.status) : null;
+  const country = data.country ? String(data.country) : null;
+  const articles =
+    (data.articles as { url: string | null; title: string | null; publishedAt: unknown }[]) ?? [];
+  const validArticles = articles.filter((a) => a.url);
+
+  const statusColor =
+    status === "closed"
+      ? "bg-emerald-500/15 text-emerald-700 border-emerald-500/30"
+      : status === "fundraising"
+        ? "bg-blue-500/15 text-blue-700 border-blue-500/30"
+        : "bg-muted text-muted-foreground border-border";
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white">
+            <Briefcase className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold leading-tight">{name}</h2>
+            {firmName && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Users className="h-3 w-3 shrink-0" />
+                {firmName}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {fundType && (
+            <Badge variant="secondary" className="text-xs">{fundType}</Badge>
+          )}
+          {status && (
+            <Badge variant="outline" className={`text-xs ${statusColor}`}>{status}</Badge>
+          )}
+          {vintage && (
+            <Badge variant="outline" className="text-xs">
+              <Calendar className="mr-1 h-2.5 w-2.5" />
+              {vintage}
+            </Badge>
+          )}
+          {country && (
+            <Badge variant="outline" className="text-xs">
+              <MapPin className="mr-1 h-2.5 w-2.5" />
+              {country}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Fund size hero */}
+      <div className="rounded-lg border bg-gradient-to-br from-amber-500/10 to-amber-500/5 px-4 py-5 text-center">
+        <span className="text-3xl font-extrabold tracking-tight">
+          {formatAmount(sizeUsd)}
+        </span>
+        <p className="mt-0.5 text-xs text-muted-foreground">Fund Size</p>
+      </div>
+
+      {/* Fund details table */}
+      <div className="space-y-1">
+        <SectionHeading>Fund Data</SectionHeading>
+        <div className="rounded-lg border divide-y text-sm">
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Firm
+            </span>
+            <span className="font-medium">{firmName ?? "—"}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-muted-foreground flex items-center gap-1.5">
+              <Target className="h-3.5 w-3.5" /> Type
+            </span>
+            <span className="font-medium">{fundType ?? "—"}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-muted-foreground flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" /> Vintage
+            </span>
+            <span className="font-medium">{vintage ?? "—"}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-muted-foreground flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5" /> Status
+            </span>
+            {status ? (
+              <Badge variant="outline" className={`text-xs ${statusColor}`}>{status}</Badge>
+            ) : (
+              <span className="font-medium">—</span>
+            )}
+          </div>
+          {country && (
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" /> Country
+              </span>
+              <span className="font-medium">{country}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Source articles */}
+      {validArticles.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <SectionHeading>Sources</SectionHeading>
+            <span className="text-xs text-muted-foreground tabular-nums">{validArticles.length} article{validArticles.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="rounded-lg border divide-y">
+            {validArticles.map((a, i) => (
+              <a
+                key={i}
+                href={a.url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors group"
+              >
+                <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                    {a.title ?? "View Article"}
+                  </p>
+                  {formatDate(a.publishedAt) && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {formatDate(a.publishedAt)}
+                    </p>
+                  )}
+                </div>
+                <ExternalLink className="h-3 w-3 mt-1 shrink-0 text-muted-foreground/50 group-hover:text-blue-500 transition-colors" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main exported component
 // ---------------------------------------------------------------------------
 
@@ -1263,6 +1615,7 @@ export function EntitySheet({
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     if (!entityType || !entityName) return;
@@ -1281,6 +1634,9 @@ export function EntitySheet({
         break;
       case "round":
         query = roundQuery(entityName);
+        break;
+      case "fund":
+        query = fundQuery(entityName);
         break;
       default:
         return;
@@ -1328,12 +1684,14 @@ export function EntitySheet({
         company: "Company Details",
         investor: "Investor Details",
         round: "Funding Round",
+        fund: "Fund Details",
       }[entityType]
     : "Details";
 
-  const sheetDescription = entityName ?? "";
+  const sheetDescription = entityType === "fund" ? "" : (entityName ?? "");
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-lg p-0 flex flex-col">
         <SheetHeader className="px-6 pt-6 pb-2">
@@ -1354,7 +1712,7 @@ export function EntitySheet({
           )}
 
           {data && !loading && entityType === "company" && (
-            <CompanyView data={data} onEnrichComplete={fetchDetail} />
+            <CompanyView data={data} onEnrichComplete={fetchDetail} onOpenLogoPicker={() => setLogoPickerOpen(true)} />
           )}
           {data && !loading && entityType === "investor" && (
             <InvestorView data={data} onEnrichComplete={fetchDetail} />
@@ -1362,8 +1720,25 @@ export function EntitySheet({
           {data && !loading && entityType === "round" && (
             <RoundView data={data} />
           )}
+          {data && !loading && entityType === "fund" && (
+            <FundView data={data} />
+          )}
         </ScrollArea>
       </SheetContent>
     </Sheet>
+
+    {data && entityType === "company" && data.website && (
+      <LogoPicker
+        open={logoPickerOpen}
+        onOpenChange={setLogoPickerOpen}
+        companyName={String(data.name ?? "")}
+        website={String(data.website)}
+        onSelect={(url) => {
+          // Update the data in-place so CompanyView reflects the change
+          setData((prev) => prev ? { ...prev, logoUrl: url, lockedFields: [...(Array.isArray(prev.lockedFields) ? prev.lockedFields as string[] : []), "logoUrl"] } : prev);
+        }}
+      />
+    )}
+    </>
   );
 }

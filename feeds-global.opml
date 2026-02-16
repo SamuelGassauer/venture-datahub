@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Global VC &amp; Startup Funding Feeds</title>
+    <dateCreated>2026-02-11</dateCreated>
+  </head>
+  <body>
+
+    <!-- ================================================================== -->
+    <!-- GLOBAL / US                                                        -->
+    <!-- ================================================================== -->
+    <outline text="Global" title="Global">
+      <outline type="rss" text="TechCrunch" title="TechCrunch" xmlUrl="https://techcrunch.com/feed/" htmlUrl="https://techcrunch.com"/>
+      <outline type="rss" text="TechCrunch - Venture" title="TechCrunch - Venture" xmlUrl="https://techcrunch.com/category/venture/feed/" htmlUrl="https://techcrunch.com/category/venture/"/>
+      <outline type="rss" text="TechCrunch - Startups" title="TechCrunch - Startups" xmlUrl="https://techcrunch.com/category/startups/feed/" htmlUrl="https://techcrunch.com/category/startups/"/>
+      <outline type="rss" text="TechCrunch - Funding" title="TechCrunch - Funding" xmlUrl="https://techcrunch.com/tag/funding/feed/" htmlUrl="https://techcrunch.com/tag/funding/"/>
+      <outline type="rss" text="Crunchbase News" title="Crunchbase News" xmlUrl="https://news.crunchbase.com/feed/" htmlUrl="https://news.crunchbase.com"/>
+      <outline type="rss" text="PitchBook Blog" title="PitchBook Blog" xmlUrl="https://pitchbook.com/blog/rss" htmlUrl="https://pitchbook.com/blog"/>
+      <outline type="rss" text="PitchBook News" title="PitchBook News" xmlUrl="https://pitchbook.com/rss/news" htmlUrl="https://pitchbook.com/news"/>
+      <outline type="rss" text="VentureBeat" title="VentureBeat" xmlUrl="https://venturebeat.com/feed/" htmlUrl="https://venturebeat.com"/>
+      <outline type="rss" text="FinSMEs" title="FinSMEs" xmlUrl="https://www.finsmes.com/feed" htmlUrl="https://www.finsmes.com"/>
+      <outline type="rss" text="Dealroom Blog" title="Dealroom Blog" xmlUrl="https://dealroom.co/blog/feed" htmlUrl="https://dealroom.co/blog"/>
+      <outline type="rss" text="PYMNTS" title="PYMNTS" xmlUrl="https://www.pymnts.com/feed/" htmlUrl="https://www.pymnts.com"/>
+      <outline type="rss" text="Fortune Term Sheet" title="Fortune Term Sheet" xmlUrl="https://fortune.com/section/term-sheet/feed/" htmlUrl="https://fortune.com/section/term-sheet/"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — Pan-European                                              -->
+    <!-- ================================================================== -->
+    <outline text="Pan-European" title="Pan-European">
+      <outline type="rss" text="Sifted" title="Sifted" xmlUrl="https://sifted.eu/feed" htmlUrl="https://sifted.eu"/>
+      <outline type="rss" text="Tech.eu" title="Tech.eu" xmlUrl="https://tech.eu/feed" htmlUrl="https://tech.eu"/>
+      <outline type="rss" text="EU-Startups" title="EU-Startups" xmlUrl="https://www.eu-startups.com/feed/" htmlUrl="https://www.eu-startups.com"/>
+      <outline type="rss" text="Silicon Canals" title="Silicon Canals" xmlUrl="https://siliconcanals.com/feed/" htmlUrl="https://siliconcanals.com"/>
+      <outline type="rss" text="Tech Funding News" title="Tech Funding News" xmlUrl="https://techfundingnews.com/feed/" htmlUrl="https://techfundingnews.com"/>
+      <outline type="rss" text="AltFi" title="AltFi" xmlUrl="https://www.altfi.com/rss" htmlUrl="https://www.altfi.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — DACH (Germany, Austria, Switzerland)                      -->
+    <!-- ================================================================== -->
+    <outline text="DACH" title="DACH">
+      <outline type="rss" text="Deutsche Startups" title="Deutsche Startups" xmlUrl="https://www.deutsche-startups.de/feed/" htmlUrl="https://www.deutsche-startups.de"/>
+      <outline type="rss" text="Gruenderszene" title="Gruenderszene" xmlUrl="https://www.businessinsider.de/gruenderszene/feed/" htmlUrl="https://www.businessinsider.de/gruenderszene/"/>
+      <outline type="rss" text="t3n" title="t3n" xmlUrl="https://t3n.de/rss.xml" htmlUrl="https://t3n.de"/>
+      <outline type="rss" text="Trending Topics" title="Trending Topics" xmlUrl="https://www.trendingtopics.eu/feed/" htmlUrl="https://www.trendingtopics.eu"/>
+      <outline type="rss" text="Startupticker.ch" title="Startupticker.ch" xmlUrl="https://www.startupticker.ch/index/rss.xml" htmlUrl="https://www.startupticker.ch"/>
+      <outline type="rss" text="Berlin Valley" title="Berlin Valley" xmlUrl="https://berlinvalley.com/feed/" htmlUrl="https://berlinvalley.com"/>
+      <outline type="rss" text="FINSIDER" title="FINSIDER" xmlUrl="https://finsider.de/feed/" htmlUrl="https://finsider.de"/>
+      <outline type="rss" text="Startup Valley" title="Startup Valley" xmlUrl="https://www.startupvalley.news/de/feed/" htmlUrl="https://www.startupvalley.news"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — UK &amp; Ireland                                          -->
+    <!-- ================================================================== -->
+    <outline text="UK &amp; Ireland" title="UK &amp; Ireland">
+      <outline type="rss" text="UKTN" title="UKTN" xmlUrl="https://www.uktech.news/feed" htmlUrl="https://www.uktech.news"/>
+      <outline type="rss" text="TechRound" title="TechRound" xmlUrl="https://techround.co.uk/feed/" htmlUrl="https://techround.co.uk"/>
+      <outline type="rss" text="BusinessCloud" title="BusinessCloud" xmlUrl="https://www.businesscloud.co.uk/feed/" htmlUrl="https://www.businesscloud.co.uk"/>
+      <outline type="rss" text="Silicon Republic" title="Silicon Republic" xmlUrl="https://www.siliconrepublic.com/feed" htmlUrl="https://www.siliconrepublic.com"/>
+      <outline type="rss" text="TechSPARK" title="TechSPARK" xmlUrl="https://techspark.co/feed/" htmlUrl="https://techspark.co"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — France                                                    -->
+    <!-- ================================================================== -->
+    <outline text="France" title="France">
+      <outline type="rss" text="Maddyness" title="Maddyness" xmlUrl="https://www.maddyness.com/feed/" htmlUrl="https://www.maddyness.com"/>
+      <outline type="rss" text="FrenchWeb" title="FrenchWeb" xmlUrl="https://www.frenchweb.fr/feed" htmlUrl="https://www.frenchweb.fr"/>
+      <outline type="rss" text="La French Tech Journal" title="La French Tech Journal" xmlUrl="https://lafrenchtech.com/en/feed/" htmlUrl="https://lafrenchtech.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — Nordics                                                   -->
+    <!-- ================================================================== -->
+    <outline text="Nordics" title="Nordics">
+      <outline type="rss" text="ArcticStartup" title="ArcticStartup" xmlUrl="https://arcticstartup.com/feed/" htmlUrl="https://arcticstartup.com"/>
+      <outline type="rss" text="The Nordic Web" title="The Nordic Web" xmlUrl="https://thenordicweb.com/feed/" htmlUrl="https://thenordicweb.com"/>
+      <outline type="rss" text="Nordic Startup News" title="Nordic Startup News" xmlUrl="https://nordicstartupnews.com/feed/" htmlUrl="https://nordicstartupnews.com"/>
+      <outline type="rss" text="HealthTech Nordic" title="HealthTech Nordic" xmlUrl="https://healthtechnordic.com/feed/" htmlUrl="https://healthtechnordic.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — Southern Europe (Iberia, Italy, Greece)                   -->
+    <!-- ================================================================== -->
+    <outline text="Southern Europe" title="Southern Europe">
+      <outline type="rss" text="Novobrief" title="Novobrief" xmlUrl="https://novobrief.com/feed/" htmlUrl="https://novobrief.com"/>
+      <outline type="rss" text="StartupItalia" title="StartupItalia" xmlUrl="https://startupitalia.eu/feed/" htmlUrl="https://startupitalia.eu"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — CEE / Baltics                                             -->
+    <!-- ================================================================== -->
+    <outline text="CEE &amp; Baltics" title="CEE &amp; Baltics">
+      <outline type="rss" text="The Recursive" title="The Recursive" xmlUrl="https://therecursive.com/feed/" htmlUrl="https://therecursive.com"/>
+      <outline type="rss" text="Emerging Europe" title="Emerging Europe" xmlUrl="https://emerging-europe.com/feed/" htmlUrl="https://emerging-europe.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- ASIA — General                                                     -->
+    <!-- ================================================================== -->
+    <outline text="Asia" title="Asia">
+      <outline type="rss" text="Tech in Asia" title="Tech in Asia" xmlUrl="https://www.techinasia.com/feed" htmlUrl="https://www.techinasia.com"/>
+      <outline type="rss" text="e27" title="e27" xmlUrl="https://e27.co/index_wp.php/feed" htmlUrl="https://e27.co"/>
+      <outline type="rss" text="DealStreetAsia" title="DealStreetAsia" xmlUrl="https://www.dealstreetasia.com/feed/" htmlUrl="https://www.dealstreetasia.com"/>
+      <outline type="rss" text="TechNode" title="TechNode" xmlUrl="https://technode.com/feed/" htmlUrl="https://technode.com"/>
+      <outline type="rss" text="36Kr (via RSSHub)" title="36Kr (via RSSHub)" xmlUrl="https://rsshub.app/36kr/newsflashes" htmlUrl="https://36kr.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- ASIA — India                                                       -->
+    <!-- ================================================================== -->
+    <outline text="India" title="India">
+      <outline type="rss" text="YourStory" title="YourStory" xmlUrl="https://yourstory.com/feed" htmlUrl="https://yourstory.com"/>
+      <outline type="rss" text="Inc42" title="Inc42" xmlUrl="https://inc42.com/feed/" htmlUrl="https://inc42.com"/>
+      <outline type="rss" text="The Ken" title="The Ken" xmlUrl="https://the-ken.com/feed/" htmlUrl="https://the-ken.com"/>
+      <outline type="rss" text="Entrackr" title="Entrackr" xmlUrl="https://entrackr.com/feed/" htmlUrl="https://entrackr.com"/>
+      <outline type="rss" text="VCCircle" title="VCCircle" xmlUrl="https://www.vccircle.com/rss-feeds/" htmlUrl="https://www.vccircle.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- MIDDLE EAST &amp; AFRICA — MENA                                    -->
+    <!-- ================================================================== -->
+    <outline text="Middle East" title="Middle East">
+      <outline type="rss" text="Wamda" title="Wamda" xmlUrl="https://www.wamda.com/feed" htmlUrl="https://www.wamda.com"/>
+      <outline type="rss" text="Menabytes" title="Menabytes" xmlUrl="https://www.menabytes.com/feed/" htmlUrl="https://www.menabytes.com"/>
+      <outline type="rss" text="Arabnet" title="Arabnet" xmlUrl="https://news.arabnet.me/feed/" htmlUrl="https://news.arabnet.me"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- MIDDLE EAST &amp; AFRICA — Africa                                  -->
+    <!-- ================================================================== -->
+    <outline text="Africa" title="Africa">
+      <outline type="rss" text="TechCabal" title="TechCabal" xmlUrl="https://techcabal.com/feed/" htmlUrl="https://techcabal.com"/>
+      <outline type="rss" text="Disrupt Africa" title="Disrupt Africa" xmlUrl="https://disruptafrica.com/feed/" htmlUrl="https://disruptafrica.com"/>
+      <outline type="rss" text="Techpoint Africa" title="Techpoint Africa" xmlUrl="https://techpoint.africa/feed/" htmlUrl="https://techpoint.africa"/>
+      <outline type="rss" text="Digest Africa" title="Digest Africa" xmlUrl="https://digestafrica.com/feed" htmlUrl="https://digestafrica.com"/>
+      <outline type="rss" text="Ventureburn" title="Ventureburn" xmlUrl="https://ventureburn.com/feed/" htmlUrl="https://ventureburn.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- LATIN AMERICA                                                      -->
+    <!-- ================================================================== -->
+    <outline text="Latin America" title="Latin America">
+      <outline type="rss" text="LatamList" title="LatamList" xmlUrl="https://latamlist.com/feed/" htmlUrl="https://latamlist.com"/>
+      <outline type="rss" text="LAVCA" title="LAVCA" xmlUrl="https://www.lavca.org/feed/" htmlUrl="https://www.lavca.org"/>
+      <outline type="rss" text="TechCrunch - Latin America" title="TechCrunch - Latin America" xmlUrl="https://techcrunch.com/tag/latin-america/feed/" htmlUrl="https://techcrunch.com/tag/latin-america/"/>
+      <outline type="rss" text="iupana" title="iupana" xmlUrl="https://iupana.com/feed/" htmlUrl="https://iupana.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- OCEANIA (Australia &amp; New Zealand)                              -->
+    <!-- ================================================================== -->
+    <outline text="Oceania" title="Oceania">
+      <outline type="rss" text="Startup Daily" title="Startup Daily" xmlUrl="https://startupdaily.net/feed/" htmlUrl="https://startupdaily.net"/>
+      <outline type="rss" text="SmartCompany" title="SmartCompany" xmlUrl="https://www.smartcompany.com.au/feed/" htmlUrl="https://www.smartcompany.com.au"/>
+      <outline type="rss" text="NZ Entrepreneur" title="NZ Entrepreneur" xmlUrl="https://nzentrepreneur.co.nz/feed/" htmlUrl="https://nzentrepreneur.co.nz"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- SECTOR-SPECIFIC (Global)                                           -->
+    <!-- ================================================================== -->
+    <outline text="Sector: FinTech" title="Sector: FinTech">
+      <outline type="rss" text="FinTech Futures" title="FinTech Futures" xmlUrl="https://www.fintechfutures.com/feed/" htmlUrl="https://www.fintechfutures.com"/>
+      <outline type="rss" text="FINSIDER" title="FINSIDER" xmlUrl="https://finsider.de/feed/" htmlUrl="https://finsider.de"/>
+      <outline type="rss" text="Finextra" title="Finextra" xmlUrl="https://www.finextra.com/rss/headlines.aspx" htmlUrl="https://www.finextra.com"/>
+    </outline>
+
+    <outline text="Sector: HealthTech &amp; BioTech" title="Sector: HealthTech &amp; BioTech">
+      <outline type="rss" text="HealthTech Nordic" title="HealthTech Nordic" xmlUrl="https://healthtechnordic.com/feed/" htmlUrl="https://healthtechnordic.com"/>
+      <outline type="rss" text="MobiHealthNews" title="MobiHealthNews" xmlUrl="https://www.mobihealthnews.com/feed" htmlUrl="https://www.mobihealthnews.com"/>
+      <outline type="rss" text="FierceBiotech" title="FierceBiotech" xmlUrl="https://www.fiercebiotech.com/rss/xml" htmlUrl="https://www.fiercebiotech.com"/>
+    </outline>
+
+    <outline text="Sector: Climate &amp; Energy" title="Sector: Climate &amp; Energy">
+      <outline type="rss" text="CleanTechnica" title="CleanTechnica" xmlUrl="https://cleantechnica.com/feed/" htmlUrl="https://cleantechnica.com"/>
+      <outline type="rss" text="CTVC (Climate Tech VC)" title="CTVC (Climate Tech VC)" xmlUrl="https://www.ctvc.co/rss/" htmlUrl="https://www.ctvc.co"/>
+      <outline type="rss" text="Charged EVs" title="Charged EVs" xmlUrl="https://chargedevs.com/feed/" htmlUrl="https://chargedevs.com"/>
+      <outline type="rss" text="GreenBiz" title="GreenBiz" xmlUrl="https://www.greenbiz.com/rss/all" htmlUrl="https://www.greenbiz.com"/>
+    </outline>
+
+    <outline text="Sector: AI &amp; DeepTech" title="Sector: AI &amp; DeepTech">
+      <outline type="rss" text="The Batch (deeplearning.ai)" title="The Batch (deeplearning.ai)" xmlUrl="https://www.deeplearning.ai/the-batch/feed/" htmlUrl="https://www.deeplearning.ai/the-batch/"/>
+      <outline type="rss" text="Import AI" title="Import AI" xmlUrl="https://importai.substack.com/feed" htmlUrl="https://importai.substack.com"/>
+      <outline type="rss" text="AI News" title="AI News" xmlUrl="https://www.artificialintelligence-news.com/feed/" htmlUrl="https://www.artificialintelligence-news.com"/>
+    </outline>
+
+    <outline text="Sector: Crypto &amp; Web3" title="Sector: Crypto &amp; Web3">
+      <outline type="rss" text="The Block" title="The Block" xmlUrl="https://www.theblock.co/rss.xml" htmlUrl="https://www.theblock.co"/>
+      <outline type="rss" text="CoinDesk" title="CoinDesk" xmlUrl="https://www.coindesk.com/arc/outboundfeeds/rss/" htmlUrl="https://www.coindesk.com"/>
+    </outline>
+
+    <outline text="Sector: SaaS &amp; Enterprise" title="Sector: SaaS &amp; Enterprise">
+      <outline type="rss" text="SaaStr" title="SaaStr" xmlUrl="https://www.saastr.com/feed/" htmlUrl="https://www.saastr.com"/>
+      <outline type="rss" text="Bessemer Cloud Index" title="Bessemer Cloud Index" xmlUrl="https://www.bvp.com/rss.xml" htmlUrl="https://www.bvp.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- VC FIRM BLOGS (Insights &amp; Deal Announcements)                  -->
+    <!-- ================================================================== -->
+    <outline text="VC Firms" title="VC Firms">
+      <outline type="rss" text="Atomico Blog" title="Atomico Blog" xmlUrl="https://atomico.com/insights/rss.xml" htmlUrl="https://atomico.com/insights"/>
+      <outline type="rss" text="Speedinvest Blog" title="Speedinvest Blog" xmlUrl="https://www.speedinvest.com/blog/rss.xml" htmlUrl="https://www.speedinvest.com/blog"/>
+      <outline type="rss" text="a16z Blog" title="a16z Blog" xmlUrl="https://a16z.com/feed/" htmlUrl="https://a16z.com"/>
+      <outline type="rss" text="Sequoia Blog" title="Sequoia Blog" xmlUrl="https://www.sequoiacap.com/feed/" htmlUrl="https://www.sequoiacap.com"/>
+      <outline type="rss" text="First Round Review" title="First Round Review" xmlUrl="https://review.firstround.com/feed.xml" htmlUrl="https://review.firstround.com"/>
+      <outline type="rss" text="NFX Blog" title="NFX Blog" xmlUrl="https://www.nfx.com/feed.xml" htmlUrl="https://www.nfx.com"/>
+      <outline type="rss" text="Point Nine Blog" title="Point Nine Blog" xmlUrl="https://medium.com/feed/point-nine-news" htmlUrl="https://medium.com/point-nine-news"/>
+      <outline type="rss" text="Northzone Blog" title="Northzone Blog" xmlUrl="https://northzone.com/feed/" htmlUrl="https://northzone.com"/>
+      <outline type="rss" text="EQT Ventures Blog" title="EQT Ventures Blog" xmlUrl="https://eqtventures.com/feed/" htmlUrl="https://eqtventures.com"/>
+    </outline>
+
+  </body>
+</opml>

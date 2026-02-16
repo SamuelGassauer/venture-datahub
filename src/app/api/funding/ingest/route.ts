@@ -3,9 +3,12 @@ import { prisma } from "@/lib/db";
 import { extractFundingFromSources } from "@/lib/llm-funding-extractor";
 import { syncSingleRoundToGraph } from "@/lib/graph-sync";
 import { enrichCompany } from "@/lib/company-enricher";
+import { requireAdmin } from "@/lib/api-auth";
 import { enrichInvestor } from "@/lib/investor-enricher";
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const body = await request.json();
     const { key, articleIds } = body as { key: string; articleIds: string[] };

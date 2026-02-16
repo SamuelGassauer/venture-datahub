@@ -1,9 +1,12 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { enrichCompany } from "@/lib/company-enricher";
+import { requireAdmin } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const { companyName } = await request.json();
 

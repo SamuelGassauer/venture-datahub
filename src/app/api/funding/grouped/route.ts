@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ type FundingEntry = {
   investors: string[];
   confidence: number;
   ingestedAt: Date | null;
+  dismissedAt: Date | null;
   createdAt: Date;
   articleId: string;
   article: {
@@ -45,6 +47,7 @@ export type GroupedRound = {
     publishedAt: string | null;
   }[];
   ingestedAt: string | null;
+  dismissedAt: string | null;
   firstSeen: string;
   lastSeen: string;
 };
@@ -296,6 +299,8 @@ function groupRounds(allRounds: FundingEntry[]): Map<string, FundingEntry[]> {
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const params = request.nextUrl.searchParams;
   const stage = params.get("stage");
   const country = params.get("country");
@@ -303,7 +308,11 @@ export async function GET(request: NextRequest) {
   const sortBy = params.get("sortBy") || "lastSeen";
   const sortOrder = params.get("sortOrder") || "desc";
 
-  const where: Record<string, unknown> = {};
+  const showDismissed = params.get("showDismissed") === "true";
+  const where: Record<string, unknown> = {
+    confidence: { gte: 0.6 },
+    ...(!showDismissed && { dismissedAt: null }),
+  };
   if (stage) where.stage = stage;
   if (country) where.country = country;
   if (search) {
@@ -389,6 +398,7 @@ export async function GET(request: NextRequest) {
       ingestedAt: entries.some((e) => e.ingestedAt)
         ? entries.find((e) => e.ingestedAt)!.ingestedAt!.toISOString()
         : null,
+      dismissedAt: entries.find((e) => e.dismissedAt)?.dismissedAt?.toISOString() ?? null,
       firstSeen: new Date(dates[0]).toISOString(),
       lastSeen: new Date(dates[dates.length - 1]).toISOString(),
     });

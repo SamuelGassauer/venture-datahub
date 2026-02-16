@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/api-auth";
 import { convertToEur } from "@/lib/post-generator";
 
 export const dynamic = "force-dynamic";
@@ -25,21 +26,27 @@ export type RoundWithPostStatus = {
   allInvestors: string[];
   logoUrl: string | null;
   description: string | null;
+  articleDate: string | null;
   hasPost: boolean;
   postId: string | null;
   postContent: string | null;
+  publishedAt: string | null;
 };
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const session = driver.session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
       OPTIONAL MATCH (lead:InvestorOrg)-[:PARTICIPATED_IN {role: 'lead'}]->(fr)
       OPTIONAL MATCH (inv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
+      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
       WITH c, fr,
            collect(DISTINCT lead.name)[0] AS leadInvestor,
-           collect(DISTINCT inv.name) AS allInvestors
+           collect(DISTINCT inv.name) AS allInvestors,
+           max(a.publishedAt) AS articleDate
       RETURN c.name AS companyName,
              c.country AS country,
              c.description AS description,
@@ -48,8 +55,9 @@ export async function GET() {
              fr.stage AS stage,
              leadInvestor,
              allInvestors,
+             articleDate,
              id(fr) AS neo4jId
-      ORDER BY fr.amountUsd DESC
+      ORDER BY articleDate DESC, fr.amountUsd DESC
     `);
 
     const rounds = result.records.map((r) => {
@@ -60,6 +68,9 @@ export async function GET() {
 
       // Build a stable key from company + stage + neo4jId
       const roundKey = `${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}_${(stage || "unknown").toLowerCase()}_${neo4jId}`;
+
+      const rawDate = r.get("articleDate");
+      const articleDate = rawDate ? String(rawDate) : null;
 
       return {
         roundKey,
@@ -72,6 +83,7 @@ export async function GET() {
         allInvestors: (r.get("allInvestors") as string[]).filter(Boolean),
         logoUrl: r.get("logoUrl") as string | null,
         description: r.get("description") as string | null,
+        articleDate,
       };
     });
 
@@ -79,7 +91,7 @@ export async function GET() {
     const roundKeys = rounds.map((r) => r.roundKey);
     const existingPosts = await prisma.post.findMany({
       where: { fundingRoundKey: { in: roundKeys } },
-      select: { id: true, fundingRoundKey: true, content: true },
+      select: { id: true, fundingRoundKey: true, content: true, publishedAt: true },
     });
     const postMap = new Map(existingPosts.map((p) => [p.fundingRoundKey, p]));
 
@@ -87,9 +99,11 @@ export async function GET() {
       const post = postMap.get(r.roundKey);
       return {
         ...r,
+        articleDate: r.articleDate,
         hasPost: !!post,
         postId: post?.id ?? null,
         postContent: post?.content ?? null,
+        publishedAt: post?.publishedAt?.toISOString() ?? null,
       };
     });
 

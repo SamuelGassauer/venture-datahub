@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
 import {
   Table,
   TableBody,
@@ -18,6 +19,7 @@ import { EntitySheet } from "@/components/graph/entity-sheet";
 type FundingRound = {
   company: string;
   country: string | null;
+  sector: string | null;
   amount: number | null;
   stage: string | null;
   leadInvestor: string | null;
@@ -56,6 +58,7 @@ export default function GraphFundingRoundsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const { filters } = useGlobalFilters();
 
   useEffect(() => {
     fetch("/api/graph-funding-rounds")
@@ -75,6 +78,18 @@ export default function GraphFundingRoundsPage() {
 
   const filtered = useMemo(() => {
     let list = rounds;
+    const geo = resolveGeoFilter(filters);
+    if (geo) {
+      list = list.filter((r) => r.country && geo.countries.has(r.country.toLowerCase()));
+    }
+    if (filters.stages.length > 0) {
+      const stagesLower = new Set(filters.stages.map((s) => s.toLowerCase()));
+      list = list.filter((r) => r.stage && stagesLower.has(r.stage.toLowerCase()));
+    }
+    if (filters.sectors.length > 0) {
+      const sectorsLower = new Set(filters.sectors.map((s) => s.toLowerCase()));
+      list = list.filter((r) => r.sector && sectorsLower.has(r.sector.toLowerCase()));
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -97,7 +112,7 @@ export default function GraphFundingRoundsPage() {
           : (aVal as number) - (bVal as number);
       return sortOrder === "asc" ? cmp : -cmp;
     });
-  }, [rounds, search, sortBy, sortOrder]);
+  }, [rounds, search, sortBy, sortOrder, filters]);
 
   const totalAmount = filtered.reduce((sum, r) => sum + (r.amount || 0), 0);
 

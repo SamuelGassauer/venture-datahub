@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { generatePost, fmtEur, convertToEur } from "@/lib/post-generator";
+import { requireAdmin } from "@/lib/api-auth";
 
 function toNumber(value: unknown): number | null {
   if (value == null) return null;
@@ -13,6 +14,8 @@ function toNumber(value: unknown): number | null {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const { roundKey } = (await request.json()) as { roundKey: string };
     if (!roundKey) {

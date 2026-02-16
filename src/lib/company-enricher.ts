@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { prisma } from "./db";
 import driver from "./neo4j";
 import { normalizeCompany } from "./graph-sync";
+import { taxonomyForPrompt, validateSector, validateSubsector } from "./taxonomy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +27,8 @@ type EnrichedFields = {
   country?: string | null;
   status?: string | null;
   location?: string | null;
+  sector?: string | null;
+  subsector?: string | null;
 };
 
 type LLMResult = EnrichedFields & {
@@ -100,7 +103,7 @@ function resolveUrl(base: string, href: string): string {
 // Logo extraction — tiered pipeline with validation
 // ---------------------------------------------------------------------------
 
-type LogoCandidate = { url: string; score: number; source: string };
+export type LogoCandidate = { url: string; score: number; source: string };
 
 const LOGO_PATTERN = /logo/i;
 const BRAND_PATTERN = /brand|mark|symbol/i;
@@ -135,7 +138,7 @@ function looksLikeHeadshot(url: string): boolean {
 }
 
 /** Validate a logo URL: must be reachable, must be an image, must not be tiny */
-async function validateLogoUrl(url: string): Promise<boolean> {
+export async function validateLogoUrl(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
       method: "HEAD",
@@ -168,7 +171,7 @@ async function validateLogoUrl(url: string): Promise<boolean> {
  * Tier 3 (Heuristic — ~70% reliable):
  *   First img in header/nav, og:image, regular favicon
  */
-function extractLogoCandidates($: cheerio.CheerioAPI, baseUrl: string): LogoCandidate[] {
+export function extractLogoCandidates($: cheerio.CheerioAPI, baseUrl: string): LogoCandidate[] {
   const candidates: LogoCandidate[] = [];
   const TIER1 = 1000; // structural sources get massive score boost
   const TIER2 = 500;
@@ -552,16 +555,37 @@ export function isValidWebsiteUrl(url: string | null | undefined): boolean {
 
 /** Known news/RSS/social domains that are NOT company websites */
 const NEWS_DOMAINS = new Set([
+  // Major tech/business news
   "techcrunch.com", "bloomberg.com", "reuters.com", "cnbc.com", "bbc.com",
   "theguardian.com", "nytimes.com", "wsj.com", "ft.com", "forbes.com",
   "venturebeat.com", "wired.com", "arstechnica.com", "theverge.com",
+  "techradar.com", "zdnet.com", "cnet.com", "engadget.com",
+  // EU startup/VC news
   "sifted.eu", "eu-startups.com", "tech.eu", "handelsblatt.com",
   "gruenderszene.de", "t3n.de", "businessinsider.com", "businessinsider.de",
+  "siliconcanals.com", "arcticstartup.com", "uktech.news",
+  "techfundingnews.com", "deutsche-startups.de", "trendingtopics.eu",
+  "berlinvalley.com", "maddyness.com", "novobrief.com", "therecursive.com",
+  "finsmes.com", "finsider.de", "altfi.com", "fintechfutures.com",
+  "cleantechnica.com", "healthtechnordic.com",
+  // Data/research platforms
   "pitchbook.com", "crunchbase.com", "dealroom.co", "cbinsights.com",
+  "tracxn.com", "owler.com", "craft.co", "zoominfo.com",
+  "angel.co", "wellfound.com", "f6s.com",
+  // Social / content platforms
   "twitter.com", "x.com", "facebook.com", "instagram.com", "youtube.com",
   "medium.com", "substack.com", "github.com", "wikipedia.org",
+  "reddit.com", "news.ycombinator.com",
+  // Big tech (never a startup website)
   "google.com", "apple.com", "amazon.com", "microsoft.com",
 ]);
+
+/** Domains that look like VC/investor sites — penalize when searching for startups */
+const VC_DOMAIN_PATTERNS = [
+  /ventures?\./, /capital\./, /partners\./, /invest/, /\.vc$/,
+  /fund\./, /catalyst/, /accel\./, /greylock/, /sequoia/, /a16z/,
+  /andreessen/, /lightspeed/, /benchmark/, /index\.co/, /indexventures/,
+];
 
 export function getDomain(url: string): string {
   try {
@@ -854,55 +878,121 @@ Respond with ONLY a JSON object, no markdown:
   "linkedinUrl": "https://www.linkedin.com/company/..." | null
 }`;
 
-/** LLM-based website verification: checks if the website content actually matches the entity */
+export type VerificationScore = {
+  match: boolean;
+  score: number;          // 0-100 overall confidence
+  reason: string;
+  subscores: {
+    namePresent: number;      // 0-25: entity name found on page?
+    businessMatch: number;    // 0-35: does the business/product match articles?
+    ownWebsite: number;       // 0-20: is this the entity's OWN site?
+    domainPlausible: number;  // 0-10: does the domain fit the entity?
+    entityTypeMatch: number;  // 0-10: correct type (startup vs investor)?
+  };
+};
+
+const VERIFICATION_THRESHOLD = 60; // minimum total score to accept
+
+/** LLM-based website verification with content scoring.
+ *  Compares website content against article context to ensure they describe the SAME business.
+ *  Returns a detailed score breakdown — never trusts name/domain match alone. */
 export async function verifyWebsiteWithLLM(
   entityName: string,
   entityType: "company" | "investor",
   url: string,
   html: string,
   articleContext: string
-): Promise<{ match: boolean; reason: string }> {
+): Promise<VerificationScore> {
   const anthropic = getClient();
 
-  // Extract meaningful page content for the LLM
   const $ = cheerio.load(html);
   const pageTitle = $("title").text().trim();
   const metaDesc = $('meta[name="description"]').attr("content") ||
     $('meta[property="og:description"]').attr("content") || "";
+
+  // Extract JSON-LD organization info
+  let jsonLdInfo = "";
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html() || "");
+      const items = Array.isArray(data) ? data : [data];
+      for (const obj of items) {
+        if (obj["@type"] && obj.name) {
+          jsonLdInfo += `Structured data: ${obj["@type"]} "${obj.name}"`;
+          if (obj.description) jsonLdInfo += ` — ${obj.description}`;
+          jsonLdInfo += "\n";
+        }
+      }
+    } catch { /* ignore */ }
+  });
+
   $("nav, footer, script, style, noscript, aside").remove();
   const bodyText = stripHtml($("body").text()).slice(0, 1500);
 
-  // Pre-check: if the page has almost no content, it's likely a redirect/parking/SPA shell
-  // → reject immediately, don't waste an LLM call
+  // Pre-check: almost no content → reject without LLM
   const totalContent = (pageTitle + metaDesc + bodyText).trim();
   if (totalContent.length < 50) {
-    return { match: false, reason: "Page has almost no content (likely a redirect, parked domain, or JS-only SPA)" };
+    return {
+      match: false, score: 0,
+      reason: "Page has almost no content (redirect, parked domain, or JS-only SPA)",
+      subscores: { namePresent: 0, businessMatch: 0, ownWebsite: 0, domainPlausible: 0, entityTypeMatch: 0 },
+    };
   }
 
   const typeLabel = entityType === "investor" ? "investment firm / VC" : "company / startup";
+  const oppositeType = entityType === "investor" ? "startup/portfolio company" : "investor/VC fund";
 
   const message = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 150,
-    system: `You verify whether a website belongs to a specific entity. Answer with ONLY a JSON object, no markdown.`,
+    max_tokens: 350,
+    system: `You verify whether a website belongs to a specific ${typeLabel} by scoring multiple dimensions.
+
+IMPORTANT: A matching name is NOT enough! The website content must describe the SAME BUSINESS as the articles.
+Example: "kinderpedia.com" could be an old children's encyclopedia — NOT the edtech startup "Kinderpedia" that was in the funding article. You must check if the PRODUCT/SERVICE described on the website matches the articles.
+
+Score each dimension independently (0 = no match, max = perfect match):
+
+1. namePresent (0-25): Does the entity name "${entityName}" appear on the page?
+   - 25: Name appears prominently (title, heading)
+   - 15: Name appears in content
+   - 0: Name not found
+
+2. businessMatch (0-35): Does the business/product/service described on the website match what the articles describe?
+   - 35: Same industry, same product, same description
+   - 15-25: Same general industry but details differ
+   - 0-10: Different business entirely (even if name matches!)
+
+3. ownWebsite (0-20): Is this the entity's OWN website (not a third-party page ABOUT them)?
+   - 20: Clearly the entity's own website (about page, product pages, contact info)
+   - 10: Probably own website but unclear
+   - 0: Third-party page (news article, database profile, Wikipedia)
+
+4. domainPlausible (0-10): Does the domain make sense for this entity?
+   - 10: Domain clearly relates to entity name
+   - 5: Domain is plausible but not obvious
+   - 0: Domain seems unrelated
+
+5. entityTypeMatch (0-10): Is this a ${typeLabel}'s website, not a ${oppositeType}'s?
+   - 10: Correct entity type
+   - 0: Wrong type (e.g. investor site when looking for startup)
+
+Answer with ONLY a JSON object, no markdown:
+{"score": <total 0-100>, "namePresent": <0-25>, "businessMatch": <0-35>, "ownWebsite": <0-20>, "domainPlausible": <0-10>, "entityTypeMatch": <0-10>, "reason": "brief explanation"}`,
     messages: [{
       role: "user",
-      content: `Does this website belong to the ${typeLabel} "${entityName}"?
+      content: `Score this website for "${entityName}" (${typeLabel}):
 
 Website URL: ${url}
+Domain: ${getDomain(url)}
 Page title: ${pageTitle}
 Meta description: ${metaDesc}
-Page content (excerpt): ${bodyText.slice(0, 800)}
+${jsonLdInfo ? `Structured data:\n${jsonLdInfo}` : ""}
+Page content (excerpt): ${bodyText.slice(0, 1000)}
 
-What we know about "${entityName}" from news articles:
-${articleContext.slice(0, 600)}
+What we know about "${entityName}" from funding/news articles:
+${articleContext.slice(0, 800)}
 
-Check:
-1. Does the website content describe the SAME entity as in the articles?
-2. Does the business/product described on the website match what we know from articles?
-3. Is this a real company website (not a parked domain, placeholder, or unrelated site)?
-
-{"match": true/false, "reason": "brief explanation"}`
+Score each dimension and provide the total (0-100).`
     }],
   });
 
@@ -914,62 +1004,354 @@ Check:
 
   try {
     const parsed = JSON.parse(cleaned);
-    return { match: !!parsed.match, reason: parsed.reason || "unknown" };
+    const total = typeof parsed.score === "number" ? parsed.score : 0;
+    const subscores = {
+      namePresent: parsed.namePresent ?? 0,
+      businessMatch: parsed.businessMatch ?? 0,
+      ownWebsite: parsed.ownWebsite ?? 0,
+      domainPlausible: parsed.domainPlausible ?? 0,
+      entityTypeMatch: parsed.entityTypeMatch ?? 0,
+    };
+
+    return {
+      match: total >= VERIFICATION_THRESHOLD,
+      score: total,
+      reason: parsed.reason || "unknown",
+      subscores,
+    };
   } catch {
-    // If LLM output is unparseable, be conservative and reject
-    return { match: false, reason: "Verification failed (unparseable LLM response)" };
+    return {
+      match: false, score: 0,
+      reason: "Verification failed (unparseable LLM response)",
+      subscores: { namePresent: 0, businessMatch: 0, ownWebsite: 0, domainPlausible: 0, entityTypeMatch: 0 },
+    };
   }
 }
 
 type VerifyResult = {
-  found: { url: string; html: string } | null;
-  rejections: { url: string; reason: string }[];
+  found: { url: string; html: string; verification: VerificationScore } | null;
+  rejections: { url: string; reason: string; score?: number }[];
 };
 
-/** Validate a batch of URL candidates, return the first that passes LLM verification */
+/** Validate a batch of URL candidates. ALWAYS verifies with LLM content scoring.
+ *  Name/domain match alone is never enough — the LLM must confirm that the
+ *  website content describes the same business as the articles. */
 async function validateAndVerify(
   candidates: string[],
   entityName: string,
   entityType: "company" | "investor",
-  articleContext: string
+  articleContext: string,
+  searchMeta?: Map<string, { title: string; description: string }>
 ): Promise<VerifyResult> {
   // Pre-filter: remove social media / non-website URLs
-  candidates = candidates.filter((url) => {
-    if (!isValidWebsiteUrl(url)) return false;
-    return true;
+  candidates = candidates.filter((url) => isValidWebsiteUrl(url));
+
+  // Score and sort candidates (most likely correct first → verify best candidates first)
+  const scored = candidates.map((url) => {
+    const meta = searchMeta?.get(url);
+    return scoreCandidate(url, entityName, entityType, meta?.title, meta?.description);
   });
+  scored.sort((a, b) => b.score - a.score);
 
-  const rejections: { url: string; reason: string }[] = [];
+  const rejections: { url: string; reason: string; score?: number }[] = [];
 
-  for (let i = 0; i < candidates.length; i += 5) {
-    const batch = candidates.slice(i, i + 5);
+  for (let i = 0; i < scored.length; i += 5) {
+    const batch = scored.slice(i, i + 5);
     // Fetch all pages in parallel
     const fetched = await Promise.all(
-      batch.map(async (url) => {
-        const result = await validateUrl(url);
-        return { url, ...result };
+      batch.map(async (c) => {
+        const result = await validateUrl(c.url);
+        return { ...c, ...result };
       })
     );
 
-    // Verify reachable pages sequentially (each costs an LLM call, limit spend)
     for (const r of fetched) {
       if (!r.ok || !r.html) {
         rejections.push({ url: r.url, reason: "URL unreachable or empty page" });
         continue;
       }
 
+      // Pre-LLM name check: only used to REJECT obviously wrong pages (save LLM cost)
+      const nameScore = quickNameCheck(r.html, entityName);
+      if (nameScore < 0.3 && r.score < 50) {
+        rejections.push({
+          url: r.url,
+          reason: `Entity name not found on page (nameScore=${nameScore.toFixed(2)}, domainScore=${r.score})`,
+        });
+        continue;
+      }
+
+      // ALWAYS verify with LLM — name/domain match alone is NOT enough.
+      // The LLM checks if the website CONTENT matches the ARTICLES (same business).
       const verification = await verifyWebsiteWithLLM(
         entityName, entityType, r.url, r.html, articleContext
       );
 
       if (verification.match) {
-        return { found: { url: r.url, html: r.html }, rejections };
+        return { found: { url: r.url, html: r.html, verification }, rejections };
       }
-      rejections.push({ url: r.url, reason: verification.reason });
+
+      const scoreDetail = Object.entries(verification.subscores)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ");
+      rejections.push({
+        url: r.url,
+        reason: `Score ${verification.score}/100 (${scoreDetail}): ${verification.reason}`,
+        score: verification.score,
+      });
     }
   }
 
   return { found: null, rejections };
+}
+
+// ---------------------------------------------------------------------------
+// Domain guessing — try obvious domains before any search/LLM
+// ---------------------------------------------------------------------------
+
+const STARTUP_TLDS = [".com", ".io", ".ai", ".co", ".tech", ".de", ".eu", ".app"];
+
+/** Normalize company name into plausible domain slugs */
+function companyToSlugs(name: string): string[] {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim();
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const slugs = new Set<string>();
+
+  // Single word or joined: "stripe", "deepl", "celonis"
+  slugs.add(words.join(""));
+
+  // Hyphenated: "hello-fresh"
+  if (words.length > 1 && words.length <= 3) {
+    slugs.add(words.join("-"));
+  }
+
+  // First word only (for "Klarna AB" → "klarna")
+  if (words.length > 1 && words[0].length >= 3) {
+    slugs.add(words[0]);
+  }
+
+  // Initials for multi-word names: "Boston Consulting Group" → "bcg"
+  if (words.length >= 3) {
+    slugs.add(words.map((w) => w[0]).join(""));
+  }
+
+  return Array.from(slugs).filter((s) => s.length >= 2);
+}
+
+/** Try direct domain guesses — cheapest discovery method (no API calls).
+ *  Returns candidates that are reachable and mention the entity name.
+ *  These still MUST be verified by LLM before acceptance. */
+async function guessWebsiteDomains(
+  entityName: string,
+  entityType: "company" | "investor"
+): Promise<{ url: string; html: string }[]> {
+  const slugs = companyToSlugs(entityName);
+  const tlds = entityType === "investor"
+    ? [".com", ".co", ".vc", ".io"]
+    : STARTUP_TLDS;
+
+  // Generate all domain candidates
+  const candidates: string[] = [];
+  for (const slug of slugs) {
+    for (const tld of tlds) {
+      candidates.push(`https://${slug}${tld}`);
+    }
+  }
+
+  const hits: { url: string; html: string; nameScore: number }[] = [];
+
+  // Try in batches of 6 (parallel GET requests)
+  for (let i = 0; i < candidates.length; i += 6) {
+    const batch = candidates.slice(i, i + 6);
+    const results = await Promise.all(
+      batch.map(async (url) => {
+        const result = await validateUrl(url);
+        return { url, ...result };
+      })
+    );
+
+    for (const r of results) {
+      if (!r.ok || !r.html) continue;
+      const nameScore = quickNameCheck(r.html, entityName);
+      if (nameScore >= 0.5) {
+        hits.push({ url: r.url, html: r.html, nameScore });
+      }
+    }
+
+    // If we already have good candidates, stop early
+    if (hits.length >= 3) break;
+  }
+
+  // Sort by name score (best match first)
+  hits.sort((a, b) => b.nameScore - a.nameScore);
+  return hits;
+}
+
+// ---------------------------------------------------------------------------
+// Pre-LLM name matching — fast sanity check before expensive verification
+// ---------------------------------------------------------------------------
+
+/** Quick check: does the page mention the entity name? Returns 0..1 score */
+function quickNameCheck(html: string, entityName: string): number {
+  const $ = cheerio.load(html);
+  const title = $("title").text().toLowerCase();
+  const metaDesc = (
+    $('meta[name="description"]').attr("content") ||
+    $('meta[property="og:description"]').attr("content") ||
+    ""
+  ).toLowerCase();
+  const ogTitle = ($('meta[property="og:title"]').attr("content") || "").toLowerCase();
+
+  // Also check JSON-LD for organization name
+  let jsonLdName = "";
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html() || "");
+      const items = Array.isArray(data) ? data : [data];
+      for (const obj of items) {
+        if (obj.name && typeof obj.name === "string") {
+          jsonLdName = obj.name.toLowerCase();
+        }
+      }
+    } catch { /* ignore */ }
+  });
+
+  const nameLower = entityName.toLowerCase();
+  const nameNorm = nameLower.replace(/[^a-z0-9]/g, "");
+
+  // Exact name match in title → very strong
+  if (title.includes(nameLower) || ogTitle.includes(nameLower)) return 1.0;
+
+  // Normalized match (ignoring special chars)
+  const titleNorm = title.replace(/[^a-z0-9]/g, "");
+  if (titleNorm.includes(nameNorm) || nameNorm.includes(titleNorm)) return 0.9;
+
+  // JSON-LD organization name match
+  if (jsonLdName && (jsonLdName.includes(nameLower) || nameLower.includes(jsonLdName))) return 0.9;
+
+  // Name in meta description
+  if (metaDesc.includes(nameLower)) return 0.7;
+
+  // Partial: first word of company name in title (e.g. "Klarna" in "Klarna | Buy now pay later")
+  const firstWord = nameLower.split(/\s+/)[0];
+  if (firstWord.length >= 3 && title.includes(firstWord)) return 0.6;
+
+  // Check domain itself
+  const domain = $('link[rel="canonical"]').attr("href") || "";
+  const domainNorm = getDomain(domain).replace(/[^a-z0-9]/g, "");
+  if (domainNorm && (domainNorm.includes(nameNorm) || nameNorm.includes(domainNorm))) return 0.5;
+
+  return 0.0;
+}
+
+// ---------------------------------------------------------------------------
+// Candidate scoring — rank URLs before expensive LLM verification
+// ---------------------------------------------------------------------------
+
+type ScoredCandidate = {
+  url: string;
+  score: number;
+  signals: string[];
+};
+
+/** Score a website candidate based on domain, URL structure, and search metadata */
+function scoreCandidate(
+  url: string,
+  entityName: string,
+  entityType: "company" | "investor",
+  searchTitle?: string,
+  searchDescription?: string
+): ScoredCandidate {
+  let score = 0;
+  const signals: string[] = [];
+
+  const domain = getDomain(url);
+  const domainNorm = domain.replace(/[^a-z0-9]/g, "");
+  const nameNorm = entityName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const nameFirst = entityName.toLowerCase().split(/\s+/)[0];
+
+  // === Domain-name match (strongest signal) ===
+  if (domainNorm === nameNorm || domainNorm === nameNorm.replace(/\s/g, "")) {
+    score += 100;
+    signals.push("exact-domain-match");
+  } else if (domainNorm.includes(nameNorm) || nameNorm.includes(domainNorm)) {
+    score += 70;
+    signals.push("domain-substring-match");
+  } else if (nameFirst.length >= 3 && domainNorm.includes(nameFirst)) {
+    score += 40;
+    signals.push("domain-first-word-match");
+  }
+
+  // === Homepage vs deep page ===
+  try {
+    const pathname = new URL(url).pathname;
+    if (pathname === "/" || pathname === "") {
+      score += 30;
+      signals.push("homepage");
+    } else if (pathname.split("/").filter(Boolean).length === 1) {
+      score += 15;
+      signals.push("shallow-path");
+    }
+  } catch { /* ignore */ }
+
+  // === TLD quality ===
+  if (domain.endsWith(".com")) { score += 10; signals.push("dot-com"); }
+  else if (domain.endsWith(".io") || domain.endsWith(".ai") || domain.endsWith(".co")) {
+    score += 8; signals.push("startup-tld");
+  }
+
+  // === Search result title match ===
+  if (searchTitle) {
+    const titleLower = searchTitle.toLowerCase();
+    if (titleLower.includes(entityName.toLowerCase())) {
+      score += 25;
+      signals.push("name-in-search-title");
+    }
+    // Penalize "Crunchbase", "LinkedIn", etc. in title
+    if (/crunchbase|pitchbook|dealroom|cbinsights|linkedin|wikipedia/i.test(titleLower)) {
+      score -= 30;
+      signals.push("aggregator-in-title");
+    }
+  }
+
+  // === Search description match ===
+  if (searchDescription) {
+    const descLower = searchDescription.toLowerCase();
+    if (descLower.includes(entityName.toLowerCase())) {
+      score += 10;
+      signals.push("name-in-search-desc");
+    }
+  }
+
+  // === Penalize VC domains when searching for startups ===
+  if (entityType === "company") {
+    for (const pattern of VC_DOMAIN_PATTERNS) {
+      if (pattern.test(domain)) {
+        score -= 40;
+        signals.push("vc-domain-penalty");
+        break;
+      }
+    }
+  }
+
+  // === Penalize deep paths that look like articles/blog posts ===
+  try {
+    const pathname = new URL(url).pathname;
+    if (/\/(blog|news|press|article|post)\//i.test(pathname)) {
+      score -= 25;
+      signals.push("blog-path-penalty");
+    }
+    if (/\/\d{4}\/\d{2}\//i.test(pathname)) {
+      score -= 30;
+      signals.push("date-path-penalty");
+    }
+  } catch { /* ignore */ }
+
+  return { url, score, signals };
 }
 
 export type DiscoveryResult = {
@@ -1003,6 +1385,28 @@ export async function discoverWebsite(
     : "";
 
   // ---------------------------------------------------------------
+  // Phase 0: Domain guessing (cheapest — no API calls for search)
+  // Each candidate still gets full LLM content verification.
+  // ---------------------------------------------------------------
+  const guessedDomains = await guessWebsiteDomains(entityName, entityType);
+  for (const guess of guessedDomains) {
+    const verification = await verifyWebsiteWithLLM(
+      entityName, entityType, guess.url, guess.html, articleSnippets
+    );
+    if (verification.match) {
+      return { website: guess.url, linkedinUrl: null, websiteHtml: guess.html };
+    }
+    allRejectedDomains.add(getDomain(guess.url));
+    const scoreDetail = Object.entries(verification.subscores)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ");
+    allRejections.push({
+      url: guess.url,
+      reason: `Score ${verification.score}/100 (${scoreDetail}): ${verification.reason}`,
+    });
+  }
+
+  // ---------------------------------------------------------------
   // Phase 1: Brave Search (real web search — most reliable)
   // ---------------------------------------------------------------
   const searchQuery =
@@ -1012,6 +1416,12 @@ export async function discoverWebsite(
 
   const searchResults = await searchWeb(searchQuery, 8);
 
+  // Build search metadata map for candidate scoring
+  const searchMeta = new Map<string, { title: string; description: string }>();
+  for (const r of searchResults) {
+    searchMeta.set(r.url, { title: r.title, description: r.description });
+  }
+
   if (searchResults.length > 0) {
     // Extract LinkedIn from search results
     const linkedinResult = searchResults.find((r) =>
@@ -1019,14 +1429,14 @@ export async function discoverWebsite(
     );
     if (linkedinResult) linkedinUrl = linkedinResult.url;
 
-    // Filter to valid website candidates
+    // Filter to valid website candidates, excluding already-rejected domains
     const searchCandidates = searchResults
       .map((r) => r.url)
-      .filter((url) => isValidWebsiteUrl(url));
+      .filter((url) => isValidWebsiteUrl(url) && !allRejectedDomains.has(getDomain(url)));
 
     if (searchCandidates.length > 0) {
       const result = await validateAndVerify(
-        searchCandidates, entityName, entityType, articleSnippets
+        searchCandidates, entityName, entityType, articleSnippets, searchMeta
       );
 
       if (result.found) {
@@ -1049,7 +1459,7 @@ export async function discoverWebsite(
   const domainToUrl = new Map<string, string>();
   for (const url of extractedUrls) {
     const domain = getDomain(url);
-    if (domain && !domainToUrl.has(domain)) {
+    if (domain && !domainToUrl.has(domain) && !allRejectedDomains.has(domain)) {
       domainToUrl.set(domain, url);
     }
   }
@@ -1137,7 +1547,9 @@ Please try DIFFERENT domains. Use your training knowledge about "${entityName}".
 
     if (candidates.length === 0) continue;
 
-    const result = await validateAndVerify(candidates, entityName, entityType, articleSnippets);
+    const result = await validateAndVerify(
+      candidates, entityName, entityType, articleSnippets, searchMeta
+    );
 
     if (result.found) {
       return { website: result.found.url, linkedinUrl, websiteHtml: result.found.html };
@@ -1166,8 +1578,12 @@ Rules:
 - For location, use city name if available
 - For linkedinUrl, provide the full URL
 - For website, provide the full URL
+- For sector and subsector: Pick EXACTLY ONE sector and ONE subsector from the taxonomy below. The PRIMARY MARKET the company serves decides the sector (e.g. "AI Drug Discovery" → "Health & Life Sciences", not "Enterprise Software"). Use the exact strings from the list.
 - For each field, provide a confidence score (0.0-1.0) in fieldConfidence
 - If a field cannot be determined, set it to null with confidence 0
+
+SECTOR TAXONOMY (sector: subsectors):
+${taxonomyForPrompt()}
 
 Respond with ONLY a JSON object, no markdown, no explanation:
 {
@@ -1179,6 +1595,8 @@ Respond with ONLY a JSON object, no markdown, no explanation:
   "country": string | null,
   "status": string | null,
   "location": string | null,
+  "sector": string | null,
+  "subsector": string | null,
   "fieldConfidence": {
     "description": number,
     "website": number,
@@ -1187,7 +1605,9 @@ Respond with ONLY a JSON object, no markdown, no explanation:
     "linkedinUrl": number,
     "country": number,
     "status": number,
-    "location": number
+    "location": number,
+    "sector": number,
+    "subsector": number
   }
 }`;
 
@@ -1234,6 +1654,9 @@ async function extractWithLLM(
     const parsed = JSON.parse(cleaned);
     // Sanitize: never accept social media URLs as website
     const rawWebsite = parsed.website || null;
+    // Validate sector/subsector against taxonomy
+    const sector = validateSector(parsed.sector);
+    const subsector = validateSubsector(sector, parsed.subsector);
     return {
       description: parsed.description || null,
       website: isValidWebsiteUrl(rawWebsite) ? rawWebsite : null,
@@ -1244,6 +1667,8 @@ async function extractWithLLM(
       country: parsed.country || null,
       status: parsed.status || null,
       location: parsed.location || null,
+      sector,
+      subsector,
       fieldConfidence: parsed.fieldConfidence ?? {},
     };
   } catch {
@@ -1272,6 +1697,7 @@ async function saveToGraph(
               c.foundedYear AS foundedYear, c.employeeRange AS employeeRange,
               c.linkedinUrl AS linkedinUrl, c.country AS country,
               c.status AS status, c.logoUrl AS logoUrl,
+              c.sector AS sector, c.subsector AS subsector,
               c.lockedFields AS lockedFields
        LIMIT 1`,
       { norm: normalizedName }
@@ -1295,6 +1721,8 @@ async function saveToGraph(
       ["linkedinUrl", "linkedinUrl"],
       ["country", "country"],
       ["status", "status"],
+      ["sector", "sector"],
+      ["subsector", "subsector"],
     ];
 
     for (const [field, neo4jProp] of fieldMap) {
@@ -1368,11 +1796,53 @@ async function saveToGraph(
 // Main pipeline
 // ---------------------------------------------------------------------------
 
+// How many days before re-enriching an entity
+const ENRICHMENT_COOLDOWN_DAYS = 365;
+
 export async function enrichCompany(
   companyName: string,
   onProgress: (p: EnrichProgress) => void
 ): Promise<void> {
   const normalizedName = normalizeCompany(companyName);
+
+  // Skip if recently enriched with key fields populated
+  {
+    const checkSession = driver.session({ defaultAccessMode: "READ" });
+    try {
+      const result = await checkSession.run(
+        `MATCH (c:Company {normalizedName: $norm})
+         RETURN c.enrichedAt AS enrichedAt, c.website AS website,
+                c.description AS description, c.sector AS sector,
+                c.logoUrl AS logoUrl
+         LIMIT 1`,
+        { norm: normalizedName }
+      );
+      const rec = result.records[0];
+      if (rec) {
+        const enrichedAt = rec.get("enrichedAt");
+        const website = rec.get("website");
+        const description = rec.get("description");
+        const sector = rec.get("sector");
+
+        if (enrichedAt && website && description && sector) {
+          // Parse Neo4j datetime to JS Date
+          const enrichedDate = new Date(enrichedAt.toString());
+          const ageMs = Date.now() - enrichedDate.getTime();
+          const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+          if (ageDays < ENRICHMENT_COOLDOWN_DAYS) {
+            onProgress({
+              stage: "done",
+              message: `Skipped — enriched ${Math.floor(ageDays)}d ago`,
+            });
+            return;
+          }
+        }
+      }
+    } finally {
+      await checkSession.close();
+    }
+  }
 
   // Stage 1: Articles
   onProgress({ stage: "articles", message: "Loading linked articles..." });
@@ -1436,13 +1906,15 @@ export async function enrichCompany(
         logoCandidates = parsed.logoCandidates;
         onProgress({
           stage: "website",
-          message: `${getDomain(websiteUrl)} verified`,
+          message: `${getDomain(websiteUrl)} verified (score: ${verification.score}/100)`,
+          detail: `businessMatch=${verification.subscores.businessMatch}/35, namePresent=${verification.subscores.namePresent}/25`,
         });
       } else {
         // Website doesn't match — clear it and re-discover
         onProgress({
           stage: "website",
-          message: `${getDomain(websiteUrl)} doesn't match — re-discovering...`,
+          message: `${getDomain(websiteUrl)} rejected (score: ${verification.score}/100) — re-discovering...`,
+          detail: verification.reason,
         });
         websiteUrl = null;
         // Clear wrong website from Neo4j
@@ -1458,9 +1930,19 @@ export async function enrichCompany(
         }
       }
     } else {
-      // Website unreachable — clear and re-discover
+      // Website unreachable — clear from Neo4j and re-discover
       onProgress({ stage: "website", message: `${getDomain(websiteUrl)} unreachable — re-discovering...` });
       websiteUrl = null;
+      const clearSession = driver.session();
+      try {
+        await clearSession.run(
+          `MATCH (c:Company {normalizedName: $norm})
+           SET c.website = null, c.logoUrl = null, c.linkedinUrl = null`,
+          { norm: normalizedName }
+        );
+      } finally {
+        await clearSession.close();
+      }
     }
   }
 
@@ -1512,13 +1994,16 @@ export async function enrichCompany(
   onProgress({ stage: "llm", message: "Extracting company data..." });
   const llmResult = await extractWithLLM(companyName, articleTexts, websiteText);
 
-  // Merge discovery results into LLM result (fill gaps)
-  if (!llmResult.website && websiteUrl) {
+  // Merge discovery results — discovery website was LLM-verified, so it ALWAYS wins
+  if (websiteUrl) {
     llmResult.website = websiteUrl;
-    llmResult.fieldConfidence["website"] = 0.8;
+    // High confidence because the website passed LLM content scoring (≥60/100)
+    llmResult.fieldConfidence["website"] = 0.95;
   }
-  if (!llmResult.linkedinUrl && discoveredLinkedinUrl) {
-    llmResult.linkedinUrl = discoveredLinkedinUrl;
+  if (discoveredLinkedinUrl) {
+    if (!llmResult.linkedinUrl) {
+      llmResult.linkedinUrl = discoveredLinkedinUrl;
+    }
     llmResult.fieldConfidence["linkedinUrl"] = 0.8;
   }
 

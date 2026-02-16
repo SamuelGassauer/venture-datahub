@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { syncAllFeeds } from "@/lib/sync-engine";
+import { requireAdmin } from "@/lib/api-auth";
 
 export async function POST() {
+  const authResult = await requireAdmin();
+  if (authResult instanceof NextResponse) return authResult;
   try {
     const results = await syncAllFeeds();
     const successful = results.filter((r) => r.status === "success").length;

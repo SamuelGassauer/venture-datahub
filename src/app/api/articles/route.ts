@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(request: NextRequest) {
+  const session = await requireAuth();
+  if (session instanceof NextResponse) return session;
   const params = request.nextUrl.searchParams;
   const page = parseInt(params.get("page") || "1");
   const pageSize = parseInt(params.get("pageSize") || "50");

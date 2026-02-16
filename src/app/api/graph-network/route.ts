@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
+import { requireAuth } from "@/lib/api-auth";
 
 function toNumber(value: unknown): unknown {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -28,6 +29,8 @@ export type GraphNetworkResponse = {
 };
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const session = driver.session({ defaultAccessMode: "READ" });
   try {
     const { searchParams } = request.nextUrl;

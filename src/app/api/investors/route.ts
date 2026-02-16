@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
+import { requireAuth } from "@/lib/api-auth";
 
 function toNumber(value: unknown): unknown {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -19,6 +20,8 @@ function parseRecords(records: import("neo4j-driver").Record[]) {
 }
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const session = driver.session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
@@ -43,7 +46,11 @@ export async function GET() {
       RETURN inv.name AS name, dealCount, leadCount,
              totalDeployed, companies[0..5] AS portfolioCompanies,
              inv.logoUrl AS logoUrl,
-             enrichScore
+             enrichScore,
+             inv.hq AS hq,
+             COALESCE(inv.stageFocus, []) AS stageFocus,
+             COALESCE(inv.geoFocus, []) AS geoFocus,
+             COALESCE(inv.sectorFocus, []) AS sectorFocus
       ORDER BY dealCount DESC
     `);
 

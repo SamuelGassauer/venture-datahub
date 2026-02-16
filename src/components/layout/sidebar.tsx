@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Newspaper,
   Rss,
-  TrendingUp,
   Settings,
   RefreshCw,
   GitFork,
@@ -14,9 +14,20 @@ import {
   Share2,
   Building2,
   Users,
-  CircleDollarSign,
   FileText,
   Shield,
+  Landmark,
+  Orbit,
+  Handshake,
+  BarChart3,
+  Flame,
+  Activity,
+  ChevronRight,
+  ChevronDown,
+  FileQuestion,
+  LogOut,
+  UserCog,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,47 +35,70 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
-type NavGroup = { label: string; items: NavItem[] };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+};
+type NavGroup = { label: string; items: NavItem[]; adminOnly?: boolean };
 
 const navGroups: NavGroup[] = [
   {
-    label: "Incoming",
+    label: "Monitor",
+    adminOnly: true,
     items: [
-      { href: "/feed", label: "Feed Timeline", icon: Newspaper },
-      { href: "/feeds", label: "Manage Feeds", icon: Rss },
-      { href: "/funding", label: "Funding Rounds", icon: TrendingUp },
+      { href: "/feed", label: "News Feed", icon: Newspaper },
+      { href: "/feeds", label: "Feed Sources", icon: Rss },
     ],
   },
   {
-    label: "Knowledge Graph",
+    label: "Pipeline",
+    adminOnly: true,
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/funding", label: "Deal Flow", icon: Flame },
+      { href: "/fund-events", label: "Fund Activity", icon: Landmark },
+      { href: "/company-value-indicator", label: "KPI Signals", icon: Activity },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
       { href: "/companies", label: "Companies", icon: Building2 },
       { href: "/investors", label: "Investors", icon: Users },
-      { href: "/graph/funding-rounds", label: "Funding Rounds", icon: CircleDollarSign },
-      { href: "/graph", label: "Graph Explorer", icon: Share2, exact: true },
+      { href: "/graph/funding-rounds", label: "Deals", icon: Handshake },
+      { href: "/graph/fund-closings", label: "Funds", icon: Landmark },
+      { href: "/graph/valuations", label: "Valuations", icon: BarChart3 },
+      { href: "/graph", label: "Explorer", icon: Share2, exact: true },
     ],
   },
   {
-    label: "Outgoing",
-    items: [
-      { href: "/posts", label: "Beitr\u00E4ge", icon: FileText },
-    ],
+    label: "Publish",
+    adminOnly: true,
+    items: [{ href: "/posts", label: "Posts", icon: FileText }],
   },
   {
-    label: "Reference",
-    items: [
-      { href: "/ontology", label: "Ontology", icon: GitFork },
-      { href: "/graphrag", label: "GraphRAG Guide", icon: BookOpen },
-      { href: "/algorithms", label: "Algorithmen", icon: Shield },
-    ],
+    label: "Admin",
+    adminOnly: true,
+    items: [{ href: "/admin/users", label: "Users", icon: UserCog }],
   },
+];
+
+const docsItems: NavItem[] = [
+  { href: "/ontology", label: "Ontology", icon: GitFork },
+  { href: "/graphrag", label: "GraphRAG", icon: BookOpen },
+  { href: "/algorithms", label: "Algorithms", icon: Shield },
+  { href: "/docs/api", label: "API", icon: Code2 },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [syncing, setSyncing] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+
+  const isAdmin = session?.user?.role === "admin";
 
   async function handleSync() {
     setSyncing(true);
@@ -85,17 +119,44 @@ export function Sidebar() {
     }
   }
 
+  function isActive(item: NavItem) {
+    return (
+      pathname === item.href ||
+      (!item.exact && pathname?.startsWith(item.href + "/"))
+    );
+  }
+
+  const linkClasses = (item: NavItem) =>
+    cn(
+      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+      isActive(item)
+        ? "bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+    );
+
+  const visibleGroups = navGroups.filter(
+    (group) => !group.adminOnly || isAdmin
+  );
+
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-card">
       <div className="flex h-14 items-center border-b px-4">
-        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <span>EU Funding Tracker</span>
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 font-semibold"
+        >
+          <Orbit className="h-5 w-5 text-primary" />
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-semibold">Orbit</span>
+            <span className="text-[10px] text-muted-foreground">
+              VC Intelligence
+            </span>
+          </div>
         </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label} className="mb-3">
             <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-muted-foreground">
               {group.label}
@@ -105,12 +166,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    pathname === item.href || (!item.exact && pathname?.startsWith(item.href + "/"))
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
+                  className={linkClasses(item)}
                 >
                   <item.icon className="h-4 w-4" />
                   {item.label}
@@ -121,28 +177,73 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t p-3 space-y-2">
-        <Link
-          href="/settings"
-          className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            pathname === "/settings"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          )}
+      <div className="border-t p-3 space-y-1">
+        {isAdmin && (
+          <>
+            <button
+              onClick={() => setDocsOpen(!docsOpen)}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <FileQuestion className="h-4 w-4" />
+              Docs
+              {docsOpen ? (
+                <ChevronDown className="ml-auto h-3 w-3" />
+              ) : (
+                <ChevronRight className="ml-auto h-3 w-3" />
+              )}
+            </button>
+            {docsOpen && (
+              <div className="ml-2 space-y-0.5">
+                {docsItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={linkClasses(item)}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+            <Link href="/settings" className={linkClasses({ href: "/settings", label: "Settings", icon: Settings })}>
+              <Settings className="h-4 w-4" />
+              Settings
+            </Link>
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+              {syncing ? "Syncing..." : "Sync All Feeds"}
+            </Button>
+          </>
+        )}
+
+        {session?.user && (
+          <div className="flex items-center gap-2 rounded-md px-3 py-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+              {(session.user.name || session.user.email || "?")[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="truncate text-sm font-medium">
+                {session.user.name || session.user.email}
+              </p>
+              <p className="text-[10px] uppercase text-muted-foreground">
+                {session.user.role}
+              </p>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
-          <Settings className="h-4 w-4" />
-          Settings
-        </Link>
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          {syncing ? "Syncing..." : "Sync All Feeds"}
-        </Button>
+          <LogOut className="h-4 w-4" />
+          Abmelden
+        </button>
       </div>
     </aside>
   );

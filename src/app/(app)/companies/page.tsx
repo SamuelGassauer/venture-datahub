@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
 import {
   Table,
   TableBody,
@@ -12,12 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Search, Building2, ExternalLink, Globe } from "lucide-react";
+import { ArrowUpDown, Search, Building2, ExternalLink, Globe, Trash2 } from "lucide-react";
+import { SmartLogo } from "@/components/ui/smart-logo";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import { EntitySheet } from "@/components/graph/entity-sheet";
 
 type Company = {
   name: string;
   country: string | null;
+  sector: string | null;
   totalFunding: number | null;
   roundCount: number;
   location: string | null;
@@ -60,6 +65,25 @@ export default function CompaniesPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const { filters } = useGlobalFilters();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+
+  async function handleDelete(name: string) {
+    if (!confirm(`Delete "${name}" and all its relationships?`)) return;
+    try {
+      const res = await fetch(`/api/companies/${encodeURIComponent(name)}`, { method: "DELETE" });
+      if (res.ok) {
+        setCompanies((prev) => prev.filter((c) => c.name !== name));
+        toast.success(`Deleted ${name}`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Delete failed");
+      }
+    } catch {
+      toast.error("Delete failed");
+    }
+  }
 
   useEffect(() => {
     fetch("/api/companies")
@@ -79,6 +103,18 @@ export default function CompaniesPage() {
 
   const filtered = useMemo(() => {
     let list = companies;
+    const geo = resolveGeoFilter(filters);
+    if (geo) {
+      list = list.filter((c) => c.country && geo.countries.has(c.country.toLowerCase()));
+    }
+    if (filters.stages.length > 0) {
+      const stagesLower = new Set(filters.stages.map((s) => s.toLowerCase()));
+      list = list.filter((c) => c.lastStage && stagesLower.has(c.lastStage.toLowerCase()));
+    }
+    if (filters.sectors.length > 0) {
+      const sectorsLower = new Set(filters.sectors.map((s) => s.toLowerCase()));
+      list = list.filter((c) => c.sector && sectorsLower.has(c.sector.toLowerCase()));
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -100,7 +136,7 @@ export default function CompaniesPage() {
         : (aVal as number) - (bVal as number);
       return sortOrder === "asc" ? cmp : -cmp;
     });
-  }, [companies, search, sortBy, sortOrder]);
+  }, [companies, search, sortBy, sortOrder, filters]);
 
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
@@ -199,6 +235,7 @@ export default function CompaniesPage() {
                 <TableHead className="w-[50px] text-xs font-semibold text-center">
                   Links
                 </TableHead>
+                {isAdmin && <TableHead className="w-[36px]" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -213,7 +250,7 @@ export default function CompaniesPage() {
                 >
                   <TableCell className="py-1.5 px-1">
                     {c.logoUrl ? (
-                      <img src={c.logoUrl} alt="" className="h-5 w-5 rounded object-contain" />
+                      <SmartLogo src={c.logoUrl} alt={c.name} className="h-5 w-5 rounded" fallback={<div className="h-5 w-5 rounded bg-muted" />} />
                     ) : (
                       <div className="h-5 w-5 rounded bg-muted" />
                     )}
@@ -303,6 +340,17 @@ export default function CompaniesPage() {
                       )}
                     </div>
                   </TableCell>
+                  {isAdmin && (
+                    <TableCell className="py-1.5 px-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(c.name); }}
+                        className="rounded p-1 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Delete company"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

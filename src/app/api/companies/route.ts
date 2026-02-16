@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
+import { requireAuth } from "@/lib/api-auth";
 
 function toNumber(value: unknown): unknown {
   return typeof value === "object" && value !== null && "toNumber" in value
@@ -18,6 +19,8 @@ function parseRecords(records: import("neo4j-driver").Record[]) {
 }
 
 export async function GET() {
+  const authResult = await requireAuth();
+  if (authResult instanceof NextResponse) return authResult;
   const session = driver.session({ defaultAccessMode: "READ" });
   try {
     const result = await session.run(`
@@ -43,6 +46,7 @@ export async function GET() {
             CASE WHEN c.logoUrl IS NOT NULL THEN 1 ELSE 0 END) AS enrichScore
       RETURN c.name AS name,
              c.country AS country,
+             c.sector AS sector,
              COALESCE(c.totalFundingUsd, calcTotalFunding) AS totalFunding,
              roundCount,
              location,

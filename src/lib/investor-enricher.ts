@@ -15,6 +15,7 @@ import {
   findBestLogo,
   type EnrichProgress,
 } from "./company-enricher";
+import { SECTORS } from "./taxonomy";
 
 export type { EnrichProgress };
 
@@ -212,7 +213,7 @@ This is the investor's OWN website. All information here is about the investor i
 Rules:
 - For type use one of: "vc", "pe", "cvc", "angel_group", "family_office", "sovereign_wealth", "government", "accelerator", "incubator", "bank", "hedge_fund", "unknown"
 - For stageFocus, extract stages like ["Pre-Seed", "Seed", "Series A", "Series B", "Growth"]
-- For sectorFocus, extract industries like ["Fintech", "SaaS", "HealthTech", "DeepTech"]
+- For sectorFocus, use ONLY names from this list: ${JSON.stringify(SECTORS)}
 - For geoFocus, extract regions like ["DACH", "Europe", "Nordics", "Global"]
 - For checkSizeMinUsd / checkSizeMaxUsd, extract in USD (raw numbers)
 - For aum, extract in USD (raw number)
@@ -248,7 +249,7 @@ CRITICAL: The articles describe STARTUPS that raised money. The investor partici
 - Do NOT extract the startup's data (website, location, founded year, description)
 - ONLY extract information about the INVESTOR's investment patterns:
   - What stages do they invest in? (from the round types)
-  - What sectors do they focus on? (from the startups' industries)
+  - What sectors do they focus on? Use ONLY names from: ${JSON.stringify(SECTORS)}
   - What geographies do they cover? (from where the startups are based)
   - What is their typical check size? (from round amounts, if their contribution is stated)
   - What type of investor are they? (VC, PE, angel, etc.)
@@ -519,11 +520,50 @@ async function saveToGraph(
 // Main pipeline
 // ---------------------------------------------------------------------------
 
+// How many days before re-enriching an entity
+const ENRICHMENT_COOLDOWN_DAYS = 365;
+
 export async function enrichInvestor(
   investorName: string,
   onProgress: (p: EnrichProgress) => void
 ): Promise<void> {
   const normalizedName = normalizeInvestor(investorName);
+
+  // Skip if recently enriched with key fields populated
+  {
+    const checkSession = driver.session({ defaultAccessMode: "READ" });
+    try {
+      const result = await checkSession.run(
+        `MATCH (inv:InvestorOrg {normalizedName: $norm})
+         RETURN inv.enrichedAt AS enrichedAt, inv.website AS website,
+                inv.type AS type, inv.logoUrl AS logoUrl
+         LIMIT 1`,
+        { norm: normalizedName }
+      );
+      const rec = result.records[0];
+      if (rec) {
+        const enrichedAt = rec.get("enrichedAt");
+        const website = rec.get("website");
+        const type = rec.get("type");
+
+        if (enrichedAt && website && type) {
+          const enrichedDate = new Date(enrichedAt.toString());
+          const ageMs = Date.now() - enrichedDate.getTime();
+          const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+          if (ageDays < ENRICHMENT_COOLDOWN_DAYS) {
+            onProgress({
+              stage: "done",
+              message: `Skipped — enriched ${Math.floor(ageDays)}d ago`,
+            });
+            return;
+          }
+        }
+      }
+    } finally {
+      await checkSession.close();
+    }
+  }
 
   // Stage 1: Load articles (for deal context only)
   onProgress({ stage: "articles", message: "Loading linked articles..." });
