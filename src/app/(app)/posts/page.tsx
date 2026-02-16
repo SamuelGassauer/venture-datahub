@@ -39,7 +39,7 @@ import {
   STAGE_COLORS,
 } from "@/lib/global-filters";
 
-type PostFilter = "all" | "with" | "without";
+type PostFilter = "all" | "with" | "without" | "published";
 type SortKey = "companyName" | "amountEur" | "stage" | "country" | "articleDate";
 type SortDir = "asc" | "desc";
 
@@ -136,6 +136,7 @@ export default function PostsPage() {
     let list = rounds.filter((r) => {
       if (postFilter === "with" && !r.hasPost) return false;
       if (postFilter === "without" && r.hasPost) return false;
+      if (postFilter === "published" && !r.publishedAt) return false;
       if (regionCountries && (!r.country || !regionCountries.has(r.country.toLowerCase()))) return false;
       if (stageFilter && r.stage !== stageFilter) return false;
       if (searchDebounced) {
@@ -392,7 +393,7 @@ export default function PostsPage() {
 
         {/* Post filter tabs */}
         <div className="flex items-center gap-1 ml-2">
-          {(["all", "with", "without"] as PostFilter[]).map((f) => (
+          {(["all", "with", "published", "without"] as PostFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setPostFilter(f)}
@@ -406,7 +407,9 @@ export default function PostsPage() {
                 ? "Alle"
                 : f === "with"
                   ? "Mit Beitrag"
-                  : "Ohne Beitrag"}
+                  : f === "published"
+                    ? "Veröffentlicht"
+                    : "Ohne Beitrag"}
             </button>
           ))}
         </div>
