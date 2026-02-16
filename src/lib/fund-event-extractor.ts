@@ -330,7 +330,8 @@ function extractVintage(text: string): string | null {
 
 // === FIRM NAME EXTRACTION ===
 
-function extractFirmName(title: string, text: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function extractFirmName(title: string, _text: string): string {
   // Pattern 1: "[Adjective] VC/PE [Firm] raises/closes/launches..."
   // e.g. "French VC Elaia reaches €120 million..."
   // Note: only match "VC"/"PE" as prefix labels, NOT "venture"/"partners" which are part of firm names
@@ -434,7 +435,8 @@ function firmIsInvestorNotSubject(title: string): boolean {
 // === QUICK GATE: should we even try extracting? ===
 
 export function isFundEvent(title: string, content: string): boolean {
-  const text = `${title} ${content}`.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _text = `${title} ${content}`.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
   // Quick reject: newsletter digests, listicles, editorials
   if (/^[^\w]/.test(title)) return false;  // starts with emoji or special char

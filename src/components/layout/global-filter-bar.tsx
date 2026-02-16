@@ -19,13 +19,11 @@ import {
 import { SECTORS } from "@/lib/taxonomy";
 import {
   useGlobalFilters,
-  ALL_REGIONS,
   REGION_COUNTRIES,
   REGION_PRESETS,
   STAGES,
   STAGE_COLORS,
 } from "@/lib/global-filters";
-import type { GlobalFilters } from "@/lib/global-filters";
 import {
   Popover,
   PopoverContent,
@@ -170,11 +168,9 @@ function FilterBarInner() {
                 {/* Geo */}
                 <GeoFilterPopover
                   value={geoLabel}
-                  region={filters.region}
                   country={filters.country}
                   countryOptions={countryOptions}
                   activePreset={activePreset}
-                  onRegion={(r) => updateFilter({ region: r, country: "" })}
                   onCountry={(c) => updateFilter({ country: c })}
                   onPreset={applyPreset}
                   onClear={() => updateFilter({ region: "Europe", country: "" })}
@@ -352,21 +348,17 @@ function Pill({
 
 function GeoFilterPopover({
   value,
-  region,
   country,
   countryOptions,
   activePreset,
-  onRegion,
   onCountry,
   onPreset,
   onClear,
 }: {
   value: string;
-  region: string;
   country: string;
   countryOptions: string[];
   activePreset: string;
-  onRegion: (r: string) => void;
   onCountry: (c: string) => void;
   onPreset: (p: string) => void;
   onClear: () => void;

@@ -10,10 +10,8 @@ import {
 
 export const runtime = "nodejs";
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
-) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function POST(request: NextRequest, _ctx: { params: Promise<{ name: string }> }) {
   const authResult = await requireAdmin();
   if (authResult instanceof NextResponse) return authResult;
 
@@ -84,7 +82,8 @@ export async function POST(
 
     const validCandidates = validated
       .filter((c) => c.valid)
-      .map(({ valid: _, ...rest }) => rest)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ valid, ...rest }) => rest)
       .sort((a, b) => b.score - a.score);
 
     return NextResponse.json({ candidates: validCandidates });

@@ -32,7 +32,6 @@ import {
   Share2,
   ArrowRight,
   Gauge,
-  Sparkles,
 } from "lucide-react";
 import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
 import type { GlobalFilters } from "@/lib/global-filters";

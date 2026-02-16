@@ -10,8 +10,6 @@ import {
   StageChart,
   GeographyChart,
   SectorChart,
-  TOOLTIP_STYLE,
-  AXIS_TICK_STYLE,
 } from "@/components/graph/funding-charts";
 import { EntitySheet } from "@/components/graph/entity-sheet";
 

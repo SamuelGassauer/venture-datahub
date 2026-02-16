@@ -3,15 +3,6 @@ import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
 
-function toNumber(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === "number") return value;
-  if (typeof value === "object" && "toNumber" in value) {
-    return (value as { toNumber(): number }).toNumber();
-  }
-  return null;
-}
-
 const INVENTURE_API_URL =
   process.env.INVENTURE_API_URL || "https://www.inventure.capital";
 const INVENTURE_API_KEY = process.env.INVENTURE_API_KEY || "";
