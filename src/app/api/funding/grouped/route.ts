@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/api-auth";
+import { EUROPEAN_COUNTRIES } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -312,9 +313,9 @@ export async function GET(request: NextRequest) {
   const where: Record<string, unknown> = {
     confidence: { gte: 0.6 },
     ...(!showDismissed && { dismissedAt: null }),
+    country: country ? country : { in: [...EUROPEAN_COUNTRIES] },
   };
   if (stage) where.stage = stage;
-  if (country) where.country = country;
   if (search) {
     where.OR = [
       { companyName: { contains: search, mode: "insensitive" } },

@@ -139,20 +139,37 @@ function looksLikeHeadshot(url: string): boolean {
 
 /** Validate a logo URL: must be reachable, must be an image, must not be tiny */
 export async function validateLogoUrl(url: string): Promise<boolean> {
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+  function checkResponse(res: Response): boolean {
+    if (!res.ok) return false;
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.startsWith("image/") && !url.match(/\.(png|jpg|jpeg|svg|webp|gif|ico)(\?|$)/i)) return false;
+    const cl = parseInt(res.headers.get("content-length") || "0", 10);
+    if (cl > 0 && cl < 200 && !ct.includes("svg")) return false;
+    return true;
+  }
+
+  // Try HEAD first (fast)
   try {
     const res = await fetch(url, {
       method: "HEAD",
       signal: AbortSignal.timeout(4000),
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+      headers: { "User-Agent": ua },
     });
-    if (!res.ok) return false;
-    const ct = res.headers.get("content-type") || "";
-    // Must be an image content type OR have an image extension
-    if (!ct.startsWith("image/") && !url.match(/\.(png|jpg|jpeg|svg|webp|gif|ico)(\?|$)/i)) return false;
-    // Reject tiny files (< 200 bytes = likely a 1px tracking pixel)
-    const cl = parseInt(res.headers.get("content-length") || "0", 10);
-    if (cl > 0 && cl < 200 && !ct.includes("svg")) return false;
-    return true;
+    if (checkResponse(res)) return true;
+  } catch {
+    // HEAD failed — fall through to GET
+  }
+
+  // Fallback: GET with range header (some servers don't support HEAD)
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(6000),
+      headers: { "User-Agent": ua, Range: "bytes=0-1023" },
+    });
+    return checkResponse(res);
   } catch {
     return false;
   }
@@ -1801,12 +1818,13 @@ const ENRICHMENT_COOLDOWN_DAYS = 365;
 
 export async function enrichCompany(
   companyName: string,
-  onProgress: (p: EnrichProgress) => void
+  onProgress: (p: EnrichProgress) => void,
+  force = false
 ): Promise<void> {
   const normalizedName = normalizeCompany(companyName);
 
-  // Skip if recently enriched with key fields populated
-  {
+  // Skip if recently enriched with key fields populated (unless forced)
+  if (!force) {
     const checkSession = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await checkSession.run(

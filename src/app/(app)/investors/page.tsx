@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
+import { useGlobalFilters, resolveGeoFilter, STAGES } from "@/lib/global-filters";
+import { INVESTOR_TYPES, normalizeInvestorType } from "@/lib/investor-enricher";
 import {
   Table,
   TableBody,
@@ -19,6 +20,7 @@ import { EntitySheet } from "@/components/graph/entity-sheet";
 
 type Investor = {
   name: string;
+  type: string | null;
   dealCount: number;
   leadCount: number;
   totalDeployed: number | null;
@@ -32,6 +34,20 @@ type Investor = {
 };
 
 const INVESTOR_MAX_SCORE = 12;
+
+const TYPE_LABELS: Record<string, string> = {
+  vc: "VC",
+  pe: "PE",
+  cvc: "CVC",
+  angel_group: "Angel",
+  family_office: "Family Office",
+  sovereign_wealth: "Sovereign Wealth",
+  government: "Government",
+  accelerator: "Accelerator",
+  incubator: "Incubator",
+  bank: "Bank",
+  hedge_fund: "Hedge Fund",
+};
 
 type SortKey = "name" | "dealCount" | "leadCount" | "totalDeployed" | "enrichScore";
 
@@ -51,12 +67,22 @@ export default function InvestorsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState<string | null>(null);
+  const [minDeals, setMinDeals] = useState(0);
+  const [stageFilter, setStageFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [logoFilter, setLogoFilter] = useState<"all" | "with" | "without">("all");
   const { filters } = useGlobalFilters();
 
   useEffect(() => {
     fetch("/api/investors")
       .then((r) => r.json())
-      .then((json) => setInvestors(json.data ?? []))
+      .then((json) => {
+        const data = (json.data ?? []).map((inv: Investor) => ({
+          ...inv,
+          type: normalizeInvestorType(inv.type) ?? inv.type,
+        }));
+        setInvestors(data);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -93,6 +119,23 @@ export default function InvestorsPage() {
         inv.sectorFocus?.some((s) => sectorsLower.has(s.toLowerCase()))
       );
     }
+    if (minDeals > 0) {
+      list = list.filter((inv) => inv.dealCount >= minDeals);
+    }
+    if (stageFilter) {
+      const sf = stageFilter.toLowerCase();
+      list = list.filter((inv) =>
+        inv.stageFocus?.some((s) => s.toLowerCase() === sf)
+      );
+    }
+    if (typeFilter) {
+      list = list.filter((inv) => inv.type === typeFilter);
+    }
+    if (logoFilter === "with") {
+      list = list.filter((inv) => !!inv.logoUrl);
+    } else if (logoFilter === "without") {
+      list = list.filter((inv) => !inv.logoUrl);
+    }
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -112,7 +155,7 @@ export default function InvestorsPage() {
         : (aVal as number) - (bVal as number);
       return sortOrder === "asc" ? cmp : -cmp;
     });
-  }, [investors, search, sortBy, sortOrder, filters]);
+  }, [investors, search, sortBy, sortOrder, filters, minDeals, stageFilter, typeFilter, logoFilter]);
 
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
@@ -124,10 +167,10 @@ export default function InvestorsPage() {
 
   return (
     <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
         <Users className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Investors</h1>
-        <div className="relative ml-auto max-w-xs flex-1">
+        <div className="relative ml-4 max-w-xs flex-1 min-w-[140px]">
           <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search investors..."
@@ -136,7 +179,62 @@ export default function InvestorsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <span className="text-xs text-muted-foreground tabular-nums">
+
+        {/* Min Deals */}
+        <select
+          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={minDeals}
+          onChange={(e) => setMinDeals(Number(e.target.value))}
+        >
+          <option value={0}>Alle Deals</option>
+          <option value={2}>≥ 2 Deals</option>
+          <option value={3}>≥ 3 Deals</option>
+          <option value={5}>≥ 5 Deals</option>
+          <option value={10}>≥ 10 Deals</option>
+        </select>
+
+        {/* Stage Focus */}
+        <select
+          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+        >
+          <option value="">Alle Stages</option>
+          {STAGES.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+
+        {/* Investor Type */}
+        <select
+          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+        >
+          <option value="">Alle Typen</option>
+          {INVESTOR_TYPES.map((t) => (
+            <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+          ))}
+        </select>
+
+        {/* Logo filter */}
+        <div className="flex items-center gap-1">
+          {(["all", "with", "without"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setLogoFilter(f)}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                logoFilter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              {f === "all" ? "Alle" : f === "with" ? "Mit Logo" : "Ohne Logo"}
+            </button>
+          ))}
+        </div>
+
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
           {filtered.length} investors
         </span>
       </div>
@@ -162,6 +260,9 @@ export default function InvestorsPage() {
                   onClick={() => toggleSort("name")}
                 >
                   Name <SortIcon field="name" />
+                </TableHead>
+                <TableHead className="w-[100px] text-xs font-semibold">
+                  Typ
                 </TableHead>
                 <TableHead
                   className="w-[70px] cursor-pointer text-center text-xs font-semibold"
@@ -214,6 +315,15 @@ export default function InvestorsPage() {
                     </TableCell>
                     <TableCell className="py-1.5 px-2 font-medium">
                       {inv.name}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2">
+                      {inv.type ? (
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                          {TYPE_LABELS[inv.type] ?? inv.type}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="py-1.5 px-2 text-center tabular-nums">
                       {inv.dealCount}
@@ -272,6 +382,9 @@ export default function InvestorsPage() {
         onOpenChange={setSheetOpen}
         entityType="investor"
         entityName={selectedInvestor}
+        onNavigate={(type, name) => {
+          if (type === "investor") setSelectedInvestor(name);
+        }}
       />
     </div>
   );

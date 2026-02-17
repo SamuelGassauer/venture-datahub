@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST, EUROPEAN_COUNTRIES } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -58,15 +59,15 @@ export async function GET() {
       // Fund summary
       fundSummaryResult,
     ] = await Promise.all([
-      // --- summary: aggregate metrics ---
+      // --- summary: aggregate metrics (Europe only) ---
       runQuery(`
-        OPTIONAL MATCH (fr:FundingRound)
+        OPTIONAL MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         WITH sum(fr.amountUsd) AS totalFunding, count(fr) AS totalRounds,
-             avg(fr.amountUsd) AS avgDealSize
-        OPTIONAL MATCH (c:Company)
-        WITH totalFunding, totalRounds, avgDealSize, count(c) AS totalCompanies
-        OPTIONAL MATCH (inv:InvestorOrg)
-        WITH totalFunding, totalRounds, avgDealSize, totalCompanies, count(inv) AS totalInvestors
+             avg(fr.amountUsd) AS avgDealSize, count(DISTINCT c) AS totalCompanies
+        OPTIONAL MATCH (inv:InvestorOrg)-[:PARTICIPATED_IN]->(fr2:FundingRound)<-[:RAISED]-(c2:Company)
+        WHERE c2.country IN ${EUROPE_CYPHER_LIST}
+        WITH totalFunding, totalRounds, avgDealSize, totalCompanies, count(DISTINCT inv) AS totalInvestors
         OPTIONAL MATCH (a:Article)
         WITH totalFunding, totalRounds, avgDealSize, totalCompanies, totalInvestors, count(a) AS totalArticles
         OPTIONAL MATCH (l:Location)
@@ -80,16 +81,17 @@ export async function GET() {
         RETURN count(r) AS totalEdges
       `),
 
-      // --- summary: median deal size (approximate via percentileDisc) ---
+      // --- summary: median deal size (Europe only) ---
       runQuery(`
-        MATCH (fr:FundingRound)
-        WHERE fr.amountUsd IS NOT NULL
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST} AND fr.amountUsd IS NOT NULL
         RETURN percentileDisc(fr.amountUsd, 0.5) AS medianDealSize
       `),
 
-      // --- recentDeals (limit 25) ---
+      // --- recentDeals (limit 25, Europe only) ---
       runQuery(`
         MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         OPTIONAL MATCH (lead:InvestorOrg)-[:PARTICIPATED_IN {role: 'lead'}]->(fr)
         OPTIONAL MATCH (participant:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
         OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
@@ -114,9 +116,10 @@ export async function GET() {
         LIMIT 25
       `),
 
-      // --- topCompanies (limit 20) ---
+      // --- topCompanies (limit 20, Europe only) ---
       runQuery(`
         MATCH (c:Company)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
         WITH c, count(fr) AS roundCount,
              collect({stage: fr.stage, amount: fr.amountUsd, roundKey: fr.roundKey}) AS rounds
@@ -133,10 +136,11 @@ export async function GET() {
         LIMIT 20
       `),
 
-      // --- topInvestors (limit 20) ---
+      // --- topInvestors (limit 20, Europe only) ---
       runQuery(`
         MATCH (inv:InvestorOrg)-[p:PARTICIPATED_IN]->(fr:FundingRound)
-        OPTIONAL MATCH (c:Company)-[:RAISED]->(fr)
+        MATCH (c:Company)-[:RAISED]->(fr)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         WITH inv,
              count(DISTINCT fr) AS dealCount,
              sum(CASE WHEN p.role = 'lead' THEN 1 ELSE 0 END) AS leadCount,
@@ -151,33 +155,32 @@ export async function GET() {
         LIMIT 20
       `),
 
-      // --- fundingByStage ---
+      // --- fundingByStage (Europe only) ---
       runQuery(`
-        MATCH (fr:FundingRound)
-        WHERE fr.stage IS NOT NULL
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST} AND fr.stage IS NOT NULL
         RETURN fr.stage AS stage,
                count(fr) AS count,
                sum(fr.amountUsd) AS totalAmount
         ORDER BY totalAmount DESC
       `),
 
-      // --- fundingByCountry (limit 10) ---
+      // --- fundingByCountry (Europe only) ---
       runQuery(`
         MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
-        WHERE c.country IS NOT NULL
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         WITH c.country AS country, fr, c
         RETURN country,
                sum(fr.amountUsd) AS totalAmount,
                count(fr) AS dealCount,
                count(DISTINCT c) AS companyCount
         ORDER BY totalAmount DESC
-        LIMIT 10
       `),
 
-      // --- fundingTimeline: monthly aggregation ---
+      // --- fundingTimeline: monthly aggregation (Europe only) ---
       runQuery(`
-        MATCH (fr:FundingRound)-[:SOURCED_FROM]->(a:Article)
-        WHERE a.publishedAt IS NOT NULL
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)-[:SOURCED_FROM]->(a:Article)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST} AND a.publishedAt IS NOT NULL
         WITH fr, substring(toString(a.publishedAt), 0, 7) AS month
         RETURN month,
                count(fr) AS dealCount,
@@ -185,9 +188,9 @@ export async function GET() {
         ORDER BY month ASC
       `),
 
-      // --- ingestion from Prisma: FundingRound ---
-      prisma.fundingRound.count(),
-      prisma.fundingRound.count({ where: { ingestedAt: { not: null } } }),
+      // --- ingestion from Prisma: FundingRound (Europe only) ---
+      prisma.fundingRound.count({ where: { country: { in: [...EUROPEAN_COUNTRIES] } } }),
+      prisma.fundingRound.count({ where: { country: { in: [...EUROPEAN_COUNTRIES] }, ingestedAt: { not: null } } }),
 
       // --- Pipeline: FundEvent counts ---
       prisma.fundEvent.count(),
@@ -198,10 +201,10 @@ export async function GET() {
       prisma.companyValueIndicator.count(),
       prisma.companyValueIndicator.count({ where: { ingestedAt: { not: null } } }),
 
-      // --- Sector breakdown from Neo4j ---
+      // --- Sector breakdown (Europe only) ---
       runQuery(`
         MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
-        WHERE c.sector IS NOT NULL
+        WHERE c.country IN ${EUROPE_CYPHER_LIST} AND c.sector IS NOT NULL
         WITH c.sector AS sector, fr, c
         RETURN sector,
                sum(fr.amountUsd) AS totalAmount,

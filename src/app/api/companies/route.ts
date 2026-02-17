@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { requireAuth } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export async function GET() {
   try {
     const result = await session.run(`
       MATCH (c:Company)
+      WHERE c.country IN ${EUROPE_CYPHER_LIST}
       OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
       WITH c,
            count(fr) AS roundCount,

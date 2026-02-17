@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { requireAuth } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,7 @@ export async function GET(request: NextRequest) {
     try {
       const fallbackResult = await session.run(`
         MATCH (c:Company)-[r1:RAISED]->(fr:FundingRound)
+        WHERE c.country IN ${EUROPE_CYPHER_LIST}
         OPTIONAL MATCH (inv:InvestorOrg)-[r2:PARTICIPATED_IN]->(fr)
         OPTIONAL MATCH (c)-[r3:HQ_IN]->(loc:Location)
         RETURN c, fr, inv, loc, r1, r2, r3

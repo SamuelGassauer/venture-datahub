@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAdmin();
   if (authResult instanceof NextResponse) return authResult;
   try {
-    const { companyName } = await request.json();
+    const { companyName, force } = await request.json();
 
     if (!companyName || typeof companyName !== "string") {
       return new Response(
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
           await enrichCompany(companyName, (progress) => {
             const data = `data: ${JSON.stringify(progress)}\n\n`;
             controller.enqueue(encoder.encode(data));
-          });
+          }, !!force);
         } catch (err) {
           const msg =
             err instanceof Error ? err.message : "Enrichment failed";

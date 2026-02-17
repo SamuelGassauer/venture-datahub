@@ -474,6 +474,7 @@ export default function GraphExplorerPage() {
         onOpenChange={(open) => setSheet((s) => ({ ...s, open }))}
         entityType={sheet.entityType}
         entityName={sheet.entityName}
+        onNavigate={(type, name) => setSheet({ open: true, entityType: type as SheetState["entityType"], entityName: name })}
       />
     </div>
   );

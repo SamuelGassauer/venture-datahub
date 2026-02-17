@@ -451,6 +451,7 @@ export default function GraphFundClosingsPage() {
         onOpenChange={setSheetOpen}
         entityType={selectedEntity?.type ?? null}
         entityName={selectedEntity?.name ?? null}
+        onNavigate={(type, name) => setSelectedEntity({ type: type as "fund" | "investor", name })}
       />
     </div>
   );

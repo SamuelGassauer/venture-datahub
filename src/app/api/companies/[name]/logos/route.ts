@@ -27,8 +27,8 @@ export async function POST(request: NextRequest, _ctx: { params: Promise<{ name:
 
     const fullUrl = website.startsWith("http") ? website : `https://${website}`;
 
-    // Fetch the website HTML
-    let html: string;
+    // Fetch the website HTML — non-fatal if it fails
+    let candidates: LogoCandidate[] = [];
     try {
       const res = await fetch(fullUrl, {
         headers: {
@@ -36,35 +36,43 @@ export async function POST(request: NextRequest, _ctx: { params: Promise<{ name:
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           Accept: "text/html,application/xhtml+xml,*/*",
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
         redirect: "follow",
       });
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: `Website returned ${res.status}` },
-          { status: 502 }
-        );
+      if (res.ok) {
+        const html = await res.text();
+        const $ = cheerio.load(html);
+        candidates = extractLogoCandidates($, fullUrl);
       }
-      html = await res.text();
     } catch {
-      return NextResponse.json(
-        { error: "Could not fetch website" },
-        { status: 502 }
-      );
+      // Website fetch failed — continue with external fallbacks
     }
-
-    // Extract logo candidates from HTML
-    const $ = cheerio.load(html);
-    const candidates = extractLogoCandidates($, fullUrl);
 
     // Add favicon fallbacks
     const domain = new URL(fullUrl).origin;
+    const hostname = new URL(fullUrl).hostname;
     const fallbacks: LogoCandidate[] = [
       { url: `${domain}/favicon.ico`, score: 50, source: "favicon-fallback" },
       {
         url: `${domain}/apple-touch-icon.png`,
         score: 80,
         source: "apple-touch-icon-fallback",
+      },
+      // External logo APIs — very reliable even when website scraping fails
+      {
+        url: `https://logo.clearbit.com/${hostname}`,
+        score: 900,
+        source: "clearbit",
+      },
+      {
+        url: `https://img.logo.dev/${hostname}?token=pk_a]3gpOmhR3-UhME-5Goyg&size=200&format=png`,
+        score: 850,
+        source: "logo.dev",
+      },
+      {
+        url: `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
+        score: 100,
+        source: "google-favicon",
       },
     ];
     for (const fb of fallbacks) {
@@ -73,7 +81,7 @@ export async function POST(request: NextRequest, _ctx: { params: Promise<{ name:
       }
     }
 
-    // Validate all candidates in parallel with HEAD requests
+    // Validate all candidates in parallel
     const validated = await Promise.all(
       candidates.map(async (c) => ({
         ...c,

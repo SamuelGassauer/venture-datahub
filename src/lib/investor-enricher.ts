@@ -25,6 +25,106 @@ export type { EnrichProgress };
 
 type ArticleRow = { url: string; content: string | null; title: string };
 
+// Canonical investor types
+export const INVESTOR_TYPES = [
+  "vc",
+  "pe",
+  "cvc",
+  "angel_group",
+  "family_office",
+  "sovereign_wealth",
+  "government",
+  "accelerator",
+  "incubator",
+  "bank",
+  "hedge_fund",
+] as const;
+
+export type InvestorType = (typeof INVESTOR_TYPES)[number];
+
+// Map common LLM variants → canonical value
+const TYPE_ALIASES: Record<string, InvestorType> = {
+  // VC
+  "venture capital": "vc",
+  "venture_capital": "vc",
+  "venture-capital": "vc",
+  "venture": "vc",
+  "vc fund": "vc",
+  "vc firm": "vc",
+  "micro vc": "vc",
+  "micro-vc": "vc",
+  "early stage vc": "vc",
+  "early-stage vc": "vc",
+  "seed fund": "vc",
+  // PE
+  "private equity": "pe",
+  "private_equity": "pe",
+  "private-equity": "pe",
+  "growth equity": "pe",
+  "growth_equity": "pe",
+  "buyout": "pe",
+  // CVC
+  "corporate venture capital": "cvc",
+  "corporate_venture_capital": "cvc",
+  "corporate vc": "cvc",
+  "corporate venture": "cvc",
+  "corporate": "cvc",
+  // Angel
+  "angel": "angel_group",
+  "angel group": "angel_group",
+  "angel network": "angel_group",
+  "angel investor": "angel_group",
+  "angel_investor": "angel_group",
+  "business angel": "angel_group",
+  "super angel": "angel_group",
+  // Family Office
+  "family office": "family_office",
+  "family-office": "family_office",
+  "single family office": "family_office",
+  "multi family office": "family_office",
+  // Sovereign Wealth
+  "sovereign wealth fund": "sovereign_wealth",
+  "sovereign wealth": "sovereign_wealth",
+  "sovereign_wealth_fund": "sovereign_wealth",
+  "swf": "sovereign_wealth",
+  // Government
+  "government fund": "government",
+  "public fund": "government",
+  "state fund": "government",
+  "government agency": "government",
+  // Accelerator
+  "startup accelerator": "accelerator",
+  "accelerator program": "accelerator",
+  "accelerator/incubator": "accelerator",
+  // Incubator
+  "startup incubator": "incubator",
+  "incubator program": "incubator",
+  // Bank
+  "investment bank": "bank",
+  "investment_bank": "bank",
+  "commercial bank": "bank",
+  // Hedge Fund
+  "hedge fund": "hedge_fund",
+  "hedge_fund_manager": "hedge_fund",
+  "hedge-fund": "hedge_fund",
+};
+
+// Build a full lookup: canonical values map to themselves + all aliases
+const TYPE_LOOKUP = new Map<string, InvestorType>();
+for (const t of INVESTOR_TYPES) {
+  TYPE_LOOKUP.set(t, t);
+}
+for (const [alias, canonical] of Object.entries(TYPE_ALIASES)) {
+  TYPE_LOOKUP.set(alias, canonical);
+}
+
+export function normalizeInvestorType(raw: string | null | undefined): InvestorType | null {
+  if (!raw) return null;
+  const key = raw.toLowerCase().trim();
+  if (key === "unknown" || key === "") return null;
+  return TYPE_LOOKUP.get(key) ?? null;
+}
+
 type InvestorFields = {
   type?: string | null;
   stageFocus?: string[] | null;
@@ -442,8 +542,14 @@ async function saveToGraph(
 
     for (const [field, neo4jProp] of scalarFields) {
       if (lockedFields.has(neo4jProp)) continue;
-      const newVal = fields[field];
+      let newVal = fields[field];
       if (newVal == null) continue;
+
+      // Normalize investor type to canonical value
+      if (field === "type") {
+        newVal = normalizeInvestorType(newVal as string);
+        if (newVal == null) continue;
+      }
 
       const conf = confidence[field] ?? 0;
       const currentVal = rec.get(neo4jProp);
@@ -525,12 +631,13 @@ const ENRICHMENT_COOLDOWN_DAYS = 365;
 
 export async function enrichInvestor(
   investorName: string,
-  onProgress: (p: EnrichProgress) => void
+  onProgress: (p: EnrichProgress) => void,
+  force = false
 ): Promise<void> {
   const normalizedName = normalizeInvestor(investorName);
 
-  // Skip if recently enriched with key fields populated
-  {
+  // Skip if recently enriched with key fields populated (unless forced)
+  if (!force) {
     const checkSession = driver().session({ defaultAccessMode: "READ" });
     try {
       const result = await checkSession.run(

@@ -42,6 +42,8 @@ import {
   SectorChart,
 } from "@/components/graph/funding-charts";
 import { EntitySheet } from "@/components/graph/entity-sheet";
+import { EuropeMap3D } from "@/components/dashboard/europe-map-3d";
+import { WeeklyDealChart } from "@/components/dashboard/weekly-deal-chart";
 import type { GroupedRound } from "@/app/api/funding/grouped/route";
 
 // ---------------------------------------------------------------------------
@@ -194,12 +196,14 @@ function HomeView({
   filters,
   onCountriesLoaded,
   companySectorMap,
+  onCountryClick,
 }: {
   onNavigate: (v: View) => void;
   onEntityOpen: (name: string, type: "company" | "investor") => void;
   filters: GlobalFilters;
   onCountriesLoaded: (countries: string[]) => void;
   companySectorMap: Map<string, string>;
+  onCountryClick?: (country: string) => void;
 }) {
   const { data: session } = useSession();
   const [stats, setStats] = useState<GraphStats | null>(null);
@@ -254,6 +258,15 @@ function HomeView({
 
   return (
     <div className="space-y-6">
+      {/* ── 3D Europe Map ── */}
+      {stats && (
+        <EuropeMap3D
+          fundingByCountry={stats.fundingByCountry}
+          onCountryClick={onCountryClick}
+        />
+      )}
+      <WeeklyDealChart />
+
       {/* ── Hero ── */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">
@@ -1351,7 +1364,7 @@ function EmptyChart() {
 
 export function ViewerDashboard() {
   const [view, setView] = useState<View>("home");
-  const { filters, setAvailableCountries } = useGlobalFilters();
+  const { filters, setAvailableCountries, updateFilter } = useGlobalFilters();
   const [entity, setEntity] = useState<{
     name: string;
     type: "company" | "investor";
@@ -1388,6 +1401,11 @@ export function ViewerDashboard() {
           filters={filters}
           onCountriesLoaded={setAvailableCountries}
           companySectorMap={companySectorMap}
+          onCountryClick={(country) =>
+            updateFilter({
+              country: filters.country === country ? "" : country,
+            })
+          }
         />
       )}
       {view === "deals" && (
@@ -1415,6 +1433,7 @@ export function ViewerDashboard() {
         }}
         entityType={entity?.type ?? null}
         entityName={entity?.name ?? null}
+        onNavigate={(type, name) => setEntity({ name, type: type as "company" | "investor" })}
       />
     </div>
   );

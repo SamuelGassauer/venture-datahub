@@ -12,6 +12,8 @@ import {
   SectorChart,
 } from "@/components/graph/funding-charts";
 import { EntitySheet } from "@/components/graph/entity-sheet";
+import { EuropeMap3D } from "@/components/dashboard/europe-map-3d";
+import { WeeklyDealChart } from "@/components/dashboard/weekly-deal-chart";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -565,6 +567,20 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-3">
+      {/* 3D Europe Map */}
+      <EuropeMap3D
+        fundingByCountry={filtered.byCountry}
+        recentDeals={data.recentDeals}
+        activeCountry={filters.country || undefined}
+        onCountryClick={(country) =>
+          setFilters((prev) => ({
+            ...prev,
+            country: prev.country === country ? "" : country,
+          }))
+        }
+      />
+      <WeeklyDealChart />
+
       <HeadlineBar summary={summary} />
 
       <div className="space-y-1.5">
@@ -779,6 +795,7 @@ export function AdminDashboard() {
         }}
         entityType={entity?.type ?? null}
         entityName={entity?.name ?? null}
+        onNavigate={(type, name) => setEntity({ name, type: type as "company" | "investor" })}
       />
     </div>
   );

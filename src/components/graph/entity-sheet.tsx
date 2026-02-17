@@ -36,7 +36,9 @@ import {
   Check,
   X,
   Camera,
+  Maximize2,
 } from "lucide-react";
+import Link from "next/link";
 import { SECTORS, SECTOR_TAXONOMY } from "@/lib/taxonomy";
 import { SmartLogo } from "@/components/ui/smart-logo";
 import { LogoPicker } from "@/components/graph/logo-picker";
@@ -50,6 +52,7 @@ type EntitySheetProps = {
   onOpenChange: (open: boolean) => void;
   entityType: "company" | "investor" | "round" | "fund" | null;
   entityName: string | null;
+  onNavigate?: (entityType: string, entityName: string) => void;
 };
 
 type DetailData = {
@@ -213,6 +216,64 @@ LIMIT 1
 `;
 }
 
+function similarCompaniesQuery(name: string): string {
+  const safe = escapeCypher(name);
+  return `
+MATCH (me:Company {name: '${safe}'})
+OPTIONAL MATCH (me)-[:RAISED]->(myRound:FundingRound)
+WITH me,
+     me.sector AS mySector,
+     me.subsector AS mySubsector,
+     me.country AS myCountry,
+     COALESCE(me.totalFundingUsd, 0) AS myFunding,
+     collect(DISTINCT myRound.stage) AS myStages
+
+OPTIONAL MATCH (inv:InvestorOrg)-[:PARTICIPATED_IN]->(:FundingRound)<-[:RAISED]-(me)
+WITH me, mySector, mySubsector, myCountry, myFunding, myStages,
+     collect(DISTINCT inv.name) AS myInvestors
+
+MATCH (c:Company)
+WHERE c.name <> me.name
+
+OPTIONAL MATCH (c)-[:RAISED]->(cr:FundingRound)
+WITH me, mySector, mySubsector, myCountry, myFunding, myStages, myInvestors,
+     c,
+     collect(DISTINCT cr.stage) AS cStages,
+     COALESCE(c.totalFundingUsd, 0) AS cFunding
+
+OPTIONAL MATCH (ci:InvestorOrg)-[:PARTICIPATED_IN]->(:FundingRound)<-[:RAISED]-(c)
+WITH me, mySector, mySubsector, myCountry, myFunding, myStages, myInvestors,
+     c, cStages, cFunding,
+     collect(DISTINCT ci.name) AS cInvestors
+
+WITH c, cFunding, cInvestors, cStages,
+     mySector, mySubsector, myCountry, myFunding, myStages, myInvestors
+
+WITH c, cFunding, cInvestors,
+     CASE WHEN c.subsector IS NOT NULL AND c.subsector = mySubsector THEN 10 ELSE 0 END +
+     CASE WHEN c.sector IS NOT NULL AND c.sector = mySector AND (c.subsector IS NULL OR c.subsector <> mySubsector) THEN 3 ELSE 0 END +
+     size([i IN cInvestors WHERE i IN myInvestors]) * 3 +
+     CASE WHEN c.country IS NOT NULL AND c.country = myCountry THEN 2 ELSE 0 END +
+     size([s IN cStages WHERE s IN myStages]) +
+     CASE WHEN cFunding > 0 AND myFunding > 0
+       AND abs(log(cFunding + 1) - log(myFunding + 1)) < 2.0 THEN 2 ELSE 0 END
+     AS score
+
+WHERE score > 0
+ORDER BY score DESC
+LIMIT 12
+
+RETURN c.name AS name,
+       c.logoUrl AS logoUrl,
+       c.subsector AS subsector,
+       c.sector AS sector,
+       c.country AS country,
+       cFunding AS totalFunding,
+       cInvestors[0..3] AS topInvestors,
+       score
+`;
+}
+
 // ---------------------------------------------------------------------------
 // Metric card
 // ---------------------------------------------------------------------------
@@ -227,10 +288,10 @@ function MetricCard({
   value: string | number;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1 rounded-lg border bg-muted/40 px-3 py-3 text-center">
-      <Icon className="h-4 w-4 text-muted-foreground" />
-      <span className="text-lg font-bold tracking-tight">{value}</span>
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+    <div className="flex flex-col items-center gap-1 rounded-lg border bg-muted/40 px-3 py-3 text-center overflow-hidden">
+      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-lg font-bold tracking-tight truncate w-full">{value}</span>
+      <span className="text-[11px] text-muted-foreground truncate w-full">{label}</span>
     </div>
   );
 }
@@ -398,7 +459,7 @@ function LockableInfoRow({
   );
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5 text-sm px-1">
+    <div className="flex items-center justify-between gap-2 py-1.5 text-sm px-1 overflow-hidden">
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={toggleLock}
@@ -472,11 +533,11 @@ function LockableInfoRow({
           ) : null}
         </div>
       ) : (
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
           {missing ? (
             <span className="text-muted-foreground/40 text-xs italic">missing</span>
           ) : (
-            <span className="text-right font-medium truncate">{value}</span>
+            <span className="text-right font-medium truncate min-w-0">{value}</span>
           )}
           {editable && (
             <button
@@ -580,7 +641,7 @@ function EnrichButton({
       const res = await fetch("/api/enrich-company", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName }),
+        body: JSON.stringify({ companyName, force: true }),
       });
 
       if (!res.ok || !res.body) {
@@ -664,7 +725,7 @@ function EnrichButton({
 // Company detail view
 // ---------------------------------------------------------------------------
 
-function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Record<string, unknown>; onEnrichComplete: () => void; onOpenLogoPicker: () => void }) {
+function CompanyView({ data, onEnrichComplete, onOpenLogoPicker, onNavigateToCompany }: { data: Record<string, unknown>; onEnrichComplete: () => void; onOpenLogoPicker: () => void; onNavigateToCompany?: (name: string) => void }) {
   const name = String(data.name ?? "");
   const [editedFields, setEditedFields] = useState<Record<string, string | number | null>>({});
   const get = (key: string, fallback: string | number | null = null) =>
@@ -745,7 +806,7 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Recor
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => website && onOpenLogoPicker()}
             disabled={!website}
@@ -763,14 +824,14 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Recor
               </div>
             )}
           </button>
-          <h2 className="text-xl font-bold">{name}</h2>
+          <h2 className="text-xl font-bold truncate">{name}</h2>
           {status && (
-            <Badge variant="outline" className="text-xs ml-1">
+            <Badge variant="outline" className="text-xs ml-1 shrink-0">
               {status}
             </Badge>
           )}
           {sector && (
-            <Badge variant="secondary" className="text-xs ml-1">
+            <Badge variant="secondary" className="text-xs ml-1 shrink-0">
               {sector}
             </Badge>
           )}
@@ -823,6 +884,16 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Recor
           )}
         </div>
       </div>
+
+      {/* Full profile link */}
+      <Link
+        href={`/companies/${encodeURIComponent(name)}`}
+        className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+      >
+        <Maximize2 className="h-3.5 w-3.5" />
+        <span className="flex-1">Open full company profile</span>
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Link>
 
       {/* Metrics */}
       <div className="grid grid-cols-3 gap-3">
@@ -887,6 +958,16 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Recor
             ) : null}
             rawValue={linkedinUrl}
             missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
+          />
+          <LockableInfoRow
+            label="Logo Link" field="logoUrl"
+            value={logoUrl ? (
+              <a href={logoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 text-xs truncate max-w-[200px] block">
+                {logoUrl.replace(/^https?:\/\//, "").substring(0, 40)}…
+              </a>
+            ) : null}
+            rawValue={logoUrl}
+            missing={!logoUrl} locked={lockedFields.has("logoUrl")} entityType="company" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
         </div>
       </div>
@@ -973,6 +1054,149 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Recor
         </div>
       )}
 
+      <Separator />
+
+      {/* Similar Companies */}
+      <SimilarCompaniesSection companyName={name} onNavigate={onNavigateToCompany} />
+
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Similar Companies Section
+// ---------------------------------------------------------------------------
+
+type SimilarCompany = {
+  name: string;
+  logoUrl: string | null;
+  subsector: string | null;
+  sector: string | null;
+  country: string | null;
+  totalFunding: number;
+  topInvestors: string[];
+  score: number;
+};
+
+function SimilarCompaniesSection({
+  companyName,
+  onNavigate,
+}: {
+  companyName: string;
+  onNavigate?: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<SimilarCompany[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleToggle = useCallback(async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && data === null && !loading) {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/graph-query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: similarCompaniesQuery(companyName) }),
+        });
+        if (res.ok) {
+          const json = (await res.json()) as DetailData;
+          setData(
+            (json.records ?? []).map((r: Record<string, unknown>) => ({
+              name: String(r.name ?? ""),
+              logoUrl: r.logoUrl ? String(r.logoUrl) : null,
+              subsector: r.subsector ? String(r.subsector) : null,
+              sector: r.sector ? String(r.sector) : null,
+              country: r.country ? String(r.country) : null,
+              totalFunding: asNumber(r.totalFunding),
+              topInvestors: Array.isArray(r.topInvestors)
+                ? (r.topInvestors as (string | null)[]).filter(Boolean) as string[]
+                : [],
+              score: asNumber(r.score),
+            }))
+          );
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [open, data, loading, companyName]);
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={handleToggle}
+        className="flex items-center gap-1.5 text-sm font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground transition-colors"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        Similar Companies
+      </button>
+
+      {open && (
+        <div className="space-y-2">
+          {loading && (
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 rounded-lg" />
+              ))}
+            </div>
+          )}
+
+          {data && data.length === 0 && (
+            <p className="text-xs text-muted-foreground py-2">No similar companies found.</p>
+          )}
+
+          {data && data.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {data.map((c) => (
+                <button
+                  key={c.name}
+                  onClick={() => onNavigate?.(c.name)}
+                  className="flex flex-col gap-1.5 rounded-lg border p-2.5 text-left hover:bg-muted/60 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {c.logoUrl ? (
+                      <SmartLogo src={c.logoUrl} alt={c.name} className="h-5 w-5 rounded shrink-0" fallback={<Building2 className="h-4 w-4 text-muted-foreground shrink-0" />} />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="text-xs font-medium truncate">{c.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {c.totalFunding > 0 && (
+                      <span className="text-[10px] font-semibold text-muted-foreground">
+                        {formatAmount(c.totalFunding)}
+                      </span>
+                    )}
+                    {(c.subsector || c.sector) && (
+                      <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
+                        {c.subsector ?? c.sector}
+                      </Badge>
+                    )}
+                    {c.country && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                        {c.country}
+                      </Badge>
+                    )}
+                  </div>
+                  {c.topInvestors.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {c.topInvestors.map((inv) => (
+                        <span key={inv} className="text-[9px] text-muted-foreground truncate max-w-[80px]">
+                          {inv}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1010,7 +1234,7 @@ function InvestorEnrichButton({
       const res = await fetch("/api/enrich-investor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ investorName }),
+        body: JSON.stringify({ investorName, force: true }),
       });
 
       if (!res.ok || !res.body) {
@@ -1101,7 +1325,7 @@ type PortfolioRow = {
   role: string | null;
 };
 
-function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown>; onEnrichComplete: () => void }) {
+function InvestorView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Record<string, unknown>; onEnrichComplete: () => void; onOpenLogoPicker: () => void }) {
   const name = String(data.name ?? "");
   const [editedFields, setEditedFields] = useState<Record<string, string | number | null>>({});
   const getStr = (key: string) =>
@@ -1170,15 +1394,27 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-1">
-        <div className="flex items-center gap-3">
-          {logoUrl ? (
-            <SmartLogo src={logoUrl} alt={`${name} logo`} className="h-8 w-8 rounded-md" fallback={<Briefcase className="h-5 w-5 text-green-500" />} />
-          ) : (
-            <Briefcase className="h-5 w-5 text-green-500" />
-          )}
-          <h2 className="text-xl font-bold">{name}</h2>
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => website && onOpenLogoPicker()}
+            disabled={!website}
+            className={`relative group shrink-0 ${website ? "cursor-pointer" : "cursor-default"}`}
+            title={website ? "Choose logo" : "Set a website first to pick a logo"}
+          >
+            {logoUrl ? (
+              <SmartLogo src={logoUrl} alt={`${name} logo`} className="h-8 w-8 rounded-md" fallback={<Briefcase className="h-5 w-5 text-green-500" />} />
+            ) : (
+              <Briefcase className="h-5 w-5 text-green-500" />
+            )}
+            {website && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-3.5 w-3.5 text-white" />
+              </div>
+            )}
+          </button>
+          <h2 className="text-xl font-bold truncate">{name}</h2>
           {type && (
-            <Badge variant="outline" className="text-xs ml-1">
+            <Badge variant="outline" className="text-xs ml-1 shrink-0">
               {type}
             </Badge>
           )}
@@ -1285,9 +1521,9 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
         </div>
         <div className="rounded-lg border divide-y">
           <LockableInfoRow label="Type" field="type" value={type} rawValue={type} missing={!type} locked={lockedFields.has("type")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
-          <LockableInfoRow label="Stage Focus" field="stageFocus" value={stageFocus?.join(", ")} missing={!stageFocus} locked={lockedFields.has("stageFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
-          <LockableInfoRow label="Sector Focus" field="sectorFocus" value={sectorFocus?.join(", ")} missing={!sectorFocus} locked={lockedFields.has("sectorFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
-          <LockableInfoRow label="Geo Focus" field="geoFocus" value={geoFocus?.join(", ")} missing={!geoFocus} locked={lockedFields.has("geoFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Stage Focus" field="stageFocus" value={<span className="truncate block max-w-[200px]" title={stageFocus?.join(", ")}>{stageFocus?.join(", ")}</span>} missing={!stageFocus} locked={lockedFields.has("stageFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Sector Focus" field="sectorFocus" value={<span className="truncate block max-w-[200px]" title={sectorFocus?.join(", ")}>{sectorFocus?.join(", ")}</span>} missing={!sectorFocus} locked={lockedFields.has("sectorFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="Geo Focus" field="geoFocus" value={<span className="truncate block max-w-[200px]" title={geoFocus?.join(", ")}>{geoFocus?.join(", ")}</span>} missing={!geoFocus} locked={lockedFields.has("geoFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
           <LockableInfoRow label="Check Size" field="checkSizeMinUsd" value={checkSizeStr} missing={!checkSizeStr} locked={lockedFields.has("checkSizeMinUsd")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
           <LockableInfoRow label="AUM" field="aum" value={aum ? formatAmount(aum) : null} missing={!aum} locked={lockedFields.has("aum")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
           <LockableInfoRow label="Founded" field="foundedYear" value={foundedYear} rawValue={foundedYear} missing={!foundedYear} locked={lockedFields.has("foundedYear")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} fieldType="number" />
@@ -1308,6 +1544,16 @@ function InvestorView({ data, onEnrichComplete }: { data: Record<string, unknown
             ) : null}
             rawValue={linkedinUrl}
             missing={!linkedinUrl} locked={lockedFields.has("linkedinUrl")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
+          />
+          <LockableInfoRow
+            label="Logo Link" field="logoUrl"
+            value={logoUrl ? (
+              <a href={logoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 text-xs truncate max-w-[200px] block">
+                {logoUrl.replace(/^https?:\/\//, "").substring(0, 40)}…
+              </a>
+            ) : null}
+            rawValue={logoUrl}
+            missing={!logoUrl} locked={lockedFields.has("logoUrl")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange}
           />
         </div>
       </div>
@@ -1483,7 +1729,7 @@ function FundView({ data }: { data: Record<string, unknown> }) {
             <Briefcase className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-xl font-bold leading-tight">{name}</h2>
+            <h2 className="text-xl font-bold leading-tight truncate">{name}</h2>
             {firmName && (
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <Users className="h-3 w-3 shrink-0" />
@@ -1611,6 +1857,7 @@ export function EntitySheet({
   onOpenChange,
   entityType,
   entityName,
+  onNavigate,
 }: EntitySheetProps) {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1693,7 +1940,7 @@ export function EntitySheet({
   return (
     <>
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg p-0 flex flex-col">
+      <SheetContent className="sm:max-w-lg w-full p-0 flex flex-col overflow-hidden">
         <SheetHeader className="px-6 pt-6 pb-2">
           <SheetTitle>{sheetTitle}</SheetTitle>
           <SheetDescription>{sheetDescription}</SheetDescription>
@@ -1712,10 +1959,10 @@ export function EntitySheet({
           )}
 
           {data && !loading && entityType === "company" && (
-            <CompanyView data={data} onEnrichComplete={fetchDetail} onOpenLogoPicker={() => setLogoPickerOpen(true)} />
+            <CompanyView data={data} onEnrichComplete={fetchDetail} onOpenLogoPicker={() => setLogoPickerOpen(true)} onNavigateToCompany={onNavigate ? (name) => onNavigate("company", name) : undefined} />
           )}
           {data && !loading && entityType === "investor" && (
-            <InvestorView data={data} onEnrichComplete={fetchDetail} />
+            <InvestorView data={data} onEnrichComplete={fetchDetail} onOpenLogoPicker={() => setLogoPickerOpen(true)} />
           )}
           {data && !loading && entityType === "round" && (
             <RoundView data={data} />
@@ -1727,14 +1974,14 @@ export function EntitySheet({
       </SheetContent>
     </Sheet>
 
-    {data && entityType === "company" && data.website && (
+    {data && (entityType === "company" || entityType === "investor") && data.website && (
       <LogoPicker
         open={logoPickerOpen}
         onOpenChange={setLogoPickerOpen}
         companyName={String(data.name ?? "")}
         website={String(data.website)}
+        entityType={entityType}
         onSelect={(url) => {
-          // Update the data in-place so CompanyView reflects the change
           setData((prev) => prev ? { ...prev, logoUrl: url, lockedFields: [...(Array.isArray(prev.lockedFields) ? prev.lockedFields as string[] : []), "logoUrl"] } : prev);
         }}
       />

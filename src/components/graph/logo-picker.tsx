@@ -24,6 +24,7 @@ type LogoPickerProps = {
   onOpenChange: (open: boolean) => void;
   companyName: string;
   website: string;
+  entityType?: "company" | "investor";
   onSelect: (logoUrl: string) => void;
 };
 
@@ -32,6 +33,7 @@ export function LogoPicker({
   onOpenChange,
   companyName,
   website,
+  entityType = "company",
   onSelect,
 }: LogoPickerProps) {
   const [candidates, setCandidates] = useState<LogoCandidate[]>([]);
@@ -84,14 +86,15 @@ export function LogoPicker({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entityType: "company",
+          entityType,
           entityName: companyName,
           field: "logoUrl",
           value: selected,
         }),
       });
       if (res.ok) {
-        onSelect(selected);
+        const body = await res.json().catch(() => ({}));
+        onSelect(body.value ?? selected);
         onOpenChange(false);
       } else {
         const body = await res.json().catch(() => ({}));
@@ -102,7 +105,7 @@ export function LogoPicker({
     } finally {
       setSaving(false);
     }
-  }, [selected, companyName, onSelect, onOpenChange]);
+  }, [selected, companyName, entityType, onSelect, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

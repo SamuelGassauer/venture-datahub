@@ -363,6 +363,7 @@ export default function CompaniesPage() {
         onOpenChange={setSheetOpen}
         entityType="company"
         entityName={selectedCompany}
+        onNavigate={(_, name) => setSelectedCompany(name)}
       />
     </div>
   );

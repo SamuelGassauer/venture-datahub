@@ -68,6 +68,21 @@
 
 
 
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes draw-line {
+  from { stroke-dashoffset: 200; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes map-pulse {
+  0% { r: 4; opacity: 0.8; }
+  100% { r: 20; opacity: 0; }
+}
+
 @layer base {
   * {
     @apply border-border;

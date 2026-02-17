@@ -13,6 +13,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   Search,
   ChevronDown,
   ChevronRight,
@@ -28,6 +39,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SmartLogo } from "@/components/ui/smart-logo";
@@ -96,6 +108,8 @@ export default function PostsPage() {
   );
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [publishing, setPublishing] = useState<Set<string>>(new Set());
+  const [wizardRound, setWizardRound] = useState<RoundWithPostStatus | null>(null);
+  const [checkedFields, setCheckedFields] = useState<Set<string>>(new Set());
 
   const loadRounds = useCallback(async () => {
     setLoading(true);
@@ -345,6 +359,43 @@ export default function PostsPage() {
     return edited != null && edited !== round.postContent;
   }
 
+  function openWizard(round: RoundWithPostStatus) {
+    setWizardRound(round);
+    setCheckedFields(new Set());
+  }
+
+  function toggleCheck(field: string) {
+    setCheckedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  }
+
+  function getRequiredFields(round: RoundWithPostStatus): string[] {
+    const fields: string[] = [];
+    // Company section
+    fields.push("companyName"); // always present
+    if (round.description) fields.push("description");
+    if (round.country) fields.push("country");
+    // Funding section
+    if (round.amountEur) fields.push("amount");
+    if (round.stage) fields.push("stage");
+    if (round.articleDate) fields.push("articleDate");
+    // Sources
+    for (const src of round.sources) {
+      fields.push(`source_${src.url}`);
+    }
+    // Investors
+    for (const inv of round.allInvestors) {
+      fields.push(`investor_${inv}`);
+    }
+    // Content
+    if (round.postContent) fields.push("content");
+    return fields;
+  }
+
   const colSpan = 9; // expand + logo + firma + betrag + stage + land + datum + lead + status
 
   return (
@@ -577,8 +628,10 @@ export default function PostsPage() {
                         )}
                       </TableCell>
                       <TableCell className="py-1.5 px-2 text-center">
-                        {round.hasPost ? (
+                        {round.publishedAt ? (
                           <Check className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                        ) : round.hasPost ? (
+                          <Check className="h-3.5 w-3.5 text-orange-400 mx-auto" />
                         ) : isGenerating ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground mx-auto" />
                         ) : (
@@ -677,7 +730,7 @@ export default function PostsPage() {
                                   disabled={
                                     publishing.has(round.roundKey) || unsaved
                                   }
-                                  onClick={() => handlePublish(round)}
+                                  onClick={() => openWizard(round)}
                                 >
                                   {publishing.has(round.roundKey) ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -753,6 +806,281 @@ export default function PostsPage() {
           </div>
         </div>
       )}
+
+      {/* Publish Wizard Sheet */}
+      <Sheet open={!!wizardRound} onOpenChange={(open) => !open && setWizardRound(null)}>
+        <SheetContent side="right" className="sm:max-w-lg w-full flex flex-col p-0">
+          {wizardRound && (() => {
+            const required = getRequiredFields(wizardRound);
+            const allChecked = required.length > 0 && required.every((f) => checkedFields.has(f));
+            const wStageColor = wizardRound.stage && STAGE_COLORS[wizardRound.stage]
+              ? STAGE_COLORS[wizardRound.stage]
+              : "bg-muted";
+
+            return (
+              <>
+                <SheetHeader className="px-6 pt-6 pb-0">
+                  <SheetTitle>Beitrag ver&ouml;ffentlichen</SheetTitle>
+                  <SheetDescription>{wizardRound.companyName}</SheetDescription>
+                </SheetHeader>
+
+                <ScrollArea className="flex-1 px-6 py-4">
+                  <div className="space-y-5">
+                    {/* Company section */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Unternehmen</h4>
+                      <div className="space-y-3">
+                        {/* Company name + logo */}
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <Checkbox
+                            checked={checkedFields.has("companyName")}
+                            onCheckedChange={() => toggleCheck("companyName")}
+                          />
+                          <div className="flex items-center gap-2">
+                            {wizardRound.logoUrl ? (
+                              <SmartLogo
+                                src={wizardRound.logoUrl}
+                                alt=""
+                                className="h-6 w-6 rounded"
+                                fallback={<div className="h-6 w-6 rounded bg-muted" />}
+                              />
+                            ) : (
+                              <div className="h-6 w-6 rounded bg-muted" />
+                            )}
+                            <span className="text-sm font-medium">{wizardRound.companyName}</span>
+                          </div>
+                        </label>
+
+                        {/* Description */}
+                        {wizardRound.description ? (
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <Checkbox
+                              className="mt-0.5"
+                              checked={checkedFields.has("description")}
+                              onCheckedChange={() => toggleCheck("description")}
+                            />
+                            <span className="text-sm text-muted-foreground line-clamp-3">{wizardRound.description}</span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-3 opacity-40">
+                            <Checkbox disabled />
+                            <span className="text-sm text-muted-foreground">Keine Beschreibung</span>
+                          </div>
+                        )}
+
+                        {/* Country */}
+                        {wizardRound.country ? (
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <Checkbox
+                              checked={checkedFields.has("country")}
+                              onCheckedChange={() => toggleCheck("country")}
+                            />
+                            <span className="text-sm">Land: {wizardRound.country}</span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-3 opacity-40">
+                            <Checkbox disabled />
+                            <span className="text-sm text-muted-foreground">Kein Land</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Funding section */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Funding-Runde</h4>
+                      <div className="space-y-3">
+                        {/* Amount */}
+                        {wizardRound.amountEur ? (
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <Checkbox
+                              checked={checkedFields.has("amount")}
+                              onCheckedChange={() => toggleCheck("amount")}
+                            />
+                            <span className="text-sm font-mono">{fmtEur(wizardRound.amountEur)}</span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-3 opacity-40">
+                            <Checkbox disabled />
+                            <span className="text-sm text-muted-foreground">Kein Betrag</span>
+                          </div>
+                        )}
+
+                        {/* Stage */}
+                        {wizardRound.stage ? (
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <Checkbox
+                              checked={checkedFields.has("stage")}
+                              onCheckedChange={() => toggleCheck("stage")}
+                            />
+                            <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${wStageColor}`}>
+                              {wizardRound.stage}
+                            </span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-3 opacity-40">
+                            <Checkbox disabled />
+                            <span className="text-sm text-muted-foreground">Keine Stage</span>
+                          </div>
+                        )}
+
+                        {/* Article date */}
+                        {wizardRound.articleDate ? (
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <Checkbox
+                              checked={checkedFields.has("articleDate")}
+                              onCheckedChange={() => toggleCheck("articleDate")}
+                            />
+                            <span className="text-sm">Artikeldatum: {fmtDate(wizardRound.articleDate)}</span>
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-3 opacity-40">
+                            <Checkbox disabled />
+                            <span className="text-sm text-muted-foreground">Kein Datum</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Sources section */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Quellen ({wizardRound.sources.length})
+                      </h4>
+                      {wizardRound.sources.length > 0 ? (
+                        <div className="space-y-3">
+                          {wizardRound.sources.map((src) => {
+                            const fieldKey = `source_${src.url}`;
+                            return (
+                              <label key={src.url} className="flex items-start gap-3 cursor-pointer">
+                                <Checkbox
+                                  className="mt-0.5"
+                                  checked={checkedFields.has(fieldKey)}
+                                  onCheckedChange={() => toggleCheck(fieldKey)}
+                                />
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                  <span className="text-sm truncate">{src.title || "Ohne Titel"}</span>
+                                  <a
+                                    href={src.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] text-blue-500 hover:text-blue-600 truncate inline-flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="h-3 w-3 shrink-0" />
+                                    {src.url.replace(/^https?:\/\//, "").substring(0, 60)}
+                                  </a>
+                                  {src.publishedAt && (
+                                    <span className="text-[10px] text-muted-foreground">{fmtDate(src.publishedAt)}</span>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground/40">Keine Quellen</p>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Investors section */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        Investoren ({wizardRound.allInvestors.length})
+                      </h4>
+                      {wizardRound.allInvestors.length > 0 ? (
+                        <div className="space-y-3">
+                          {wizardRound.allInvestors.map((inv) => {
+                            const isLead = inv === wizardRound.leadInvestor;
+                            const fieldKey = `investor_${inv}`;
+                            return (
+                              <label key={inv} className="flex items-center gap-3 cursor-pointer">
+                                <Checkbox
+                                  checked={checkedFields.has(fieldKey)}
+                                  onCheckedChange={() => toggleCheck(fieldKey)}
+                                />
+                                <span className="text-sm">{inv}</span>
+                                {isLead && (
+                                  <span className="rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                                    Lead
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground/40">Keine Investoren</p>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Content preview */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Beitrag</h4>
+                      {wizardRound.postContent ? (
+                        <div className="space-y-3">
+                          <textarea
+                            readOnly
+                            className="w-full rounded border border-input bg-muted/30 p-3 text-sm leading-relaxed resize-none min-h-[160px] max-h-[240px] overflow-y-auto focus:outline-none"
+                            value={wizardRound.postContent}
+                          />
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <Checkbox
+                              checked={checkedFields.has("content")}
+                              onCheckedChange={() => toggleCheck("content")}
+                            />
+                            <span className="text-sm font-medium">Beitrag gepr&uuml;ft</span>
+                          </label>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground/40">Kein Beitrag vorhanden</p>
+                      )}
+                    </div>
+                  </div>
+                </ScrollArea>
+
+                <Separator />
+
+                <SheetFooter className="px-6 py-4">
+                  <div className="flex items-center justify-between w-full gap-3">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {checkedFields.size} / {required.length}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setWizardRound(null)}>
+                        Abbrechen
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!allChecked || publishing.has(wizardRound.roundKey)}
+                        onClick={async () => {
+                          await handlePublish(wizardRound);
+                          setWizardRound(null);
+                        }}
+                      >
+                        {publishing.has(wizardRound.roundKey) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Ver&ouml;ffentlichen
+                      </Button>
+                    </div>
+                  </div>
+                </SheetFooter>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

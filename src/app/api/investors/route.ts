@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { requireAuth } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,8 @@ export async function GET() {
   try {
     const result = await session.run(`
       MATCH (inv:InvestorOrg)-[p:PARTICIPATED_IN]->(fr:FundingRound)
-      OPTIONAL MATCH (c:Company)-[:RAISED]->(fr)
+      MATCH (c:Company)-[:RAISED]->(fr)
+      WHERE c.country IN ${EUROPE_CYPHER_LIST}
       WITH inv, count(DISTINCT fr) AS dealCount,
            sum(CASE WHEN p.role = 'lead' THEN 1 ELSE 0 END) AS leadCount,
            sum(fr.amountUsd) AS totalDeployed,
@@ -48,6 +50,7 @@ export async function GET() {
       RETURN inv.name AS name, dealCount, leadCount,
              totalDeployed, companies[0..5] AS portfolioCompanies,
              inv.logoUrl AS logoUrl,
+             inv.type AS type,
              enrichScore,
              inv.hq AS hq,
              COALESCE(inv.stageFocus, []) AS stageFocus,

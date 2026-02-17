@@ -3,6 +3,7 @@ import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/api-auth";
 import { convertToEur } from "@/lib/post-generator";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+      WHERE c.country IN ${EUROPE_CYPHER_LIST}
       OPTIONAL MATCH (inv:InvestorOrg)-[pi:PARTICIPATED_IN]->(fr)
       OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
       WITH c, fr,

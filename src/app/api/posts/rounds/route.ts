@@ -3,6 +3,7 @@ import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/api-auth";
 import { convertToEur } from "@/lib/post-generator";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,12 @@ function toNumber(value: unknown): number | null {
   }
   return null;
 }
+
+export type ArticleSource = {
+  title: string | null;
+  url: string;
+  publishedAt: string | null;
+};
 
 export type RoundWithPostStatus = {
   roundKey: string;
@@ -27,6 +34,7 @@ export type RoundWithPostStatus = {
   logoUrl: string | null;
   description: string | null;
   articleDate: string | null;
+  sources: ArticleSource[];
   hasPost: boolean;
   postId: string | null;
   postContent: string | null;
@@ -40,13 +48,15 @@ export async function GET() {
   try {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+      WHERE c.country IN ${EUROPE_CYPHER_LIST}
       OPTIONAL MATCH (lead:InvestorOrg)-[:PARTICIPATED_IN {role: 'lead'}]->(fr)
       OPTIONAL MATCH (inv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
       OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
       WITH c, fr,
            collect(DISTINCT lead.name)[0] AS leadInvestor,
            collect(DISTINCT inv.name) AS allInvestors,
-           max(a.publishedAt) AS articleDate
+           max(a.publishedAt) AS articleDate,
+           collect(DISTINCT {title: a.title, url: a.url, publishedAt: toString(a.publishedAt)}) AS sources
       RETURN c.name AS companyName,
              c.country AS country,
              c.description AS description,
@@ -56,6 +66,7 @@ export async function GET() {
              leadInvestor,
              allInvestors,
              articleDate,
+             sources,
              id(fr) AS neo4jId
       ORDER BY articleDate DESC, fr.amountUsd DESC
     `);
@@ -72,6 +83,11 @@ export async function GET() {
       const rawDate = r.get("articleDate");
       const articleDate = rawDate ? String(rawDate) : null;
 
+      const rawSources = r.get("sources") as Array<{title: string | null; url: string | null; publishedAt: string | null}> | null;
+      const sources: ArticleSource[] = (rawSources ?? [])
+        .filter((s) => s.url)
+        .map((s) => ({ title: s.title, url: s.url!, publishedAt: s.publishedAt }));
+
       return {
         roundKey,
         companyName,
@@ -84,6 +100,7 @@ export async function GET() {
         logoUrl: r.get("logoUrl") as string | null,
         description: r.get("description") as string | null,
         articleDate,
+        sources,
       };
     });
 
