@@ -45,7 +45,7 @@ export async function GET() {
              leadInvestor,
              investorCount,
              dates[0] AS publishedAt
-      ORDER BY fr.amountUsd DESC
+      ORDER BY dates[0] DESC, fr.amountUsd DESC
     `);
 
     return NextResponse.json({ data: parseRecords(result.records) });

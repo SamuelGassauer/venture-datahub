@@ -27,7 +27,7 @@ type FundingRound = {
   publishedAt: string | null;
 };
 
-type SortKey = "company" | "amount" | "stage" | "leadInvestor" | "investorCount";
+type SortKey = "company" | "amount" | "stage" | "leadInvestor" | "investorCount" | "publishedAt";
 
 function fmtAmt(n: number | null | undefined): string {
   if (!n) return "—";
@@ -54,7 +54,7 @@ export default function GraphFundingRoundsPage() {
   const [rounds, setRounds] = useState<FundingRound[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("amount");
+  const [sortBy, setSortBy] = useState<SortKey>("publishedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
@@ -106,10 +106,14 @@ export default function GraphFundingRoundsPage() {
       if (aVal == null && bVal == null) return 0;
       if (aVal == null) return 1;
       if (bVal == null) return -1;
-      const cmp =
-        typeof aVal === "string"
-          ? aVal.localeCompare(bVal as string)
-          : (aVal as number) - (bVal as number);
+      let cmp: number;
+      if (sortBy === "publishedAt") {
+        cmp = new Date(aVal as string).getTime() - new Date(bVal as string).getTime();
+      } else if (typeof aVal === "string") {
+        cmp = aVal.localeCompare(bVal as string);
+      } else {
+        cmp = (aVal as number) - (bVal as number);
+      }
       return sortOrder === "asc" ? cmp : -cmp;
     });
   }, [rounds, search, sortBy, sortOrder, filters]);
@@ -194,8 +198,11 @@ export default function GraphFundingRoundsPage() {
                 >
                   Investors <SortIcon field="investorCount" />
                 </TableHead>
-                <TableHead className="w-[90px] text-xs font-semibold">
-                  Published
+                <TableHead
+                  className="w-[90px] cursor-pointer text-xs font-semibold"
+                  onClick={() => toggleSort("publishedAt")}
+                >
+                  Published <SortIcon field="publishedAt" />
                 </TableHead>
               </TableRow>
             </TableHeader>
