@@ -128,10 +128,10 @@ export function Sidebar() {
 
   const linkClasses = (item: NavItem) =>
     cn(
-      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+      "flex items-center gap-3 rounded-[8px] px-3 py-2 text-[13px] font-medium transition-colors",
       isActive(item)
-        ? "bg-primary text-primary-foreground"
-        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        ? "bg-foreground/[0.08] text-foreground/85"
+        : "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/70"
     );
 
   const visibleGroups = navGroups.filter(
@@ -139,16 +139,16 @@ export function Sidebar() {
   );
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex h-14 items-center border-b px-4">
+    <aside className="flex h-screen w-64 flex-col border-r border-foreground/[0.08] bg-foreground/[0.02] backdrop-blur-xl">
+      <div className="flex h-14 items-center border-b border-foreground/[0.08] px-4">
         <Link
           href="/dashboard"
           className="flex items-center gap-2 font-semibold"
         >
           <Orbit className="h-5 w-5 text-primary" />
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold">Orbit</span>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[13px] font-semibold text-foreground/85">Orbit</span>
+            <span className="text-[10px] text-foreground/40">
               VC Intelligence
             </span>
           </div>
@@ -158,7 +158,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-3">
         {visibleGroups.map((group) => (
           <div key={group.label} className="mb-3">
-            <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="mb-1 px-3 text-[11px] uppercase tracking-[0.04em] font-medium text-foreground/35">
               {group.label}
             </div>
             <div className="space-y-0.5">
@@ -177,12 +177,12 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t p-3 space-y-1">
+      <div className="border-t border-foreground/[0.08] p-3 space-y-1">
         {isAdmin && (
           <>
             <button
               onClick={() => setDocsOpen(!docsOpen)}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-[13px] font-medium text-foreground/55 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/70"
             >
               <FileQuestion className="h-4 w-4" />
               Docs
@@ -212,7 +212,7 @@ export function Sidebar() {
             </Link>
             <Button
               variant="outline"
-              className="w-full justify-start gap-2"
+              className="w-full justify-start gap-2 rounded-[8px] border-foreground/[0.08] text-[13px] text-foreground/55 hover:bg-foreground/[0.06]"
               onClick={handleSync}
               disabled={syncing}
             >
@@ -223,15 +223,15 @@ export function Sidebar() {
         )}
 
         {session?.user && (
-          <div className="flex items-center gap-2 rounded-md px-3 py-2">
+          <div className="flex items-center gap-2 rounded-[8px] px-3 py-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
               {(session.user.name || session.user.email || "?")[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="truncate text-sm font-medium">
+              <p className="truncate text-[13px] font-medium text-foreground/85">
                 {session.user.name || session.user.email}
               </p>
-              <p className="text-[10px] uppercase text-muted-foreground">
+              <p className="text-[10px] uppercase tracking-[0.04em] text-foreground/40">
                 {session.user.role}
               </p>
             </div>
@@ -239,7 +239,7 @@ export function Sidebar() {
         )}
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-[13px] font-medium text-foreground/55 transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
           <LogOut className="h-4 w-4" />
           Abmelden

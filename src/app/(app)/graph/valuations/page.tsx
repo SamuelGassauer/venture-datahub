@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,13 +32,13 @@ type ValuationEntry = {
 type SortKey = "company" | "valueUsd" | "metricType" | "sourceCount" | "confidence";
 
 const METRIC_BADGE_COLORS: Record<string, string> = {
-  valuation: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
-  revenue: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  arr: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
-  mrr: "bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30",
-  gmv: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30",
-  users: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  growth_rate: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
+  valuation: "bg-purple-500/8 text-purple-600 dark:text-purple-400",
+  revenue: "bg-emerald-500/8 text-emerald-600 dark:text-emerald-400",
+  arr: "bg-green-500/8 text-green-600 dark:text-green-400",
+  mrr: "bg-teal-500/8 text-teal-600 dark:text-teal-400",
+  gmv: "bg-cyan-500/8 text-cyan-600 dark:text-cyan-400",
+  users: "bg-blue-500/8 text-blue-600 dark:text-blue-400",
+  growth_rate: "bg-orange-500/8 text-orange-600 dark:text-orange-400",
 };
 
 function metricLabel(type: string): string {
@@ -164,19 +163,20 @@ export default function GraphValuationsPage() {
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
       className={`ml-0.5 inline h-3 w-3 ${
-        sortBy === field ? "text-foreground" : "text-muted-foreground/50"
+        sortBy === field ? "text-foreground" : "text-foreground/30"
       }`}
     />
   );
 
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
-      <div className="flex items-center gap-3 shrink-0">
-        <Gauge className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Valuations &amp; KPIs</h1>
-        <span className="text-xs text-muted-foreground">Knowledge Graph</span>
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-0">
+      {/* Status bar / toolbar */}
+      <div className="glass-status-bar flex items-center gap-3 px-4 py-2.5 shrink-0">
+        <Gauge className="h-4 w-4 text-foreground/40" />
+        <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground/85">Valuations &amp; KPIs</h1>
+        <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">Knowledge Graph</span>
         <select
-          className="ml-2 h-7 rounded border border-input bg-transparent px-2 text-xs"
+          className="glass-search-input ml-2 h-7 px-2 text-[13px]"
           value={metricFilter}
           onChange={(e) => setMetricFilter(e.target.value)}
         >
@@ -186,129 +186,132 @@ export default function GraphValuationsPage() {
           ))}
         </select>
         <div className="relative ml-auto max-w-xs flex-1">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <Input
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+          <input
             placeholder="Search companies..."
-            className="h-7 pl-7 text-xs"
+            className="glass-search-input h-8 w-full pl-8 text-[13px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+        <div className="flex items-center gap-3 text-[12px] text-foreground/40 tabular-nums">
           <span>{filtered.length} metrics</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto rounded border">
-        {loading ? (
-          <div className="space-y-1 p-2">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="h-7" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            No valuations in the knowledge graph yet.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow className="hover:bg-transparent">
-                <TableHead
-                  className="cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("company")}
-                >
-                  Company <SortIcon field="company" />
-                </TableHead>
-                <TableHead
-                  className="w-[90px] cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("metricType")}
-                >
-                  Metric <SortIcon field="metricType" />
-                </TableHead>
-                <TableHead
-                  className="w-[110px] cursor-pointer text-right text-xs font-semibold"
-                  onClick={() => toggleSort("valueUsd")}
-                >
-                  Value <SortIcon field="valueUsd" />
-                </TableHead>
-                <TableHead className="w-[80px] text-xs font-semibold">
-                  Period
-                </TableHead>
-                <TableHead
-                  className="w-[70px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("confidence")}
-                >
-                  Conf <SortIcon field="confidence" />
-                </TableHead>
-                <TableHead
-                  className="w-[70px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("sourceCount")}
-                >
-                  Sources <SortIcon field="sourceCount" />
-                </TableHead>
-                <TableHead className="w-[90px] text-xs font-semibold">
-                  Published
-                </TableHead>
-                {isAdmin && <TableHead className="w-[36px]" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((v, i) => (
-                <TableRow
-                  key={`${v.valuationKey}-${i}`}
-                  className="cursor-pointer text-xs"
-                  onClick={() => {
-                    setSelectedCompany(v.companyNorm);
-                    setSheetOpen(true);
-                  }}
-                >
-                  <TableCell className="py-1.5 px-2 font-medium">
-                    {v.company}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2">
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] h-5 px-1.5 ${METRIC_BADGE_COLORS[v.metricType] || "bg-muted text-muted-foreground border-border"}`}
-                    >
-                      {metricLabel(v.metricType)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {fmtValue(v.valueUsd, v.unit)}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground text-[10px]">
-                    {v.period ?? "\u2014"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center tabular-nums">
-                    {v.confidence != null ? (
-                      <span className="font-mono text-[10px]">
-                        {(v.confidence * 100).toFixed(0)}
-                      </span>
-                    ) : "\u2014"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center tabular-nums">
-                    {v.sourceCount}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground whitespace-nowrap">
-                    {fmtDate(v.publishedAt)}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell className="py-1.5 px-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(v.valuationKey); }}
-                        className="rounded p-1 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Delete valuation"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </TableCell>
-                  )}
-                </TableRow>
+      {/* Table content */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="lg-inset rounded-[16px] overflow-hidden">
+          {loading ? (
+            <div className="space-y-1 p-3">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-7 rounded-[6px]" />
               ))}
-            </TableBody>
-          </Table>
-        )}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-[13px] text-foreground/40">
+              No valuations in the knowledge graph yet.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="glass-table-header hover:bg-transparent">
+                  <TableHead
+                    className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("company")}
+                  >
+                    Company <SortIcon field="company" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[90px] cursor-pointer text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("metricType")}
+                  >
+                    Metric <SortIcon field="metricType" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[110px] cursor-pointer text-right text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("valueUsd")}
+                  >
+                    Value <SortIcon field="valueUsd" />
+                  </TableHead>
+                  <TableHead className="w-[80px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    Period
+                  </TableHead>
+                  <TableHead
+                    className="w-[70px] cursor-pointer text-center text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("confidence")}
+                  >
+                    Conf <SortIcon field="confidence" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[70px] cursor-pointer text-center text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("sourceCount")}
+                  >
+                    Sources <SortIcon field="sourceCount" />
+                  </TableHead>
+                  <TableHead className="w-[90px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    Published
+                  </TableHead>
+                  {isAdmin && <TableHead className="w-[36px]" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((v, i) => (
+                  <TableRow
+                    key={`${v.valuationKey}-${i}`}
+                    className="lg-inset-table-row cursor-pointer text-[13px]"
+                    onClick={() => {
+                      setSelectedCompany(v.companyNorm);
+                      setSheetOpen(true);
+                    }}
+                  >
+                    <TableCell className="py-1.5 px-2 font-semibold text-foreground/85">
+                      {v.company}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] h-5 px-1.5 ${METRIC_BADGE_COLORS[v.metricType] || "bg-foreground/[0.04] text-foreground/45"}`}
+                      >
+                        {metricLabel(v.metricType)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap text-foreground/85">
+                      {fmtValue(v.valueUsd, v.unit)}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-foreground/40 text-[10px]">
+                      {v.period ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center tabular-nums">
+                      {v.confidence != null ? (
+                        <span className="font-mono text-[10px] text-foreground/55">
+                          {(v.confidence * 100).toFixed(0)}
+                        </span>
+                      ) : "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center tabular-nums text-foreground/45">
+                      {v.sourceCount}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-foreground/40 whitespace-nowrap">
+                      {fmtDate(v.publishedAt)}
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="py-1.5 px-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(v.valuationKey); }}
+                          className="rounded-[6px] p-1 text-foreground/30 hover:text-red-500 hover:bg-red-500/8 transition-colors"
+                          title="Delete valuation"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
       <EntitySheet

@@ -13,13 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,9 +40,14 @@ import {
   ArrowUp,
   ArrowDown,
   ExternalLink,
+  ImageIcon,
+  Pencil,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SmartLogo } from "@/components/ui/smart-logo";
+import { LogoPicker } from "@/components/graph/logo-picker";
+import { LiquidGlass } from "@/components/ui/liquid-glass";
 import type { RoundWithPostStatus } from "@/app/api/posts/rounds/route";
 import {
   REGION_COUNTRIES,
@@ -110,6 +115,15 @@ export default function PostsPage() {
   const [publishing, setPublishing] = useState<Set<string>>(new Set());
   const [wizardRound, setWizardRound] = useState<RoundWithPostStatus | null>(null);
   const [checkedFields, setCheckedFields] = useState<Set<string>>(new Set());
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
+  const [logoPickerTarget, setLogoPickerTarget] = useState<{
+    entityType: "company" | "investor";
+    name: string;
+    website: string;
+  } | null>(null);
+  const [editingWebsite, setEditingWebsite] = useState<string | null>(null); // key like "company" or "investor_Name"
+  const [editingWebsiteValue, setEditingWebsiteValue] = useState("");
+  const [savingWebsite, setSavingWebsite] = useState(false);
 
   const loadRounds = useCallback(async () => {
     setLoading(true);
@@ -217,7 +231,7 @@ export default function PostsPage() {
 
   function SortIcon({ col }: { col: SortKey }) {
     if (sortKey !== col)
-      return <ArrowUpDown className="h-3 w-3 ml-0.5 opacity-40" />;
+      return <ArrowUpDown className="h-3 w-3 ml-0.5 text-foreground/30" />;
     return sortDir === "asc" ? (
       <ArrowUp className="h-3 w-3 ml-0.5" />
     ) : (
@@ -364,6 +378,86 @@ export default function PostsPage() {
     setCheckedFields(new Set());
   }
 
+  function openLogoPicker(entityType: "company" | "investor", name: string, website: string) {
+    setLogoPickerTarget({ entityType, name, website });
+    setLogoPickerOpen(true);
+  }
+
+  function handleLogoSelected(logoUrl: string) {
+    if (!logoPickerTarget || !wizardRound) return;
+    if (logoPickerTarget.entityType === "company") {
+      // Update company logo in rounds state and wizard
+      const updated = { ...wizardRound, logoUrl };
+      setWizardRound(updated);
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.roundKey === wizardRound.roundKey ? { ...r, logoUrl } : r
+        )
+      );
+    } else {
+      // Update investor logo in rounds state and wizard
+      const investorName = logoPickerTarget.name;
+      const updatedDetails = wizardRound.investorDetails.map((d) =>
+        d.name === investorName ? { ...d, logoUrl } : d
+      );
+      const updated = { ...wizardRound, investorDetails: updatedDetails };
+      setWizardRound(updated);
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.roundKey === wizardRound.roundKey
+            ? { ...r, investorDetails: updatedDetails }
+            : r
+        )
+      );
+    }
+  }
+
+  async function saveWebsite(entityType: "company" | "investor", entityName: string, value: string) {
+    setSavingWebsite(true);
+    try {
+      const res = await fetch("/api/update-field", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityName, field: "website", value }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error || "Fehler beim Speichern der URL");
+        return;
+      }
+      // Update local state
+      if (!wizardRound) return;
+      if (entityType === "company") {
+        const updated = { ...wizardRound, companyWebsite: value || null };
+        setWizardRound(updated);
+        setRounds((prev) =>
+          prev.map((r) =>
+            r.roundKey === wizardRound.roundKey ? { ...r, companyWebsite: value || null } : r
+          )
+        );
+      } else {
+        const updatedDetails = wizardRound.investorDetails.map((d) =>
+          d.name === entityName ? { ...d, website: value || null } : d
+        );
+        const updated = { ...wizardRound, investorDetails: updatedDetails };
+        setWizardRound(updated);
+        setRounds((prev) =>
+          prev.map((r) =>
+            r.roundKey === wizardRound.roundKey
+              ? { ...r, investorDetails: updatedDetails }
+              : r
+          )
+        );
+      }
+      setEditingWebsite(null);
+      toast.success("Website gespeichert");
+    } catch {
+      toast.error("Fehler beim Speichern der URL");
+    } finally {
+      setSavingWebsite(false);
+    }
+  }
+
   function toggleCheck(field: string) {
     setCheckedFields((prev) => {
       const next = new Set(prev);
@@ -399,16 +493,16 @@ export default function PostsPage() {
   const colSpan = 9; // expand + logo + firma + betrag + stage + land + datum + lead + status
 
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
-      {/* Header */}
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <FileText className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Beitr&auml;ge</h1>
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+      {/* Filter toolbar */}
+      <div className="glass-status-bar px-4 py-2.5 flex items-center gap-3 shrink-0 flex-wrap">
+        <FileText className="h-5 w-5 text-foreground/40" />
+        <h1 className="text-[17px] tracking-[-0.02em] font-semibold text-foreground/85">Beitr&auml;ge</h1>
         <div className="relative ml-4 max-w-xs flex-1 min-w-[140px]">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-foreground/30" />
           <Input
             placeholder="Suchen..."
-            className="h-7 pl-7 text-xs"
+            className="glass-search-input h-7 pl-7 text-[13px] tracking-[-0.01em]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -416,7 +510,7 @@ export default function PostsPage() {
 
         {/* Region dropdown */}
         <select
-          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] text-foreground/55 appearance-none cursor-pointer"
           value={regionFilter}
           onChange={(e) => setRegionFilter(e.target.value)}
         >
@@ -430,7 +524,7 @@ export default function PostsPage() {
 
         {/* Stage dropdown */}
         <select
-          className="h-7 rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] text-foreground/55 appearance-none cursor-pointer"
           value={stageFilter}
           onChange={(e) => setStageFilter(e.target.value)}
         >
@@ -448,10 +542,10 @@ export default function PostsPage() {
             <button
               key={f}
               onClick={() => setPostFilter(f)}
-              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+              className={`glass-capsule-btn px-2.5 py-1 text-[13px] tracking-[-0.01em] font-medium transition-colors ${
                 postFilter === f
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent"
+                  ? "bg-foreground/[0.08] text-foreground/85"
+                  : "text-foreground/45 hover:text-foreground/70"
               }`}
             >
               {f === "all"
@@ -466,11 +560,11 @@ export default function PostsPage() {
         </div>
 
         {/* Stats */}
-        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-          <span>
+        <div className="ml-auto flex items-center gap-3 text-[12px] tracking-[-0.01em] tabular-nums text-foreground/40">
+          <span className="text-foreground/55">
             {filtered.length} Runden &middot; {fmtEur(totalCapital)}
           </span>
-          <span>&middot;</span>
+          <span className="text-foreground/30">&middot;</span>
           <span className="text-emerald-600 dark:text-emerald-400">
             {postCount} Beitr&auml;ge
           </span>
@@ -478,588 +572,734 @@ export default function PostsPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded border">
-        {loading ? (
-          <div className="space-y-1 p-2">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="h-7" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            Keine Funding-Runden gefunden.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[24px] text-xs" />
-                <TableHead className="w-[32px] text-xs" />
-                <TableHead
-                  className="text-xs font-semibold cursor-pointer select-none"
-                  onClick={() => handleSort("companyName")}
-                >
-                  <span className="inline-flex items-center">
-                    Firma
-                    <SortIcon col="companyName" />
-                  </span>
-                </TableHead>
-                <TableHead
-                  className="w-[100px] text-right text-xs font-semibold cursor-pointer select-none"
-                  onClick={() => handleSort("amountEur")}
-                >
-                  <span className="inline-flex items-center justify-end">
-                    Betrag (&euro;)
-                    <SortIcon col="amountEur" />
-                  </span>
-                </TableHead>
-                <TableHead
-                  className="w-[80px] text-xs font-semibold cursor-pointer select-none"
-                  onClick={() => handleSort("stage")}
-                >
-                  <span className="inline-flex items-center">
-                    Stage
-                    <SortIcon col="stage" />
-                  </span>
-                </TableHead>
-                <TableHead
-                  className="w-[60px] text-xs font-semibold cursor-pointer select-none"
-                  onClick={() => handleSort("country")}
-                >
-                  <span className="inline-flex items-center">
-                    Land
-                    <SortIcon col="country" />
-                  </span>
-                </TableHead>
-                <TableHead
-                  className="w-[85px] text-xs font-semibold cursor-pointer select-none"
-                  onClick={() => handleSort("articleDate")}
-                >
-                  <span className="inline-flex items-center">
-                    Datum
-                    <SortIcon col="articleDate" />
-                  </span>
-                </TableHead>
-                <TableHead className="w-[150px] text-xs font-semibold">
-                  Lead
-                </TableHead>
-                <TableHead className="w-[80px] text-center text-xs font-semibold">
-                  Status
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paged.map((round) => {
-                const isExpanded = expanded.has(round.roundKey);
-                const isGenerating = generating.has(round.roundKey);
-                const content = getDisplayContent(round);
-                const unsaved = hasUnsavedChanges(round);
-                const stageColor =
-                  round.stage && STAGE_COLORS[round.stage]
-                    ? STAGE_COLORS[round.stage]
-                    : "bg-muted";
+      <div className="flex-1 overflow-auto p-4">
+        <div className="lg-inset rounded-[16px]">
+          {loading ? (
+            <div className="space-y-1 p-2">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-7 rounded-[6px]" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-[13px] tracking-[-0.01em] text-foreground/40">
+              Keine Funding-Runden gefunden.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader className="glass-table-header sticky top-0 z-20">
+                <TableRow className="hover:bg-transparent border-0">
+                  <TableHead className="w-[24px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35" />
+                  <TableHead className="w-[32px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35" />
+                  <TableHead
+                    className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 cursor-pointer select-none"
+                    onClick={() => handleSort("companyName")}
+                  >
+                    <span className="inline-flex items-center">
+                      Firma
+                      <SortIcon col="companyName" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="w-[100px] text-right text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 cursor-pointer select-none"
+                    onClick={() => handleSort("amountEur")}
+                  >
+                    <span className="inline-flex items-center justify-end">
+                      Betrag (&euro;)
+                      <SortIcon col="amountEur" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="w-[80px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 cursor-pointer select-none"
+                    onClick={() => handleSort("stage")}
+                  >
+                    <span className="inline-flex items-center">
+                      Stage
+                      <SortIcon col="stage" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="w-[60px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 cursor-pointer select-none"
+                    onClick={() => handleSort("country")}
+                  >
+                    <span className="inline-flex items-center">
+                      Land
+                      <SortIcon col="country" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="w-[85px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 cursor-pointer select-none"
+                    onClick={() => handleSort("articleDate")}
+                  >
+                    <span className="inline-flex items-center">
+                      Datum
+                      <SortIcon col="articleDate" />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-[150px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    Lead
+                  </TableHead>
+                  <TableHead className="w-[80px] text-center text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    Status
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paged.map((round) => {
+                  const isExpanded = expanded.has(round.roundKey);
+                  const isGenerating = generating.has(round.roundKey);
+                  const content = getDisplayContent(round);
+                  const unsaved = hasUnsavedChanges(round);
+                  const stageColor =
+                    round.stage && STAGE_COLORS[round.stage]
+                      ? STAGE_COLORS[round.stage]
+                      : "bg-foreground/[0.04]";
 
-                return (
-                  <Fragment key={round.roundKey}>
-                    <TableRow
-                      className={`cursor-pointer text-xs ${
-                        isExpanded ? "bg-accent/50" : ""
-                      }`}
-                      onClick={() => toggleExpand(round.roundKey)}
-                    >
-                      <TableCell className="py-1.5 px-1 text-center">
-                        {isExpanded ? (
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-1">
-                        {round.logoUrl ? (
-                          <SmartLogo
-                            src={round.logoUrl}
-                            alt=""
-                            className="h-5 w-5 rounded"
-                            fallback={
-                              <div className="h-5 w-5 rounded bg-muted" />
-                            }
-                          />
-                        ) : (
-                          <div className="h-5 w-5 rounded bg-muted" />
-                        )}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2 font-medium">
-                        {round.companyName}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap">
-                        {fmtEur(round.amountEur)}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2">
-                        {round.stage ? (
-                          <span
-                            className={`rounded border px-1 py-0.5 text-[10px] font-medium ${stageColor}`}
-                          >
-                            {round.stage}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/40">
-                            &mdash;
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2 text-[10px]">
-                        {round.country ?? (
-                          <span className="text-muted-foreground/40">
-                            &mdash;
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2 text-[10px] tabular-nums whitespace-nowrap">
-                        {fmtDate(round.articleDate)}
-                      </TableCell>
-                      <TableCell
-                        className="py-1.5 px-2 truncate max-w-[150px]"
-                        title={round.leadInvestor || ""}
-                      >
-                        {round.leadInvestor ?? (
-                          <span className="text-muted-foreground/40">
-                            &mdash;
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-1.5 px-2 text-center">
-                        {round.publishedAt ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
-                        ) : round.hasPost ? (
-                          <Check className="h-3.5 w-3.5 text-orange-400 mx-auto" />
-                        ) : isGenerating ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground mx-auto" />
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGenerate(round);
-                            }}
-                            className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                          >
-                            <Sparkles className="h-3 w-3" />
-                            Generieren
-                          </button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Expanded: Post content */}
-                    {isExpanded && (
+                  return (
+                    <Fragment key={round.roundKey}>
                       <TableRow
-                        key={`${round.roundKey}-expand`}
-                        className="text-xs hover:bg-transparent"
+                        className={`lg-inset-table-row border-0 cursor-pointer text-[13px] tracking-[-0.01em] hover:bg-foreground/[0.02] ${
+                          isExpanded ? "bg-foreground/[0.03]" : ""
+                        }`}
+                        onClick={() => toggleExpand(round.roundKey)}
                       >
-                        <TableCell colSpan={colSpan} className="py-3 px-4">
-                          {round.hasPost ? (
-                            <div className="space-y-2 max-w-2xl">
-                              {round.publishedAt && (
-                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                                  Ver&ouml;ffentlicht am{" "}
-                                  {new Date(
-                                    round.publishedAt
-                                  ).toLocaleDateString("de-DE", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
-                              )}
-                              <textarea
-                                className="w-full rounded border border-input bg-transparent p-2 text-sm leading-relaxed resize-y min-h-[120px] focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={content}
-                                onChange={(e) =>
-                                  setEditedContent((prev) =>
-                                    new Map(prev).set(
-                                      round.roundKey,
-                                      e.target.value
+                        <TableCell className="py-1.5 px-1 text-center">
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3 text-foreground/40" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-foreground/40" />
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-1">
+                          {round.logoUrl ? (
+                            <SmartLogo
+                              src={round.logoUrl}
+                              alt=""
+                              className="h-5 w-5 rounded-[4px]"
+                              fallback={
+                                <div className="h-5 w-5 rounded-[4px] bg-foreground/[0.04]" />
+                              }
+                            />
+                          ) : (
+                            <div className="h-5 w-5 rounded-[4px] bg-foreground/[0.04]" />
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2 font-semibold text-foreground/85">
+                          {round.companyName}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap text-foreground/55">
+                          {fmtEur(round.amountEur)}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2">
+                          {round.stage ? (
+                            <span
+                              className={`rounded-[6px] px-1.5 py-0.5 text-[10px] font-medium ${stageColor}`}
+                            >
+                              {round.stage}
+                            </span>
+                          ) : (
+                            <span className="text-foreground/30">
+                              &mdash;
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2 text-[12px] tracking-[-0.01em] text-foreground/55">
+                          {round.country ?? (
+                            <span className="text-foreground/30">
+                              &mdash;
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2 text-[12px] tracking-[-0.01em] tabular-nums whitespace-nowrap text-foreground/45">
+                          {fmtDate(round.articleDate)}
+                        </TableCell>
+                        <TableCell
+                          className="py-1.5 px-2 truncate max-w-[150px] text-foreground/55"
+                          title={round.leadInvestor || ""}
+                        >
+                          {round.leadInvestor ?? (
+                            <span className="text-foreground/30">
+                              &mdash;
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 px-2 text-center">
+                          {round.publishedAt ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                          ) : round.hasPost ? (
+                            <Check className="h-3.5 w-3.5 text-orange-400 mx-auto" />
+                          ) : isGenerating ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/40 mx-auto" />
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerate(round);
+                              }}
+                              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium bg-foreground/[0.04] text-foreground/55 hover:bg-foreground/[0.08] transition-colors"
+                            >
+                              <Sparkles className="h-3 w-3" />
+                              Generieren
+                            </button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expanded: Post content */}
+                      {isExpanded && (
+                        <TableRow
+                          key={`${round.roundKey}-expand`}
+                          className="border-0 hover:bg-transparent"
+                        >
+                          <TableCell colSpan={colSpan} className="py-3 px-4">
+                            {round.hasPost ? (
+                              <div className="space-y-2 max-w-2xl">
+                                {round.publishedAt && (
+                                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                    Ver&ouml;ffentlicht am{" "}
+                                    {new Date(
+                                      round.publishedAt
+                                    ).toLocaleDateString("de-DE", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                )}
+                                <textarea
+                                  className="w-full rounded-[10px] bg-foreground/[0.03] p-2 text-[13px] tracking-[-0.01em] leading-relaxed resize-y min-h-[120px] text-foreground/70 focus:outline-none focus:ring-1 focus:ring-foreground/[0.12]"
+                                  style={{ borderWidth: "0.5px", borderColor: "rgba(0,0,0,0.06)" }}
+                                  value={content}
+                                  onChange={(e) =>
+                                    setEditedContent((prev) =>
+                                      new Map(prev).set(
+                                        round.roundKey,
+                                        e.target.value
+                                      )
                                     )
-                                  )
-                                }
-                              />
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1"
-                                  onClick={() => handleCopy(content)}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                  Kopieren
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1"
+                                  }
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1 text-foreground/55"
+                                    onClick={() => handleCopy(content)}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                    Kopieren
+                                  </button>
+                                  <button
+                                    className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1 text-foreground/55 disabled:opacity-40"
+                                    disabled={isGenerating}
+                                    onClick={() => handleGenerate(round)}
+                                  >
+                                    {isGenerating ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-3 w-3" />
+                                    )}
+                                    Neu generieren
+                                  </button>
+                                  {unsaved && (
+                                    <button
+                                      className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1 text-foreground/85 bg-foreground/[0.06] disabled:opacity-40"
+                                      disabled={saving.has(round.roundKey)}
+                                      onClick={() => handleSave(round)}
+                                    >
+                                      {saving.has(round.roundKey) ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Save className="h-3 w-3" />
+                                      )}
+                                      Speichern
+                                    </button>
+                                  )}
+                                  <button
+                                    className="apple-btn-blue h-7 px-3 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1 ml-auto disabled:opacity-40"
+                                    disabled={
+                                      publishing.has(round.roundKey) || unsaved
+                                    }
+                                    onClick={() => openWizard(round)}
+                                  >
+                                    {publishing.has(round.roundKey) ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Upload className="h-3 w-3" />
+                                    )}
+                                    {round.publishedAt
+                                      ? "Erneut publishen"
+                                      : "Publish"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <span className="text-[13px] tracking-[-0.01em] text-foreground/45">
+                                  Noch kein Beitrag vorhanden.
+                                </span>
+                                <button
+                                  className="glass-capsule-btn h-7 px-3 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1 text-foreground/55 disabled:opacity-40"
                                   disabled={isGenerating}
                                   onClick={() => handleGenerate(round)}
                                 >
                                   {isGenerating ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
                                   ) : (
-                                    <RefreshCw className="h-3 w-3" />
+                                    <Sparkles className="h-3 w-3" />
                                   )}
-                                  Neu generieren
-                                </Button>
-                                {unsaved && (
-                                  <Button
-                                    size="sm"
-                                    className="h-7 text-xs gap-1"
-                                    disabled={saving.has(round.roundKey)}
-                                    onClick={() => handleSave(round)}
-                                  >
-                                    {saving.has(round.roundKey) ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Save className="h-3 w-3" />
-                                    )}
-                                    Speichern
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1 ml-auto"
-                                  disabled={
-                                    publishing.has(round.roundKey) || unsaved
-                                  }
-                                  onClick={() => openWizard(round)}
-                                >
-                                  {publishing.has(round.roundKey) ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Upload className="h-3 w-3" />
-                                  )}
-                                  {round.publishedAt
-                                    ? "Erneut publishen"
-                                    : "Publish"}
-                                </Button>
+                                  Beitrag generieren
+                                </button>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-3">
-                              <span className="text-muted-foreground">
-                                Noch kein Beitrag vorhanden.
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                disabled={isGenerating}
-                                onClick={() => handleGenerate(round)}
-                              >
-                                {isGenerating ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Sparkles className="h-3 w-3" />
-                                )}
-                                Beitrag generieren
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination footer */}
       {!loading && filtered.length > 0 && (
-        <div className="flex items-center justify-between shrink-0 text-xs text-muted-foreground px-1">
-          <span className="tabular-nums">
+        <div className="glass-status-bar px-4 py-2 flex items-center justify-between shrink-0">
+          <span className="text-[12px] tracking-[-0.01em] tabular-nums text-foreground/35">
             {pageStart + 1}&ndash;{pageEnd} von {filtered.length}
           </span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 w-7 p-0"
+            <button
+              className="glass-capsule-btn h-7 w-7 inline-flex items-center justify-center disabled:opacity-30"
               disabled={page === 0}
               onClick={() => setPage((p) => p - 1)}
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="px-2 tabular-nums">
+              <ChevronLeft className="h-3.5 w-3.5 text-foreground/55" />
+            </button>
+            <span className="px-2 text-[12px] tracking-[-0.01em] tabular-nums text-foreground/35">
               {page + 1} / {totalPages}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 w-7 p-0"
+            <button
+              className="glass-capsule-btn h-7 w-7 inline-flex items-center justify-center disabled:opacity-30"
               disabled={page >= totalPages - 1}
               onClick={() => setPage((p) => p + 1)}
             >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+              <ChevronRight className="h-3.5 w-3.5 text-foreground/55" />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Publish Wizard Sheet */}
-      <Sheet open={!!wizardRound} onOpenChange={(open) => !open && setWizardRound(null)}>
-        <SheetContent side="right" className="sm:max-w-lg w-full flex flex-col p-0">
+      {/* Publish Wizard Dialog */}
+      <Dialog open={!!wizardRound} onOpenChange={(open) => { if (!open) { setWizardRound(null); setEditingWebsite(null); } }}>
+        <DialogContent className="!bg-transparent !border-0 !shadow-none !p-0 !gap-0 sm:max-w-[540px] !rounded-none">
+          <LiquidGlass distortion={22} blur={44} className="max-h-[85vh] overflow-y-auto p-0">
+            <div className="lg-edge-glow" />
+            <div className="relative z-10">
           {wizardRound && (() => {
             const required = getRequiredFields(wizardRound);
             const allChecked = required.length > 0 && required.every((f) => checkedFields.has(f));
             const wStageColor = wizardRound.stage && STAGE_COLORS[wizardRound.stage]
               ? STAGE_COLORS[wizardRound.stage]
-              : "bg-muted";
+              : "bg-foreground/[0.04]";
 
             return (
               <>
-                <SheetHeader className="px-6 pt-6 pb-0">
-                  <SheetTitle>Beitrag ver&ouml;ffentlichen</SheetTitle>
-                  <SheetDescription>{wizardRound.companyName}</SheetDescription>
-                </SheetHeader>
+                {/* Header with company card */}
+                <div className="px-6 pt-6 pb-4 space-y-4">
+                  <DialogHeader>
+                    <DialogTitle className="text-[17px] tracking-[-0.02em] font-semibold text-foreground/85">Beitrag ver&ouml;ffentlichen</DialogTitle>
+                    <DialogDescription className="text-[13px] tracking-[-0.01em] text-foreground/45">
+                      Pr&uuml;fe alle Daten und best&auml;tige sie per Checkbox.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                <ScrollArea className="flex-1 px-6 py-4">
-                  <div className="space-y-5">
-                    {/* Company section */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Unternehmen</h4>
-                      <div className="space-y-3">
-                        {/* Company name + logo */}
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <Checkbox
-                            checked={checkedFields.has("companyName")}
-                            onCheckedChange={() => toggleCheck("companyName")}
-                          />
-                          <div className="flex items-center gap-2">
-                            {wizardRound.logoUrl ? (
-                              <SmartLogo
-                                src={wizardRound.logoUrl}
-                                alt=""
-                                className="h-6 w-6 rounded"
-                                fallback={<div className="h-6 w-6 rounded bg-muted" />}
-                              />
-                            ) : (
-                              <div className="h-6 w-6 rounded bg-muted" />
-                            )}
-                            <span className="text-sm font-medium">{wizardRound.companyName}</span>
-                          </div>
-                        </label>
-
-                        {/* Description */}
-                        {wizardRound.description ? (
-                          <label className="flex items-start gap-3 cursor-pointer">
-                            <Checkbox
-                              className="mt-0.5"
-                              checked={checkedFields.has("description")}
-                              onCheckedChange={() => toggleCheck("description")}
-                            />
-                            <span className="text-sm text-muted-foreground line-clamp-3">{wizardRound.description}</span>
-                          </label>
-                        ) : (
-                          <div className="flex items-center gap-3 opacity-40">
-                            <Checkbox disabled />
-                            <span className="text-sm text-muted-foreground">Keine Beschreibung</span>
-                          </div>
-                        )}
-
-                        {/* Country */}
-                        {wizardRound.country ? (
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <Checkbox
-                              checked={checkedFields.has("country")}
-                              onCheckedChange={() => toggleCheck("country")}
-                            />
-                            <span className="text-sm">Land: {wizardRound.country}</span>
-                          </label>
-                        ) : (
-                          <div className="flex items-center gap-3 opacity-40">
-                            <Checkbox disabled />
-                            <span className="text-sm text-muted-foreground">Kein Land</span>
-                          </div>
+                  {/* Company hero card */}
+                  <div className="lg-inset rounded-[14px] flex items-start gap-4 p-4">
+                    <button
+                      type="button"
+                      onClick={() => openLogoPicker("company", wizardRound.companyName, wizardRound.companyWebsite ?? "")}
+                      className="relative shrink-0 group"
+                      title="Logo &auml;ndern"
+                    >
+                      {wizardRound.logoUrl ? (
+                        <SmartLogo
+                          src={wizardRound.logoUrl}
+                          alt=""
+                          className="h-12 w-12 rounded-[10px]"
+                          fallback={<div className="h-12 w-12 rounded-[10px] bg-foreground/[0.04] flex items-center justify-center"><ImageIcon className="h-5 w-5 text-foreground/30" /></div>}
+                        />
+                      ) : (
+                        <div className="h-12 w-12 rounded-[10px] bg-foreground/[0.04] flex items-center justify-center">
+                          <ImageIcon className="h-5 w-5 text-foreground/30" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 rounded-[10px] bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <Pencil className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </button>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={checkedFields.has("companyName")}
+                          onCheckedChange={() => toggleCheck("companyName")}
+                        />
+                        <span className="text-[15px] tracking-[-0.02em] font-semibold text-foreground/85 truncate">{wizardRound.companyName}</span>
+                        {wizardRound.country && (
+                          <span className="text-[12px] tracking-[-0.01em] text-foreground/45">{wizardRound.country}</span>
                         )}
                       </div>
+                      {/* Company website inline */}
+                      <div className="flex items-center gap-1.5 ml-6">
+                        {editingWebsite === "company" ? (
+                          <div className="flex items-center gap-1.5 flex-1">
+                            <Input
+                              className="glass-search-input h-6 text-[12px] tracking-[-0.01em] flex-1 max-w-[280px]"
+                              placeholder="https://example.com"
+                              value={editingWebsiteValue}
+                              onChange={(e) => setEditingWebsiteValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveWebsite("company", wizardRound.companyName, editingWebsiteValue);
+                                if (e.key === "Escape") setEditingWebsite(null);
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              className="glass-capsule-btn h-6 w-6 inline-flex items-center justify-center disabled:opacity-40"
+                              disabled={savingWebsite}
+                              onClick={() => saveWebsite("company", wizardRound.companyName, editingWebsiteValue)}
+                            >
+                              {savingWebsite ? <Loader2 className="h-3 w-3 animate-spin text-foreground/40" /> : <Check className="h-3 w-3 text-foreground/55" />}
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <Globe className="h-3 w-3 text-foreground/30" />
+                            {wizardRound.companyWebsite ? (
+                              <a
+                                href={wizardRound.companyWebsite}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] tracking-[-0.01em] text-blue-500 hover:text-blue-600 truncate max-w-[240px]"
+                              >
+                                {wizardRound.companyWebsite.replace(/^https?:\/\//, "")}
+                              </a>
+                            ) : (
+                              <a
+                                href={`https://www.google.com/search?q=${encodeURIComponent(wizardRound.companyName + " website")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] tracking-[-0.01em] text-foreground/30 hover:text-blue-500 inline-flex items-center gap-1 transition-colors"
+                              >
+                                <Search className="h-2.5 w-2.5" />
+                                Google
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingWebsite("company");
+                                setEditingWebsiteValue(wizardRound.companyWebsite ?? "");
+                              }}
+                              className="rounded-[6px] p-0.5 text-foreground/30 hover:text-foreground/70 hover:bg-foreground/[0.04] transition-colors"
+                            >
+                              <Pencil className="h-2.5 w-2.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {wizardRound.description && (
+                        <p className="text-[12px] tracking-[-0.01em] text-foreground/45 line-clamp-2 ml-6">{wizardRound.description}</p>
+                      )}
                     </div>
+                  </div>
+                </div>
 
-                    <Separator />
-
-                    {/* Funding section */}
+                {/* Scrollable checklist */}
+                <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-4">
+                  <div className="space-y-5">
+                    {/* Funding details */}
                     <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Funding-Runde</h4>
-                      <div className="space-y-3">
-                        {/* Amount */}
+                      <h4 className="text-[11px] font-medium text-foreground/35 uppercase tracking-[0.04em] mb-2">Funding-Runde</h4>
+                      <div className="grid grid-cols-3 gap-2">
                         {wizardRound.amountEur ? (
-                          <label className="flex items-center gap-3 cursor-pointer">
+                          <label className="lg-inset-row flex items-center gap-2 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors">
                             <Checkbox
                               checked={checkedFields.has("amount")}
                               onCheckedChange={() => toggleCheck("amount")}
                             />
-                            <span className="text-sm font-mono">{fmtEur(wizardRound.amountEur)}</span>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-foreground/35">Betrag</p>
+                              <p className="text-[13px] tracking-[-0.01em] font-mono font-medium text-foreground/70 truncate">{fmtEur(wizardRound.amountEur)}</p>
+                            </div>
                           </label>
                         ) : (
-                          <div className="flex items-center gap-3 opacity-40">
+                          <div className="flex items-center gap-2 rounded-[10px] bg-foreground/[0.02] px-3 py-2 opacity-40">
                             <Checkbox disabled />
-                            <span className="text-sm text-muted-foreground">Kein Betrag</span>
+                            <div><p className="text-[10px] text-foreground/35">Betrag</p><p className="text-[13px] tracking-[-0.01em] text-foreground/45">&mdash;</p></div>
                           </div>
                         )}
-
-                        {/* Stage */}
                         {wizardRound.stage ? (
-                          <label className="flex items-center gap-3 cursor-pointer">
+                          <label className="lg-inset-row flex items-center gap-2 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors">
                             <Checkbox
                               checked={checkedFields.has("stage")}
                               onCheckedChange={() => toggleCheck("stage")}
                             />
-                            <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${wStageColor}`}>
-                              {wizardRound.stage}
-                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-foreground/35">Stage</p>
+                              <span className={`rounded-[6px] px-1.5 py-0.5 text-[10px] font-medium ${wStageColor}`}>{wizardRound.stage}</span>
+                            </div>
                           </label>
                         ) : (
-                          <div className="flex items-center gap-3 opacity-40">
+                          <div className="flex items-center gap-2 rounded-[10px] bg-foreground/[0.02] px-3 py-2 opacity-40">
                             <Checkbox disabled />
-                            <span className="text-sm text-muted-foreground">Keine Stage</span>
+                            <div><p className="text-[10px] text-foreground/35">Stage</p><p className="text-[13px] tracking-[-0.01em] text-foreground/45">&mdash;</p></div>
                           </div>
                         )}
-
-                        {/* Article date */}
                         {wizardRound.articleDate ? (
-                          <label className="flex items-center gap-3 cursor-pointer">
+                          <label className="lg-inset-row flex items-center gap-2 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors">
                             <Checkbox
                               checked={checkedFields.has("articleDate")}
                               onCheckedChange={() => toggleCheck("articleDate")}
                             />
-                            <span className="text-sm">Artikeldatum: {fmtDate(wizardRound.articleDate)}</span>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-foreground/35">Datum</p>
+                              <p className="text-[13px] tracking-[-0.01em] tabular-nums text-foreground/70">{fmtDate(wizardRound.articleDate)}</p>
+                            </div>
                           </label>
                         ) : (
-                          <div className="flex items-center gap-3 opacity-40">
+                          <div className="flex items-center gap-2 rounded-[10px] bg-foreground/[0.02] px-3 py-2 opacity-40">
                             <Checkbox disabled />
-                            <span className="text-sm text-muted-foreground">Kein Datum</span>
+                            <div><p className="text-[10px] text-foreground/35">Datum</p><p className="text-[13px] tracking-[-0.01em] text-foreground/45">&mdash;</p></div>
                           </div>
+                        )}
+                        {wizardRound.description && (
+                          <label className="lg-inset-row flex items-center gap-2 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors col-span-3">
+                            <Checkbox
+                              checked={checkedFields.has("description")}
+                              onCheckedChange={() => toggleCheck("description")}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-foreground/35">Beschreibung</p>
+                              <p className="text-[13px] tracking-[-0.01em] text-foreground/55 line-clamp-1">{wizardRound.description}</p>
+                            </div>
+                          </label>
+                        )}
+                        {wizardRound.country && (
+                          <label className="lg-inset-row flex items-center gap-2 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors">
+                            <Checkbox
+                              checked={checkedFields.has("country")}
+                              onCheckedChange={() => toggleCheck("country")}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-foreground/35">Land</p>
+                              <p className="text-[13px] tracking-[-0.01em] text-foreground/70">{wizardRound.country}</p>
+                            </div>
+                          </label>
                         )}
                       </div>
                     </div>
 
-                    <Separator />
+                    {/* Investors */}
+                    {wizardRound.allInvestors.length > 0 && (
+                      <div>
+                        <h4 className="text-[11px] font-medium text-foreground/35 uppercase tracking-[0.04em] mb-2">
+                          Investoren ({wizardRound.allInvestors.length})
+                        </h4>
+                        <div className="space-y-1.5">
+                          {wizardRound.allInvestors.map((inv) => {
+                            const isLead = inv === wizardRound.leadInvestor;
+                            const fieldKey = `investor_${inv}`;
+                            const detail = wizardRound.investorDetails.find((d) => d.name === inv);
+                            const editKey = `investor_${inv}`;
+                            return (
+                              <div key={inv} className="lg-inset-row flex items-center gap-3 rounded-[10px] px-3 py-2 hover:bg-foreground/[0.02] transition-colors">
+                                <Checkbox
+                                  checked={checkedFields.has(fieldKey)}
+                                  onCheckedChange={() => toggleCheck(fieldKey)}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => openLogoPicker("investor", inv, detail?.website ?? "")}
+                                  className="relative shrink-0 group"
+                                  title="Logo &auml;ndern"
+                                >
+                                  {detail?.logoUrl ? (
+                                    <SmartLogo
+                                      src={detail.logoUrl}
+                                      alt=""
+                                      className="h-8 w-8 rounded-[6px]"
+                                      fallback={<div className="h-8 w-8 rounded-[6px] bg-foreground/[0.04] flex items-center justify-center"><ImageIcon className="h-3.5 w-3.5 text-foreground/30" /></div>}
+                                    />
+                                  ) : (
+                                    <div className="h-8 w-8 rounded-[6px] bg-foreground/[0.04] flex items-center justify-center">
+                                      <ImageIcon className="h-3.5 w-3.5 text-foreground/30" />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 rounded-[6px] bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                    <Pencil className="h-3 w-3 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[13px] tracking-[-0.01em] font-semibold text-foreground/85 truncate cursor-pointer" onClick={() => toggleCheck(fieldKey)}>{inv}</span>
+                                    {isLead && (
+                                      <span className="shrink-0 rounded-full bg-amber-500/8 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
+                                        Lead
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Investor website */}
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    {editingWebsite === editKey ? (
+                                      <div className="flex items-center gap-1.5 flex-1">
+                                        <Input
+                                          className="glass-search-input h-5 text-[11px] tracking-[-0.01em] flex-1 max-w-[220px]"
+                                          placeholder="https://example.com"
+                                          value={editingWebsiteValue}
+                                          onChange={(e) => setEditingWebsiteValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") saveWebsite("investor", inv, editingWebsiteValue);
+                                            if (e.key === "Escape") setEditingWebsite(null);
+                                          }}
+                                          autoFocus
+                                        />
+                                        <button
+                                          className="glass-capsule-btn h-5 w-5 inline-flex items-center justify-center disabled:opacity-40"
+                                          disabled={savingWebsite}
+                                          onClick={() => saveWebsite("investor", inv, editingWebsiteValue)}
+                                        >
+                                          {savingWebsite ? <Loader2 className="h-3 w-3 animate-spin text-foreground/40" /> : <Check className="h-3 w-3 text-foreground/55" />}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <Globe className="h-2.5 w-2.5 text-foreground/30" />
+                                        {detail?.website ? (
+                                          <a
+                                            href={detail.website}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[11px] tracking-[-0.01em] text-blue-500 hover:text-blue-600 truncate max-w-[180px]"
+                                          >
+                                            {detail.website.replace(/^https?:\/\//, "")}
+                                          </a>
+                                        ) : (
+                                          <a
+                                            href={`https://www.google.com/search?q=${encodeURIComponent(inv + " investor website")}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[11px] tracking-[-0.01em] text-foreground/30 hover:text-blue-500 inline-flex items-center gap-1 transition-colors"
+                                          >
+                                            <Search className="h-2.5 w-2.5" />
+                                            Google
+                                          </a>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingWebsite(editKey);
+                                            setEditingWebsiteValue(detail?.website ?? "");
+                                          }}
+                                          className="rounded-[6px] p-0.5 text-foreground/30 hover:text-foreground/70 hover:bg-foreground/[0.04] transition-colors"
+                                        >
+                                          <Pencil className="h-2.5 w-2.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Sources section */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        Quellen ({wizardRound.sources.length})
-                      </h4>
-                      {wizardRound.sources.length > 0 ? (
-                        <div className="space-y-3">
+                    {/* Sources */}
+                    {wizardRound.sources.length > 0 && (
+                      <div>
+                        <h4 className="text-[11px] font-medium text-foreground/35 uppercase tracking-[0.04em] mb-2">
+                          Quellen ({wizardRound.sources.length})
+                        </h4>
+                        <div className="space-y-1.5">
                           {wizardRound.sources.map((src) => {
                             const fieldKey = `source_${src.url}`;
                             return (
-                              <label key={src.url} className="flex items-start gap-3 cursor-pointer">
+                              <label key={src.url} className="lg-inset-row flex items-start gap-3 rounded-[10px] px-3 py-2 cursor-pointer hover:bg-foreground/[0.02] transition-colors">
                                 <Checkbox
                                   className="mt-0.5"
                                   checked={checkedFields.has(fieldKey)}
                                   onCheckedChange={() => toggleCheck(fieldKey)}
                                 />
                                 <div className="flex flex-col gap-0.5 min-w-0">
-                                  <span className="text-sm truncate">{src.title || "Ohne Titel"}</span>
+                                  <span className="text-[13px] tracking-[-0.01em] font-semibold text-foreground/70 truncate">{src.title || "Ohne Titel"}</span>
                                   <a
                                     href={src.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-[11px] text-blue-500 hover:text-blue-600 truncate inline-flex items-center gap-1"
+                                    className="text-[11px] tracking-[-0.01em] text-blue-500 hover:text-blue-600 truncate inline-flex items-center gap-1"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <ExternalLink className="h-3 w-3 shrink-0" />
-                                    {src.url.replace(/^https?:\/\//, "").substring(0, 60)}
+                                    <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                                    {src.url.replace(/^https?:\/\//, "").substring(0, 50)}
                                   </a>
                                   {src.publishedAt && (
-                                    <span className="text-[10px] text-muted-foreground">{fmtDate(src.publishedAt)}</span>
+                                    <span className="text-[10px] text-foreground/30">{fmtDate(src.publishedAt)}</span>
                                   )}
                                 </div>
                               </label>
                             );
                           })}
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground/40">Keine Quellen</p>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    {/* Investors section */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        Investoren ({wizardRound.allInvestors.length})
-                      </h4>
-                      {wizardRound.allInvestors.length > 0 ? (
-                        <div className="space-y-3">
-                          {wizardRound.allInvestors.map((inv) => {
-                            const isLead = inv === wizardRound.leadInvestor;
-                            const fieldKey = `investor_${inv}`;
-                            return (
-                              <label key={inv} className="flex items-center gap-3 cursor-pointer">
-                                <Checkbox
-                                  checked={checkedFields.has(fieldKey)}
-                                  onCheckedChange={() => toggleCheck(fieldKey)}
-                                />
-                                <span className="text-sm">{inv}</span>
-                                {isLead && (
-                                  <span className="rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 text-[10px] font-medium">
-                                    Lead
-                                  </span>
-                                )}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground/40">Keine Investoren</p>
-                      )}
-                    </div>
-
-                    <Separator />
+                      </div>
+                    )}
 
                     {/* Content preview */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Beitrag</h4>
-                      {wizardRound.postContent ? (
-                        <div className="space-y-3">
+                    {wizardRound.postContent && (
+                      <div>
+                        <h4 className="text-[11px] font-medium text-foreground/35 uppercase tracking-[0.04em] mb-2">Beitrag</h4>
+                        <div className="space-y-2">
                           <textarea
                             readOnly
-                            className="w-full rounded border border-input bg-muted/30 p-3 text-sm leading-relaxed resize-none min-h-[160px] max-h-[240px] overflow-y-auto focus:outline-none"
+                            className="w-full rounded-[10px] bg-foreground/[0.03] p-3 text-[13px] tracking-[-0.01em] leading-relaxed text-foreground/55 resize-none min-h-[120px] max-h-[200px] overflow-y-auto focus:outline-none"
+                            style={{ borderWidth: "0.5px", borderColor: "rgba(0,0,0,0.06)" }}
                             value={wizardRound.postContent}
                           />
-                          <label className="flex items-center gap-3 cursor-pointer">
+                          <label className="flex items-center gap-2 cursor-pointer">
                             <Checkbox
                               checked={checkedFields.has("content")}
                               onCheckedChange={() => toggleCheck("content")}
                             />
-                            <span className="text-sm font-medium">Beitrag gepr&uuml;ft</span>
+                            <span className="text-[13px] tracking-[-0.01em] font-medium text-foreground/70">Beitrag gepr&uuml;ft</span>
                           </label>
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground/40">Kein Beitrag vorhanden</p>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                </ScrollArea>
+                </div>
 
-                <Separator />
-
-                <SheetFooter className="px-6 py-4">
+                {/* Footer */}
+                <div className="px-6 py-4" style={{ borderTopWidth: "0.5px", borderColor: "rgba(0,0,0,0.06)" }}>
                   <div className="flex items-center justify-between w-full gap-3">
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {checkedFields.size} / {required.length}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 min-w-[80px] rounded-full bg-foreground/[0.06] overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${required.length > 0 ? (checkedFields.size / required.length) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] tracking-[-0.01em] text-foreground/35 tabular-nums">
+                        {checkedFields.size}/{required.length}
+                      </span>
+                    </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setWizardRound(null)}>
+                      <button className="glass-capsule-btn h-8 px-4 text-[13px] tracking-[-0.01em] text-foreground/55" onClick={() => setWizardRound(null)}>
                         Abbrechen
-                      </Button>
-                      <Button
-                        size="sm"
+                      </button>
+                      <button
+                        className="apple-btn-blue h-8 px-4 text-[13px] tracking-[-0.01em] inline-flex items-center gap-1.5 disabled:opacity-40"
                         disabled={!allChecked || publishing.has(wizardRound.roundKey)}
                         onClick={async () => {
                           await handlePublish(wizardRound);
@@ -1067,20 +1307,37 @@ export default function PostsPage() {
                         }}
                       >
                         {publishing.has(wizardRound.roundKey) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <Upload className="h-3.5 w-3.5 mr-1.5" />
+                          <Upload className="h-3.5 w-3.5" />
                         )}
                         Ver&ouml;ffentlichen
-                      </Button>
+                      </button>
                     </div>
                   </div>
-                </SheetFooter>
+                </div>
               </>
             );
           })()}
-        </SheetContent>
-      </Sheet>
+            </div>
+          </LiquidGlass>
+        </DialogContent>
+      </Dialog>
+
+      {/* Logo Picker Dialog */}
+      {logoPickerTarget && (
+        <LogoPicker
+          open={logoPickerOpen}
+          onOpenChange={(open) => {
+            setLogoPickerOpen(open);
+            if (!open) setLogoPickerTarget(null);
+          }}
+          companyName={logoPickerTarget.name}
+          website={logoPickerTarget.website}
+          entityType={logoPickerTarget.entityType}
+          onSelect={handleLogoSelected}
+        />
+      )}
     </div>
   );
 }

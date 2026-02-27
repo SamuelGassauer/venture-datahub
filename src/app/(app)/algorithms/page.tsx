@@ -809,10 +809,10 @@ function WeightBar({ weight, color }: { weight: string; color: string }) {
   const pct = parseFloat(weight) * (weight.includes("%") ? 1 : 100);
   return (
     <div className="flex items-center gap-2 min-w-[80px]">
-      <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
+      <div className="h-2 w-16 rounded-full bg-foreground/[0.04] overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(pct * 2.5, 100)}%` }} />
       </div>
-      <span className="font-mono text-[11px] text-muted-foreground tabular-nums w-10">{weight}</span>
+      <span className="font-mono text-[11px] text-foreground/35 tabular-nums w-10">{weight}</span>
     </div>
   );
 }
@@ -820,13 +820,13 @@ function WeightBar({ weight, color }: { weight: string; color: string }) {
 function WeightsBlock({ block }: { block: Extract<DetailBlock, { type: "weights" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
       <div className="space-y-1">
         {block.items.map((item) => (
-          <div key={item.label} className="flex items-center gap-3 rounded-md border border-border/50 bg-card px-3 py-2">
+          <div key={item.label} className="flex items-center gap-3 lg-inset-row px-3 py-2">
             <WeightBar weight={item.weight} color={item.color} />
-            <span className="text-sm font-medium min-w-[180px]">{item.label}</span>
-            <span className="text-xs text-muted-foreground">{item.description}</span>
+            <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85 min-w-[180px]">{item.label}</span>
+            <span className="text-[12px] text-foreground/45">{item.description}</span>
           </div>
         ))}
       </div>
@@ -837,11 +837,11 @@ function WeightsBlock({ block }: { block: Extract<DetailBlock, { type: "weights"
 function SignalsBlock({ block }: { block: Extract<DetailBlock, { type: "signals" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
         {block.negative.map((s) => (
-          <div key={s.pattern} className="flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-1.5">
-            <span className="text-sm">{s.pattern}</span>
+          <div key={s.pattern} className="flex items-center justify-between rounded-[8px] bg-red-500/8 px-3 py-1.5" style={{ border: "0.5px solid rgba(239, 68, 68, 0.2)" }}>
+            <span className="text-[13px] text-foreground/85">{s.pattern}</span>
             <Badge variant="outline" className="text-[10px] font-mono border-red-500/30 text-red-600 dark:text-red-400">
               {s.penalty}
             </Badge>
@@ -855,24 +855,24 @@ function SignalsBlock({ block }: { block: Extract<DetailBlock, { type: "signals"
 function PipelineBlock({ block }: { block: Extract<DetailBlock, { type: "pipeline" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
       <div className="space-y-0">
         {block.steps.map((step, i) => (
           <div key={step.label} className="flex items-start gap-3 relative">
             {i < block.steps.length - 1 && (
-              <div className="absolute left-[11px] top-[24px] bottom-0 w-px bg-border" />
+              <div className="absolute left-[11px] top-[24px] bottom-0 w-px bg-foreground/[0.06]" />
             )}
-            <div className="relative z-10 mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 border-primary/30 bg-background">
-              <span className="text-[9px] font-bold text-primary">{i + 1}</span>
+            <div className="relative z-10 mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-foreground/[0.04]" style={{ border: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.1)" }}>
+              <span className="text-[9px] font-bold text-foreground/55">{i + 1}</span>
             </div>
             <div className="flex-1 pb-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{step.label}</span>
+                <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{step.label}</span>
                 {step.badge && (
-                  <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{step.badge}</Badge>
+                  <span className="text-[9px] font-medium bg-foreground/[0.04] text-foreground/55 rounded-full px-1.5 py-0.5">{step.badge}</span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">{step.detail}</p>
+              <p className="text-[12px] text-foreground/45 mt-0.5">{step.detail}</p>
             </div>
           </div>
         ))}
@@ -884,13 +884,13 @@ function PipelineBlock({ block }: { block: Extract<DetailBlock, { type: "pipelin
 function TableBlock({ block }: { block: Extract<DetailBlock, { type: "table" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
-      <div className="rounded-md border overflow-hidden">
-        <table className="w-full text-sm">
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
+      <div className="lg-inset rounded-[10px] overflow-hidden">
+        <table className="w-full text-[13px] tracking-[-0.01em]">
           <thead>
-            <tr className="bg-muted/50">
+            <tr className="glass-table-header">
               {block.headers.map((h) => (
-                <th key={h} className="px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th key={h} className="px-3 py-1.5 text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
                   {h}
                 </th>
               ))}
@@ -898,9 +898,9 @@ function TableBlock({ block }: { block: Extract<DetailBlock, { type: "table" }> 
           </thead>
           <tbody>
             {block.rows.map((row, i) => (
-              <tr key={i} className="border-t border-border/50">
+              <tr key={i} className="lg-inset-table-row">
                 {row.map((cell, j) => (
-                  <td key={j} className={`px-3 py-1.5 ${j === 0 ? "font-medium" : "text-muted-foreground"}`}>
+                  <td key={j} className={`px-3 py-1.5 ${j === 0 ? "font-semibold text-foreground/85" : "text-foreground/45"}`}>
                     {cell}
                   </td>
                 ))}
@@ -916,19 +916,19 @@ function TableBlock({ block }: { block: Extract<DetailBlock, { type: "table" }> 
 function TiersBlock({ block }: { block: Extract<DetailBlock, { type: "tiers" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {block.tiers.map((tier) => (
-          <div key={tier.name} className="rounded-lg border p-3 space-y-2">
+          <div key={tier.name} className="lg-inset rounded-[14px] p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">{tier.name}</span>
+              <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{tier.name}</span>
               <Badge variant="outline" className="text-[10px] font-mono">{tier.score}</Badge>
             </div>
             <div className={`h-1 rounded-full ${tier.color}`} />
             <ul className="space-y-1">
               {tier.items.map((item) => (
-                <li key={item} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground/50" />
+                <li key={item} className="flex items-start gap-1.5 text-[12px] text-foreground/45">
+                  <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-foreground/15" />
                   {item}
                 </li>
               ))}
@@ -943,8 +943,8 @@ function TiersBlock({ block }: { block: Extract<DetailBlock, { type: "tiers" }> 
 function TextBlock({ block }: { block: Extract<DetailBlock, { type: "text" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
-      <p className="text-sm text-muted-foreground leading-relaxed">{block.content}</p>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
+      <p className="text-[13px] text-foreground/45 leading-relaxed">{block.content}</p>
     </div>
   );
 }
@@ -952,8 +952,8 @@ function TextBlock({ block }: { block: Extract<DetailBlock, { type: "text" }> })
 function CodeBlock({ block }: { block: Extract<DetailBlock, { type: "code" }> }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.title}</h4>
-      <pre className="rounded-md border bg-muted/50 p-3 text-xs font-mono overflow-x-auto">{block.code}</pre>
+      <h4 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">{block.title}</h4>
+      <pre className="lg-inset rounded-[10px] p-3 text-[12px] font-mono overflow-x-auto text-foreground/70">{block.code}</pre>
     </div>
   );
 }
@@ -979,35 +979,35 @@ function AlgorithmCard({ algo, forceOpen }: { algo: AlgoSection; forceOpen?: boo
   const Icon = algo.icon;
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
+    <div className="lg-inset rounded-[14px] overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-accent/30 transition-colors"
+        className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-foreground/[0.02] transition-colors"
       >
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted ${algo.color}`}>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-foreground/[0.04] ${algo.color}`}>
           <Icon className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold">{algo.title}</h3>
-            <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-muted-foreground">
+            <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{algo.title}</h3>
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal text-foreground/45">
               {algo.subtitle}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{algo.overview}</p>
+          <p className="text-[12px] text-foreground/45 mt-0.5 line-clamp-1">{algo.overview}</p>
         </div>
-        <code className="hidden lg:block text-[10px] text-muted-foreground/60 font-mono shrink-0">
+        <code className="hidden lg:block text-[10px] text-foreground/30 font-mono shrink-0">
           {algo.file}
         </code>
         {open ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          <ChevronDown className="h-4 w-4 text-foreground/35 shrink-0" />
         ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          <ChevronRight className="h-4 w-4 text-foreground/35 shrink-0" />
         )}
       </button>
       {open && (
-        <div className="border-t px-5 py-4 space-y-5">
-          <p className="text-sm text-muted-foreground leading-relaxed">{algo.overview}</p>
+        <div className="px-5 py-4 space-y-5" style={{ borderTop: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
+          <p className="text-[13px] text-foreground/45 leading-relaxed">{algo.overview}</p>
           {algo.details.map((block, i) => (
             <DetailRenderer key={i} block={block} />
           ))}
@@ -1025,26 +1025,28 @@ export default function AlgorithmsPage() {
   const [expandAll, setExpandAll] = useState(false);
 
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-3">
-      <div className="flex items-center gap-3 shrink-0">
-        <Shield className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Algorithmen</h1>
-        <Badge variant="secondary" className="text-[10px]">
-          {algorithms.length} Algorithmen
-        </Badge>
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+      {/* Tier 2: Toolbar */}
+      <div className="glass-status-bar px-4 py-2.5 flex items-center gap-3">
+        <Shield className="h-4 w-4 text-foreground/40" />
+        <span className="text-[13px] font-semibold text-foreground/85">Algorithmen</span>
+        <span className="text-[11px] font-medium bg-foreground/[0.04] text-foreground/55 rounded-full px-2 py-0.5 tabular-nums">
+          {algorithms.length}
+        </span>
         <button
           onClick={() => setExpandAll(!expandAll)}
-          className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="ml-auto glass-capsule-btn px-2.5 py-1 text-[12px]"
         >
           {expandAll ? "Alle zuklappen" : "Alle aufklappen"}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+      {/* Tier 3: Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {/* Data Flow Overview */}
-        <div className="rounded-lg border bg-gradient-to-r from-card to-muted/30 p-4 mb-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Data Flow</h2>
-          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+        <div className="lg-inset rounded-[16px] p-4 mb-3">
+          <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-3">Data Flow</h2>
+          <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
             {[
               { label: "RSS Feeds", icon: Search },
               { label: "Regex Extraction", icon: Zap },
@@ -1055,11 +1057,11 @@ export default function AlgorithmsPage() {
               { label: "Post Generation", icon: FileText },
             ].map((step, i, arr) => (
               <div key={step.label} className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5">
-                  <step.icon className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium">{step.label}</span>
+                <div className="flex items-center gap-1.5 rounded-[8px] bg-foreground/[0.04] px-2.5 py-1.5" style={{ border: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
+                  <step.icon className="h-3.5 w-3.5 text-foreground/40" />
+                  <span className="font-medium text-foreground/70">{step.label}</span>
                 </div>
-                {i < arr.length - 1 && <ArrowRight className="h-3 w-3 text-muted-foreground/50" />}
+                {i < arr.length - 1 && <ArrowRight className="h-3 w-3 text-foreground/15" />}
               </div>
             ))}
           </div>

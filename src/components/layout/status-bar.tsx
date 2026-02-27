@@ -57,16 +57,16 @@ export function StatusBar() {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-4 py-1 text-[11px] border-b shrink-0 select-none",
-        isOk && !hasErrors && "bg-emerald-500/5 border-emerald-500/20",
-        isOk && hasErrors && "bg-yellow-500/5 border-yellow-500/20",
-        !isOk && "bg-red-500/5 border-red-500/20",
+        "glass-status-bar flex items-center gap-3 px-4 py-1 text-[11px] tracking-[-0.01em] shrink-0 select-none",
+        isOk && !hasErrors && "bg-emerald-500/5",
+        isOk && hasErrors && "bg-amber-500/5",
+        !isOk && "bg-red-500/5",
       )}
     >
       {/* Status icon */}
       <div className="flex items-center gap-1.5">
         {checking ? (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          <Loader2 className="h-3 w-3 animate-spin text-foreground/40" />
         ) : isOk ? (
           <CheckCircle2 className="h-3 w-3 text-emerald-500" />
         ) : (
@@ -74,7 +74,7 @@ export function StatusBar() {
         )}
         <span className={cn(
           "font-medium",
-          isOk ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"
+          isOk ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
         )}>
           Claude Haiku
         </span>
@@ -82,12 +82,12 @@ export function StatusBar() {
 
       {/* Status text */}
       {isOk ? (
-        <span className="text-muted-foreground">
+        <span className="text-foreground/45">
           <Activity className="inline h-2.5 w-2.5 mr-0.5" />
           {health.latencyMs}ms
         </span>
       ) : (
-        <span className="text-red-600 dark:text-red-400 font-medium">
+        <span className="text-red-500 font-medium">
           {health.error}
         </span>
       )}
@@ -95,15 +95,15 @@ export function StatusBar() {
       {/* Error counter */}
       {hasErrors && (
         <span className={cn(
-          "flex items-center gap-1 rounded px-1.5 py-0.5",
+          "flex items-center gap-1 rounded-[6px] px-1.5 py-0.5",
           health.errorCount >= 5
-            ? "bg-red-500/10 text-red-700 dark:text-red-400"
-            : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+            ? "bg-red-500/8 text-red-500"
+            : "bg-amber-500/8 text-amber-600"
         )}>
           <AlertTriangle className="h-2.5 w-2.5" />
           {health.errorCount} error{health.errorCount !== 1 ? "s" : ""}
           {health.lastErrorAt && (
-            <span className="text-muted-foreground ml-0.5">
+            <span className="text-foreground/30 ml-0.5">
               (last: {fmtAgo(health.lastErrorAt)})
             </span>
           )}
@@ -112,13 +112,13 @@ export function StatusBar() {
 
       {/* Last error message */}
       {hasErrors && health.lastErrorMessage && !health.error && (
-        <span className="text-muted-foreground truncate max-w-[300px]" title={health.lastErrorMessage}>
+        <span className="text-foreground/45 truncate max-w-[300px]" title={health.lastErrorMessage}>
           {health.lastErrorMessage}
         </span>
       )}
 
       {/* Spacer + last checked */}
-      <span className="ml-auto text-muted-foreground/60 tabular-nums">
+      <span className="ml-auto text-foreground/30 tabular-nums">
         checked {fmtAgo(health.checkedAt)}
       </span>
     </div>

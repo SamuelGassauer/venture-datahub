@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
@@ -13,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Search, Building2, ExternalLink, Globe, Trash2 } from "lucide-react";
+import { ArrowUpDown, Search, Building2, Globe, Trash2 } from "lucide-react";
 import { SmartLogo } from "@/components/ui/smart-logo";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -42,7 +41,7 @@ const COMPANY_MAX_SCORE = 9;
 type SortKey = "name" | "country" | "totalFunding" | "roundCount" | "lastStage" | "foundedYear" | "status" | "enrichScore";
 
 function fmtAmt(n: number | null | undefined): string {
-  if (!n) return "—";
+  if (!n) return "\u2014";
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
@@ -50,11 +49,11 @@ function fmtAmt(n: number | null | undefined): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  acquired: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  ipo: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
-  shut_down: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-  unknown: "bg-muted text-muted-foreground border-border",
+  active: "bg-emerald-500/8 text-emerald-600 dark:text-emerald-400",
+  acquired: "bg-blue-500/8 text-blue-600 dark:text-blue-400",
+  ipo: "bg-purple-500/8 text-purple-600 dark:text-purple-400",
+  shut_down: "bg-red-500/8 text-red-500",
+  unknown: "bg-foreground/[0.04] text-foreground/45",
 };
 
 export default function CompaniesPage() {
@@ -141,221 +140,225 @@ export default function CompaniesPage() {
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
       className={`ml-0.5 inline h-3 w-3 ${
-        sortBy === field ? "text-foreground" : "text-muted-foreground/50"
+        sortBy === field ? "text-foreground/85" : "text-foreground/30"
       }`}
     />
   );
 
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
-      <div className="flex items-center gap-3 shrink-0">
-        <Building2 className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Companies</h1>
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+      {/* Tier 2: Status bar / toolbar */}
+      <div className="glass-status-bar flex items-center gap-3 px-4 py-2.5 shrink-0">
+        <Building2 className="h-4 w-4 text-foreground/40" />
+        <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground/85">Companies</h1>
         <div className="relative ml-auto max-w-xs flex-1">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <Input
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+          <input
             placeholder="Search companies..."
-            className="h-7 pl-7 text-xs"
+            className="glass-search-input h-7 w-full pl-8 pr-3 text-[13px] tracking-[-0.01em] text-foreground/85 placeholder:text-foreground/30"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <span className="text-xs text-muted-foreground tabular-nums">
+        <span className="text-[11px] text-foreground/35 tabular-nums tracking-[0.04em]">
           {filtered.length} companies
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto rounded border">
-        {loading ? (
-          <div className="space-y-1 p-2">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="h-7" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            No companies found.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[32px] text-xs" />
-                <TableHead
-                  className="cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("name")}
-                >
-                  Name <SortIcon field="name" />
-                </TableHead>
-                <TableHead
-                  className="w-[70px] cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("status")}
-                >
-                  Status <SortIcon field="status" />
-                </TableHead>
-                <TableHead
-                  className="w-[70px] cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("country")}
-                >
-                  Country <SortIcon field="country" />
-                </TableHead>
-                <TableHead
-                  className="w-[90px] cursor-pointer text-right text-xs font-semibold"
-                  onClick={() => toggleSort("totalFunding")}
-                >
-                  Funding <SortIcon field="totalFunding" />
-                </TableHead>
-                <TableHead
-                  className="w-[55px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("roundCount")}
-                >
-                  Rnds <SortIcon field="roundCount" />
-                </TableHead>
-                <TableHead className="w-[65px] text-xs font-semibold">
-                  Stage
-                </TableHead>
-                <TableHead
-                  className="w-[55px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("foundedYear")}
-                >
-                  Est. <SortIcon field="foundedYear" />
-                </TableHead>
-                <TableHead className="w-[70px] text-xs font-semibold">
-                  Size
-                </TableHead>
-                <TableHead className="min-w-[150px] text-xs font-semibold">
-                  Description
-                </TableHead>
-                <TableHead
-                  className="w-[55px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("enrichScore")}
-                >
-                  Score <SortIcon field="enrichScore" />
-                </TableHead>
-                <TableHead className="w-[50px] text-xs font-semibold text-center">
-                  Links
-                </TableHead>
-                {isAdmin && <TableHead className="w-[36px]" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((c) => (
-                <TableRow
-                  key={c.name}
-                  className="cursor-pointer text-xs"
-                  onClick={() => {
-                    setSelectedCompany(c.name);
-                    setSheetOpen(true);
-                  }}
-                >
-                  <TableCell className="py-1.5 px-1">
-                    {c.logoUrl ? (
-                      <SmartLogo src={c.logoUrl} alt={c.name} className="h-5 w-5 rounded" fallback={<div className="h-5 w-5 rounded bg-muted" />} />
-                    ) : (
-                      <div className="h-5 w-5 rounded bg-muted" />
-                    )}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 font-medium">
-                    {c.name}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2">
-                    {c.status ? (
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] h-5 px-1.5 ${STATUS_COLORS[c.status] ?? STATUS_COLORS.unknown}`}
-                      >
-                        {c.status}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground/40">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground">
-                    {c.country ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {fmtAmt(c.totalFunding)}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center tabular-nums">
-                    {c.roundCount}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2">
-                    {c.lastStage ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        {c.lastStage}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground/40">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center tabular-nums text-muted-foreground">
-                    {c.foundedYear ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground whitespace-nowrap">
-                    {c.employeeRange ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground truncate max-w-[200px]" title={c.description ?? ""}>
-                    {c.description ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center">
-                    <div className="flex items-center justify-center gap-1" title={`${c.enrichScore}/${COMPANY_MAX_SCORE}`}>
-                      <div className="h-1.5 w-10 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            c.enrichScore >= 7 ? "bg-emerald-500" :
-                            c.enrichScore >= 4 ? "bg-yellow-500" : "bg-orange-500"
-                          }`}
-                          style={{ width: `${(c.enrichScore / COMPANY_MAX_SCORE) * 100}%` }}
-                        />
-                      </div>
-                      <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{c.enrichScore}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-1.5 px-2 text-center">
-                    <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {c.website && (
-                        <a
-                          href={c.website.startsWith("http") ? c.website : `https://${c.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
-                          title={c.website}
-                        >
-                          <Globe className="h-3 w-3" />
-                        </a>
-                      )}
-                      {c.linkedinUrl && (
-                        <a
-                          href={c.linkedinUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
-                          title="LinkedIn"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                      {!c.website && !c.linkedinUrl && (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell className="py-1.5 px-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(c.name); }}
-                        className="rounded p-1 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Delete company"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </TableCell>
-                  )}
-                </TableRow>
+      {/* Tier 3: Scrollable content */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="lg-inset rounded-[16px] overflow-hidden">
+          {loading ? (
+            <div className="space-y-1 p-2">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-7 rounded-[6px]" />
               ))}
-            </TableBody>
-          </Table>
-        )}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-[13px] text-foreground/40">
+              No companies found.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader className="glass-table-header sticky top-0 z-10">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[32px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35" />
+                  <TableHead
+                    className="cursor-pointer text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("name")}
+                  >
+                    Name <SortIcon field="name" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[70px] cursor-pointer text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("status")}
+                  >
+                    Status <SortIcon field="status" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[70px] cursor-pointer text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("country")}
+                  >
+                    Country <SortIcon field="country" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[90px] cursor-pointer text-right text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("totalFunding")}
+                  >
+                    Funding <SortIcon field="totalFunding" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[55px] cursor-pointer text-center text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("roundCount")}
+                  >
+                    Rnds <SortIcon field="roundCount" />
+                  </TableHead>
+                  <TableHead className="w-[65px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    Stage
+                  </TableHead>
+                  <TableHead
+                    className="w-[55px] cursor-pointer text-center text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("foundedYear")}
+                  >
+                    Est. <SortIcon field="foundedYear" />
+                  </TableHead>
+                  <TableHead className="w-[70px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    Size
+                  </TableHead>
+                  <TableHead className="min-w-[150px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    Description
+                  </TableHead>
+                  <TableHead
+                    className="w-[55px] cursor-pointer text-center text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35"
+                    onClick={() => toggleSort("enrichScore")}
+                  >
+                    Score <SortIcon field="enrichScore" />
+                  </TableHead>
+                  <TableHead className="w-[50px] text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 text-center">
+                    Links
+                  </TableHead>
+                  {isAdmin && <TableHead className="w-[36px]" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((c) => (
+                  <TableRow
+                    key={c.name}
+                    className="cursor-pointer lg-inset-table-row text-[13px] tracking-[-0.01em]"
+                    onClick={() => {
+                      setSelectedCompany(c.name);
+                      setSheetOpen(true);
+                    }}
+                  >
+                    <TableCell className="py-1.5 px-1">
+                      {c.logoUrl ? (
+                        <SmartLogo src={c.logoUrl} alt={c.name} className="h-5 w-5 rounded-[6px]" fallback={<div className="h-5 w-5 rounded-[6px] bg-foreground/[0.04]" />} />
+                      ) : (
+                        <div className="h-5 w-5 rounded-[6px] bg-foreground/[0.04]" />
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 font-semibold text-foreground/85">
+                      {c.name}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2">
+                      {c.status ? (
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] h-5 px-1.5 rounded-full border-0 ${STATUS_COLORS[c.status] ?? STATUS_COLORS.unknown}`}
+                        >
+                          {c.status}
+                        </Badge>
+                      ) : (
+                        <span className="text-foreground/30">&mdash;</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-foreground/45">
+                      {c.country ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-right font-mono tabular-nums whitespace-nowrap text-foreground/85">
+                      {fmtAmt(c.totalFunding)}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center tabular-nums text-foreground/55">
+                      {c.roundCount}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2">
+                      {c.lastStage ? (
+                        <span className="rounded-full bg-foreground/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-foreground/55">
+                          {c.lastStage}
+                        </span>
+                      ) : (
+                        <span className="text-foreground/30">&mdash;</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center tabular-nums text-foreground/40">
+                      {c.foundedYear ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-foreground/45 whitespace-nowrap">
+                      {c.employeeRange ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-foreground/40 truncate max-w-[200px]" title={c.description ?? ""}>
+                      {c.description ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1" title={`${c.enrichScore}/${COMPANY_MAX_SCORE}`}>
+                        <div className="h-1.5 w-10 rounded-full bg-foreground/[0.04] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              c.enrichScore >= 7 ? "bg-emerald-500" :
+                              c.enrichScore >= 4 ? "bg-yellow-500" : "bg-orange-500"
+                            }`}
+                            style={{ width: `${(c.enrichScore / COMPANY_MAX_SCORE) * 100}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-[10px] text-foreground/35 tabular-nums">{c.enrichScore}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-1.5 px-2 text-center">
+                      <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {c.website && (
+                          <a
+                            href={c.website.startsWith("http") ? c.website : `https://${c.website}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-foreground/40 hover:text-foreground/85"
+                            title={c.website}
+                          >
+                            <Globe className="h-3 w-3" />
+                          </a>
+                        )}
+                        {c.linkedinUrl && (
+                          <a
+                            href={c.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-foreground/40 hover:text-foreground/85"
+                            title="LinkedIn"
+                          >
+                            <Globe className="h-3 w-3" />
+                          </a>
+                        )}
+                        {!c.website && !c.linkedinUrl && (
+                          <span className="text-foreground/15">&mdash;</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="py-1.5 px-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(c.name); }}
+                          className="rounded-[8px] p-1 text-foreground/30 hover:text-red-500 hover:bg-red-500/8 transition-colors"
+                          title="Delete company"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
       <EntitySheet

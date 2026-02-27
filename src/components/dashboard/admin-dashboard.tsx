@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   TimelineChart,
   StageChart,
@@ -132,16 +131,16 @@ function HeadlineBar({ summary }: { summary: GraphStats["summary"] }) {
   ];
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 rounded-md border px-4 py-2.5">
+    <div className="glass-status-bar flex flex-wrap items-baseline gap-x-1.5 gap-y-1 px-4 py-2.5">
       {items.map((item, i) => (
         <span key={item.label} className="whitespace-nowrap">
           {i > 0 && (
-            <span className="mr-1.5 text-muted-foreground/40">&middot;</span>
+            <span className="mr-1.5 text-foreground/15">&middot;</span>
           )}
-          <span className="font-mono text-sm font-bold tabular-nums">
+          <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
             {item.value}
           </span>{" "}
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[11px] tracking-[0.04em] text-foreground/35">
             {item.label}
           </span>
         </span>
@@ -163,22 +162,22 @@ function PipelineRow({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-md border px-3 py-1.5 transition-colors hover:bg-accent"
+      className="lg-inset-row flex items-center gap-3 px-3 py-1.5 transition-colors"
     >
-      <span className="w-28 shrink-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <span className="w-28 shrink-0 text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
         {label}
       </span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/[0.04]">
         <div
           className="h-full rounded-full bg-emerald-500 transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+      <span className="font-mono text-[11px] tabular-nums text-foreground/45">
         {bucket.ingested}/{bucket.total}
       </span>
       {bucket.pending > 0 && (
-        <span className="font-mono text-[11px] text-amber-500">
+        <span className="font-mono text-[11px] text-amber-600">
           {bucket.pending} pending
         </span>
       )}
@@ -188,7 +187,7 @@ function PipelineRow({
 
 function SectionHead({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+    <h2 className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
       {children}
     </h2>
   );
@@ -202,7 +201,7 @@ function ChartPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border">
+    <div className="lg-inset rounded-[16px]">
       <div className="px-3 pt-2.5 pb-1">
         <SectionHead>{title}</SectionHead>
       </div>
@@ -236,12 +235,12 @@ function RankTable<T>({
   return (
     <ScrollArea style={{ height }}>
       <table className="w-full">
-        <thead className="sticky top-0 z-10 bg-background">
-          <tr className="border-b">
+        <thead className="glass-table-header sticky top-0 z-10">
+          <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 ${
+                className={`text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 ${
                   col.align === "right" ? "text-right" : "text-left"
                 }`}
               >
@@ -254,7 +253,7 @@ function RankTable<T>({
           {data.map((row, i) => (
             <tr
               key={i}
-              className={`border-b transition-colors hover:bg-accent ${
+              className={`lg-inset-table-row transition-colors ${
                 onRowClick ? "cursor-pointer" : ""
               }`}
               onClick={() => onRowClick?.(row)}
@@ -262,7 +261,7 @@ function RankTable<T>({
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  className={`text-xs px-3 py-1.5 ${
+                  className={`text-[13px] tracking-[-0.01em] px-3 py-1.5 ${
                     col.align === "right" ? "text-right" : "text-left"
                   }`}
                 >
@@ -279,7 +278,7 @@ function RankTable<T>({
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <p className="py-8 text-center text-xs text-muted-foreground">{message}</p>
+    <p className="py-8 text-center text-[13px] text-foreground/40">{message}</p>
   );
 }
 
@@ -296,11 +295,11 @@ function FilterSelect({
 }) {
   return (
     <label className="flex items-center gap-1.5">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-[11px] text-foreground/45">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-6 rounded border bg-background px-1.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+        className="glass-search-input h-6 px-1.5 text-[11px] font-mono text-foreground/85 focus:outline-none"
       >
         <option value="">All</option>
         {options.map((o) => (
@@ -334,8 +333,8 @@ function FilterBar({
     (filters.sector ? 1 : 0);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-md border px-3 py-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="glass-status-bar flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
         Filter
       </span>
       <FilterSelect
@@ -359,7 +358,7 @@ function FilterBar({
       {active > 0 && (
         <button
           onClick={() => onFilterChange({ country: "", stage: "", sector: "" })}
-          className="ml-auto text-[11px] text-amber-500 hover:text-amber-400 transition-colors"
+          className="ml-auto text-[11px] text-amber-600 hover:text-amber-500 transition-colors"
         >
           Clear {active} filter{active > 1 ? "s" : ""}
         </button>
@@ -380,17 +379,17 @@ const companyColumns: Column<Company>[] = [
     key: "#",
     label: "#",
     render: (_, i) => (
-      <span className="text-muted-foreground">{i + 1}</span>
+      <span className="text-foreground/40">{i + 1}</span>
     ),
   },
   {
     key: "name",
     label: "Name",
     render: (r) => (
-      <span className="font-medium">
+      <span className="font-semibold text-[13px] tracking-[-0.01em] text-foreground/85">
         {r.name}
         {r.country && (
-          <span className="ml-1 text-muted-foreground">{r.country}</span>
+          <span className="ml-1 text-foreground/40">{r.country}</span>
         )}
       </span>
     ),
@@ -400,7 +399,7 @@ const companyColumns: Column<Company>[] = [
     label: "Raised",
     align: "right",
     render: (r) => (
-      <span className="font-mono text-xs font-bold tabular-nums">
+      <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
         {fmt(r.totalFunding)}
       </span>
     ),
@@ -410,7 +409,7 @@ const companyColumns: Column<Company>[] = [
     label: "Rds",
     align: "right",
     render: (r) => (
-      <span className="font-mono tabular-nums">{r.roundCount}</span>
+      <span className="font-mono tabular-nums text-foreground/55">{r.roundCount}</span>
     ),
   },
   {
@@ -418,7 +417,7 @@ const companyColumns: Column<Company>[] = [
     label: "Stage",
     render: (r) =>
       r.lastRoundStage ? (
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+        <span className="rounded-full bg-foreground/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-foreground/55">
           {r.lastRoundStage}
         </span>
       ) : null,
@@ -430,20 +429,20 @@ const investorColumns: Column<Investor>[] = [
     key: "#",
     label: "#",
     render: (_, i) => (
-      <span className="text-muted-foreground">{i + 1}</span>
+      <span className="text-foreground/40">{i + 1}</span>
     ),
   },
   {
     key: "name",
     label: "Name",
-    render: (r) => <span className="font-medium">{r.name}</span>,
+    render: (r) => <span className="font-semibold text-[13px] tracking-[-0.01em] text-foreground/85">{r.name}</span>,
   },
   {
     key: "deals",
     label: "Deals",
     align: "right",
     render: (r) => (
-      <span className="font-mono tabular-nums">{r.dealCount}</span>
+      <span className="font-mono tabular-nums text-foreground/55">{r.dealCount}</span>
     ),
   },
   {
@@ -451,7 +450,7 @@ const investorColumns: Column<Investor>[] = [
     label: "Leads",
     align: "right",
     render: (r) => (
-      <span className="font-mono tabular-nums">{r.leadCount}</span>
+      <span className="font-mono tabular-nums text-foreground/55">{r.leadCount}</span>
     ),
   },
   {
@@ -459,7 +458,7 @@ const investorColumns: Column<Investor>[] = [
     label: "Deployed",
     align: "right",
     render: (r) => (
-      <span className="font-mono text-xs font-bold tabular-nums">
+      <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
         {fmt(r.totalDeployed)}
       </span>
     ),
@@ -486,7 +485,9 @@ export function AdminDashboard() {
   useEffect(() => {
     fetch("/api/graph-stats")
       .then((r) => r.json())
-      .then(setData)
+      .then((json) => {
+        if (!json.error) setData(json);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -545,15 +546,15 @@ export function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-3">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-64" />
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-10 rounded-[10px]" />
+        <Skeleton className="h-24 rounded-[14px]" />
+        <Skeleton className="h-64 rounded-[16px]" />
       </div>
     );
   }
 
-  if (!data || !filtered) return <p>Failed to load graph stats.</p>;
+  if (!data || !filtered) return <p className="text-foreground/45 p-4">Failed to load graph stats.</p>;
 
   const {
     summary,
@@ -566,7 +567,7 @@ export function AdminDashboard() {
   const hasActiveFilters = filters.country || filters.stage || filters.sector;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 p-4">
       {/* 3D Europe Map */}
       <EuropeMap3D
         fundingByCountry={filtered.byCountry}
@@ -583,7 +584,7 @@ export function AdminDashboard() {
 
       <HeadlineBar summary={summary} />
 
-      <div className="space-y-1.5">
+      <div className="lg-inset rounded-[16px] overflow-hidden">
         <PipelineRow
           label="Deals"
           href="/funding"
@@ -609,12 +610,11 @@ export function AdminDashboard() {
         sectorOptions={filterOptions.sectors}
       />
 
-      <Separator />
-
-      <div className="rounded-md border">
-        <div className="px-3 pt-2.5 pb-1 flex items-baseline gap-2">
+      {/* Deal Tape */}
+      <div className="lg-inset rounded-[16px] overflow-hidden">
+        <div className="glass-table-header px-3 py-2 flex items-baseline gap-2">
           <SectionHead>Deal Tape</SectionHead>
-          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+          <span className="font-mono text-[11px] tabular-nums text-foreground/35">
             {filtered.deals.length}
             {hasActiveFilters
               ? ` / ${data.recentDeals.length}`
@@ -625,21 +625,21 @@ export function AdminDashboard() {
         {filtered.deals.length > 0 ? (
           <ScrollArea className="h-[280px]">
             <table className="w-full">
-              <thead className="sticky top-0 z-10 bg-background">
-                <tr className="border-b">
-                  <th className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 text-left">
+              <thead className="glass-table-header sticky top-0 z-10">
+                <tr>
+                  <th className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 text-left">
                     Company
                   </th>
-                  <th className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 text-right">
+                  <th className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 text-right">
                     Amount
                   </th>
-                  <th className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 text-left">
+                  <th className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 text-left">
                     Stage
                   </th>
-                  <th className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 text-left">
+                  <th className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 text-left">
                     Lead
                   </th>
-                  <th className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 py-1.5 text-right">
+                  <th className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 px-3 py-1.5 text-right">
                     Time
                   </th>
                 </tr>
@@ -648,33 +648,33 @@ export function AdminDashboard() {
                 {filtered.deals.map((deal, i) => (
                   <tr
                     key={i}
-                    className="cursor-pointer border-b transition-colors hover:bg-accent"
+                    className="cursor-pointer lg-inset-table-row transition-colors"
                     onClick={() =>
                       setEntity({ name: deal.company, type: "company" })
                     }
                   >
-                    <td className="px-3 py-1.5 text-xs font-medium">
+                    <td className="px-3 py-1.5 text-[13px] tracking-[-0.01em] font-semibold text-foreground/85">
                       {deal.company}
                       {deal.companyCountry && (
-                        <span className="ml-1 text-muted-foreground">
+                        <span className="ml-1 text-foreground/40">
                           {deal.companyCountry}
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-mono text-xs font-bold tabular-nums">
+                    <td className="px-3 py-1.5 text-right font-mono text-[13px] font-bold tabular-nums text-foreground/85">
                       {fmt(deal.amount)}
                     </td>
-                    <td className="px-3 py-1.5 text-xs">
+                    <td className="px-3 py-1.5 text-[13px]">
                       {deal.stage && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                        <span className="rounded-full bg-foreground/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-foreground/55">
                           {deal.stage}
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-xs text-muted-foreground">
+                    <td className="px-3 py-1.5 text-[13px] text-foreground/45">
                       {deal.leadInvestor ?? "\u2014"}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-mono text-[11px] text-muted-foreground">
+                    <td className="px-3 py-1.5 text-right font-mono text-[11px] text-foreground/30">
                       {relTime(deal.publishedAt)}
                     </td>
                   </tr>
@@ -687,8 +687,7 @@ export function AdminDashboard() {
         )}
       </div>
 
-      <Separator />
-
+      {/* Charts */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <ChartPanel title="Funding Timeline">
           {fundingTimeline.length > 0 ? (
@@ -719,14 +718,13 @@ export function AdminDashboard() {
         </ChartPanel>
       </div>
 
-      <Separator />
-
+      {/* Top Companies & Investors */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-md border">
-          <div className="px-3 pt-2.5 pb-1 flex items-baseline gap-2">
+        <div className="lg-inset rounded-[16px] overflow-hidden">
+          <div className="glass-table-header px-3 py-2 flex items-baseline gap-2">
             <SectionHead>Top Companies</SectionHead>
             {hasActiveFilters && (
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              <span className="font-mono text-[11px] tabular-nums text-foreground/35">
                 {filtered.companies.length} / {data.topCompanies.length}
               </span>
             )}
@@ -740,8 +738,8 @@ export function AdminDashboard() {
           />
         </div>
 
-        <div className="rounded-md border">
-          <div className="px-3 pt-2.5 pb-1">
+        <div className="lg-inset rounded-[16px] overflow-hidden">
+          <div className="glass-table-header px-3 py-2">
             <SectionHead>Top Investors</SectionHead>
           </div>
           <RankTable<Investor>
@@ -754,35 +752,36 @@ export function AdminDashboard() {
         </div>
       </div>
 
+      {/* Funds Summary */}
       {(fundSummary.totalFunds > 0 ||
         fundSummary.totalAum > 0 ||
         fundSummary.managingFirms > 0) && (
         <Link
           href="/graph/fund-closings"
-          className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-4 py-2 transition-colors hover:bg-accent"
+          className="glass-status-bar flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 transition-colors hover:bg-foreground/[0.04]"
         >
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
             Funds
           </span>
           <span className="whitespace-nowrap">
-            <span className="font-mono text-sm font-bold tabular-nums">
+            <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
               {fmtNum(fundSummary.totalFunds)}
             </span>{" "}
-            <span className="text-[11px] text-muted-foreground">funds</span>
+            <span className="text-[11px] text-foreground/45">funds</span>
           </span>
           <span className="whitespace-nowrap">
-            <span className="font-mono text-sm font-bold tabular-nums">
+            <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
               {fmt(fundSummary.totalAum)}
             </span>{" "}
-            <span className="text-[11px] text-muted-foreground">AUM</span>
+            <span className="text-[11px] text-foreground/45">AUM</span>
           </span>
           <span className="whitespace-nowrap">
-            <span className="font-mono text-sm font-bold tabular-nums">
+            <span className="font-mono text-[13px] font-bold tabular-nums text-foreground/85">
               {fmtNum(fundSummary.managingFirms)}
             </span>{" "}
-            <span className="text-[11px] text-muted-foreground">firms</span>
+            <span className="text-[11px] text-foreground/45">firms</span>
           </span>
-          <span className="ml-auto text-[11px] text-muted-foreground">
+          <span className="ml-auto text-[11px] text-foreground/40">
             View Fund Closings &rarr;
           </span>
         </Link>

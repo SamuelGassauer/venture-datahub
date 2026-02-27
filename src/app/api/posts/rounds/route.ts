@@ -22,15 +22,23 @@ export type ArticleSource = {
   publishedAt: string | null;
 };
 
+export type InvestorDetail = {
+  name: string;
+  logoUrl: string | null;
+  website: string | null;
+};
+
 export type RoundWithPostStatus = {
   roundKey: string;
   companyName: string;
+  companyWebsite: string | null;
   amountUsd: number | null;
   amountEur: number | null;
   stage: string | null;
   country: string | null;
   leadInvestor: string | null;
   allInvestors: string[];
+  investorDetails: InvestorDetail[];
   logoUrl: string | null;
   description: string | null;
   articleDate: string | null;
@@ -55,16 +63,19 @@ export async function GET() {
       WITH c, fr,
            collect(DISTINCT lead.name)[0] AS leadInvestor,
            collect(DISTINCT inv.name) AS allInvestors,
+           collect(DISTINCT {name: inv.name, logoUrl: inv.logoUrl, website: inv.website}) AS investorDetails,
            max(a.publishedAt) AS articleDate,
            collect(DISTINCT {title: a.title, url: a.url, publishedAt: toString(a.publishedAt)}) AS sources
       RETURN c.name AS companyName,
              c.country AS country,
              c.description AS description,
              c.logoUrl AS logoUrl,
+             c.website AS companyWebsite,
              fr.amountUsd AS amountUsd,
              fr.stage AS stage,
              leadInvestor,
              allInvestors,
+             investorDetails,
              articleDate,
              sources,
              id(fr) AS neo4jId
@@ -88,15 +99,29 @@ export async function GET() {
         .filter((s) => s.url)
         .map((s) => ({ title: s.title, url: s.url!, publishedAt: s.publishedAt }));
 
+      const rawInvestorDetails = r.get("investorDetails") as Array<{name: string | null; logoUrl: string | null; website: string | null}> | null;
+      const investorDetails: InvestorDetail[] = (rawInvestorDetails ?? [])
+        .filter((d) => d.name)
+        .map((d) => ({ name: d.name!, logoUrl: d.logoUrl ?? null, website: d.website ?? null }));
+      // Deduplicate by name
+      const seenInvestors = new Set<string>();
+      const uniqueInvestorDetails = investorDetails.filter((d) => {
+        if (seenInvestors.has(d.name)) return false;
+        seenInvestors.add(d.name);
+        return true;
+      });
+
       return {
         roundKey,
         companyName,
+        companyWebsite: r.get("companyWebsite") as string | null,
         amountUsd,
         amountEur: convertToEur(amountUsd),
         stage,
         country: r.get("country") as string | null,
         leadInvestor: r.get("leadInvestor") as string | null,
         allInvestors: (r.get("allInvestors") as string[]).filter(Boolean),
+        investorDetails: uniqueInvestorDetails,
         logoUrl: r.get("logoUrl") as string | null,
         description: r.get("description") as string | null,
         articleDate,

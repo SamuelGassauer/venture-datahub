@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGlobalFilters, resolveGeoFilter } from "@/lib/global-filters";
@@ -54,7 +53,7 @@ type FundClosing = {
 type SortKey = "firm" | "sizeUsd" | "fundType" | "vintage" | "sourceCount" | "dealCount";
 
 function fmtAmt(n: number | null | undefined): string {
-  if (!n) return "—";
+  if (!n) return "\u2014";
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
@@ -62,7 +61,7 @@ function fmtAmt(n: number | null | undefined): string {
 }
 
 function fmtDate(d: string | null): string {
-  if (!d) return "—";
+  if (!d) return "\u2014";
   try {
     return new Date(d).toLocaleDateString("en-US", {
       month: "short",
@@ -70,25 +69,25 @@ function fmtDate(d: string | null): string {
       year: "numeric",
     });
   } catch {
-    return "—";
+    return "\u2014";
   }
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  vc: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  pe: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
-  growth: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
-  impact: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  climate: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
-  debt: "bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30",
-  secondary: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  infra: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
-  "real estate": "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30",
+  vc: "bg-blue-500/8 text-blue-600 dark:text-blue-400",
+  pe: "bg-purple-500/8 text-purple-600 dark:text-purple-400",
+  growth: "bg-rose-500/8 text-rose-600 dark:text-rose-400",
+  impact: "bg-emerald-500/8 text-emerald-600 dark:text-emerald-400",
+  climate: "bg-green-500/8 text-green-600 dark:text-green-400",
+  debt: "bg-foreground/[0.04] text-foreground/45",
+  secondary: "bg-amber-500/8 text-amber-600 dark:text-amber-400",
+  infra: "bg-orange-500/8 text-orange-600 dark:text-orange-400",
+  "real estate": "bg-cyan-500/8 text-cyan-600 dark:text-cyan-400",
 };
 
 function typeColor(type: string | null): string {
-  if (!type) return "bg-muted text-muted-foreground border-border";
-  return TYPE_COLORS[type.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
+  if (!type) return "bg-foreground/[0.04] text-foreground/45";
+  return TYPE_COLORS[type.toLowerCase()] ?? "bg-foreground/[0.04] text-foreground/45";
 }
 
 export default function GraphFundClosingsPage() {
@@ -202,19 +201,20 @@ export default function GraphFundClosingsPage() {
   const SortIcon = ({ field }: { field: SortKey }) => (
     <ArrowUpDown
       className={`ml-0.5 inline h-3 w-3 ${
-        sortBy === field ? "text-foreground" : "text-muted-foreground/50"
+        sortBy === field ? "text-foreground" : "text-foreground/30"
       }`}
     />
   );
 
   return (
-    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-2">
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <Landmark className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">Fund Closings</h1>
-        <span className="text-xs text-muted-foreground">Knowledge Graph</span>
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col gap-0">
+      {/* Status bar / toolbar */}
+      <div className="glass-status-bar flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap">
+        <Landmark className="h-4 w-4 text-foreground/40" />
+        <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground/85">Fund Closings</h1>
+        <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">Knowledge Graph</span>
         <select
-          className="ml-2 h-7 rounded border border-input bg-transparent px-2 text-xs"
+          className="glass-search-input ml-2 h-7 px-2 text-[13px]"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
@@ -224,226 +224,229 @@ export default function GraphFundClosingsPage() {
           ))}
         </select>
         <div className="relative ml-auto max-w-xs flex-1">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <Input
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+          <input
             placeholder="Search funds, firms, focus..."
-            className="h-7 pl-7 text-xs"
+            className="glass-search-input h-8 w-full pl-8 text-[13px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+        <div className="flex items-center gap-3 text-[12px] text-foreground/40 tabular-nums">
           <span>{filtered.length} funds</span>
           <span>&middot;</span>
           <span>{fmtAmt(totalSize)} total</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto rounded border">
-        {loading ? (
-          <div className="space-y-1 p-2">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="h-10" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            No fund closings found.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[32px] text-xs" />
-                <TableHead
-                  className="cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("firm")}
-                >
-                  Firm <SortIcon field="firm" />
-                </TableHead>
-                <TableHead className="w-[130px] text-xs font-semibold">
-                  Fund
-                </TableHead>
-                <TableHead
-                  className="w-[90px] cursor-pointer text-right text-xs font-semibold"
-                  onClick={() => toggleSort("sizeUsd")}
-                >
-                  Size <SortIcon field="sizeUsd" />
-                </TableHead>
-                <TableHead
-                  className="w-[70px] cursor-pointer text-xs font-semibold"
-                  onClick={() => toggleSort("fundType")}
-                >
-                  Type <SortIcon field="fundType" />
-                </TableHead>
-                <TableHead className="min-w-[120px] text-xs font-semibold">
-                  <Target className="inline h-3 w-3 mr-1" />
-                  Stage Focus
-                </TableHead>
-                <TableHead className="min-w-[120px] text-xs font-semibold">
-                  <Briefcase className="inline h-3 w-3 mr-1" />
-                  Sector Focus
-                </TableHead>
-                <TableHead className="min-w-[100px] text-xs font-semibold">
-                  <Globe className="inline h-3 w-3 mr-1" />
-                  Geo Focus
-                </TableHead>
-                <TableHead
-                  className="w-[55px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("dealCount")}
-                >
-                  Deals <SortIcon field="dealCount" />
-                </TableHead>
-                <TableHead
-                  className="w-[55px] cursor-pointer text-center text-xs font-semibold"
-                  onClick={() => toggleSort("vintage")}
-                >
-                  Yr <SortIcon field="vintage" />
-                </TableHead>
-                <TableHead className="w-[55px] text-xs font-semibold">
-                  HQ
-                </TableHead>
-                <TableHead className="w-[80px] text-xs font-semibold">
-                  Published
-                </TableHead>
-                {isAdmin && <TableHead className="w-[36px]" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((f, i) => (
-                <TableRow
-                  key={`${f.firm}-${f.fundName}-${i}`}
-                  className="cursor-pointer text-xs group"
-                  onClick={() => {
-                    setSelectedEntity({ type: "investor", name: f.firm });
-                    setSheetOpen(true);
-                  }}
-                >
-                  <TableCell className="py-2 px-1">
-                    {f.logoUrl ? (
-                      <SmartLogo
-                        src={f.logoUrl}
-                        alt={f.firm}
-                        className="h-6 w-6 rounded"
-                        fallback={<div className="h-6 w-6 rounded bg-muted flex items-center justify-center"><Building2 className="h-3 w-3 text-muted-foreground" /></div>}
-                      />
-                    ) : (
-                      <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
-                        <Building2 className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold">{f.firm}</span>
-                      {f.website && (
-                        <a
-                          href={f.website.startsWith("http") ? f.website : `https://${f.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground/40 hover:text-foreground transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-muted-foreground">
-                    {f.fundName}
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-right font-mono tabular-nums whitespace-nowrap font-semibold">
-                    {fmtAmt(f.sizeUsd)}
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    {f.fundType ? (
-                      <Badge variant="outline" className={`text-[10px] h-5 px-1.5 ${typeColor(f.fundType)}`}>
-                        {f.fundType}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground/40">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    <div className="flex flex-wrap gap-1">
-                      {(f.stageFocus ?? []).length > 0 ? (
-                        f.stageFocus.map((s) => (
-                          <Badge key={s} variant="outline" className="text-[10px] h-5 px-1.5 bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/25">
-                            {s}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    <div className="flex flex-wrap gap-1">
-                      {(f.sectorFocus ?? []).length > 0 ? (
-                        f.sectorFocus.slice(0, 3).map((s) => (
-                          <Badge key={s} variant="outline" className="text-[10px] h-5 px-1.5 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25">
-                            {s}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                      {(f.sectorFocus ?? []).length > 3 && (
-                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
-                          +{f.sectorFocus.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    <div className="flex flex-wrap gap-1">
-                      {(f.geoFocus ?? []).length > 0 ? (
-                        f.geoFocus.slice(0, 2).map((g) => (
-                          <Badge key={g} variant="outline" className="text-[10px] h-5 px-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25">
-                            {g}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                      {(f.geoFocus ?? []).length > 2 && (
-                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
-                          +{f.geoFocus.length - 2}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-center tabular-nums">
-                    {f.dealCount || "—"}
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-center tabular-nums text-muted-foreground">
-                    {f.vintage ?? "—"}
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-1">
-                      {(f.hq || f.country) && <MapPin className="h-3 w-3 text-muted-foreground/50 shrink-0" />}
-                      <span className="truncate max-w-[60px]">{f.hq || f.country || "—"}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 px-2 text-muted-foreground whitespace-nowrap text-[10px]">
-                    {fmtDate(f.publishedAt)}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell className="py-2 px-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(f.fundKey); }}
-                        className="rounded p-1 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
-                        title="Delete fund"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </TableCell>
-                  )}
-                </TableRow>
+      {/* Table content */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="lg-inset rounded-[16px] overflow-hidden">
+          {loading ? (
+            <div className="space-y-1 p-3">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 rounded-[6px]" />
               ))}
-            </TableBody>
-          </Table>
-        )}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-[13px] text-foreground/40">
+              No fund closings found.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="glass-table-header hover:bg-transparent">
+                  <TableHead className="w-[32px] text-[11px]" />
+                  <TableHead
+                    className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("firm")}
+                  >
+                    Firm <SortIcon field="firm" />
+                  </TableHead>
+                  <TableHead className="w-[130px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    Fund
+                  </TableHead>
+                  <TableHead
+                    className="w-[90px] cursor-pointer text-right text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("sizeUsd")}
+                  >
+                    Size <SortIcon field="sizeUsd" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[70px] cursor-pointer text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("fundType")}
+                  >
+                    Type <SortIcon field="fundType" />
+                  </TableHead>
+                  <TableHead className="min-w-[120px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    <Target className="inline h-3 w-3 mr-1" />
+                    Stage Focus
+                  </TableHead>
+                  <TableHead className="min-w-[120px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    <Briefcase className="inline h-3 w-3 mr-1" />
+                    Sector Focus
+                  </TableHead>
+                  <TableHead className="min-w-[100px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    <Globe className="inline h-3 w-3 mr-1" />
+                    Geo Focus
+                  </TableHead>
+                  <TableHead
+                    className="w-[55px] cursor-pointer text-center text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("dealCount")}
+                  >
+                    Deals <SortIcon field="dealCount" />
+                  </TableHead>
+                  <TableHead
+                    className="w-[55px] cursor-pointer text-center text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35"
+                    onClick={() => toggleSort("vintage")}
+                  >
+                    Yr <SortIcon field="vintage" />
+                  </TableHead>
+                  <TableHead className="w-[55px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    HQ
+                  </TableHead>
+                  <TableHead className="w-[80px] text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                    Published
+                  </TableHead>
+                  {isAdmin && <TableHead className="w-[36px]" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((f, i) => (
+                  <TableRow
+                    key={`${f.firm}-${f.fundName}-${i}`}
+                    className="lg-inset-table-row cursor-pointer text-[13px] group"
+                    onClick={() => {
+                      setSelectedEntity({ type: "investor", name: f.firm });
+                      setSheetOpen(true);
+                    }}
+                  >
+                    <TableCell className="py-2 px-1">
+                      {f.logoUrl ? (
+                        <SmartLogo
+                          src={f.logoUrl}
+                          alt={f.firm}
+                          className="h-6 w-6 rounded-[6px]"
+                          fallback={<div className="h-6 w-6 rounded-[6px] bg-foreground/[0.04] flex items-center justify-center"><Building2 className="h-3 w-3 text-foreground/30" /></div>}
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded-[6px] bg-foreground/[0.04] flex items-center justify-center">
+                          <Building2 className="h-3 w-3 text-foreground/30" />
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2 px-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground/85">{f.firm}</span>
+                        {f.website && (
+                          <a
+                            href={f.website.startsWith("http") ? f.website : `https://${f.website}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-foreground/30 hover:text-foreground/70 transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-foreground/55">
+                      {f.fundName}
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-right font-mono tabular-nums whitespace-nowrap font-semibold text-foreground/85">
+                      {fmtAmt(f.sizeUsd)}
+                    </TableCell>
+                    <TableCell className="py-2 px-2">
+                      {f.fundType ? (
+                        <Badge variant="outline" className={`text-[10px] h-5 px-1.5 ${typeColor(f.fundType)}`}>
+                          {f.fundType}
+                        </Badge>
+                      ) : (
+                        <span className="text-foreground/30">\u2014</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2 px-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(f.stageFocus ?? []).length > 0 ? (
+                          f.stageFocus.map((s) => (
+                            <Badge key={s} variant="outline" className="text-[10px] h-5 px-1.5 bg-blue-500/8 text-blue-600 dark:text-blue-400">
+                              {s}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-foreground/30">\u2014</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 px-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(f.sectorFocus ?? []).length > 0 ? (
+                          f.sectorFocus.slice(0, 3).map((s) => (
+                            <Badge key={s} variant="outline" className="text-[10px] h-5 px-1.5 bg-amber-500/8 text-amber-600 dark:text-amber-400">
+                              {s}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-foreground/30">\u2014</span>
+                        )}
+                        {(f.sectorFocus ?? []).length > 3 && (
+                          <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-foreground/40">
+                            +{f.sectorFocus.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 px-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(f.geoFocus ?? []).length > 0 ? (
+                          f.geoFocus.slice(0, 2).map((g) => (
+                            <Badge key={g} variant="outline" className="text-[10px] h-5 px-1.5 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400">
+                              {g}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-foreground/30">\u2014</span>
+                        )}
+                        {(f.geoFocus ?? []).length > 2 && (
+                          <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-foreground/40">
+                            +{f.geoFocus.length - 2}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-center tabular-nums text-foreground/55">
+                      {f.dealCount || "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-center tabular-nums text-foreground/40">
+                      {f.vintage ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-foreground/40 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        {(f.hq || f.country) && <MapPin className="h-3 w-3 text-foreground/30 shrink-0" />}
+                        <span className="truncate max-w-[60px]">{f.hq || f.country || "\u2014"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2 px-2 text-foreground/40 whitespace-nowrap text-[10px]">
+                      {fmtDate(f.publishedAt)}
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="py-2 px-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(f.fundKey); }}
+                          className="rounded-[6px] p-1 text-foreground/30 hover:text-red-500 hover:bg-red-500/8 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Delete fund"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
       <EntitySheet

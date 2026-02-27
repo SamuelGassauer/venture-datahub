@@ -382,7 +382,7 @@ const NODES: NodeDef[] = [
     label: "Article",
     category: "provenance",
     icon: FileText,
-    color: "bg-slate-500",
+    color: "bg-foreground/[0.06]",
     description: "Quellartikel — atomare Informationseinheit mit Provenienz-Tracking",
     properties: [
       { name: "title", type: "string", description: "Artikeltitel", required: true },
@@ -400,7 +400,7 @@ const NODES: NodeDef[] = [
     label: "DataSource",
     category: "provenance",
     icon: Globe,
-    color: "bg-gray-500",
+    color: "bg-foreground/[0.06]",
     description: "Externe Datenquelle für Enrichment-Daten (API, Scrape, Manual)",
     properties: [
       { name: "name", type: "string", description: "Quellenname", required: true },
@@ -772,7 +772,7 @@ function getNode(id: string): NodeDef | undefined {
 
 function NodeBadge({ nodeId }: { nodeId: string }) {
   const node = getNode(nodeId);
-  if (!node) return <code className="text-[10px] text-muted-foreground">{nodeId}</code>;
+  if (!node) return <code className="text-[10px] text-foreground/45">{nodeId}</code>;
   const Icon = node.icon;
   return (
     <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-white ${node.color}`}>
@@ -789,54 +789,54 @@ function NodeBadge({ nodeId }: { nodeId: string }) {
 function NodeCard({ node, isExpanded, onToggle }: { node: NodeDef; isExpanded: boolean; onToggle: () => void }) {
   const Icon = node.icon;
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="lg-inset rounded-[14px]">
       <button
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/50 transition-colors"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-foreground/[0.02] transition-colors rounded-[14px]"
         onClick={onToggle}
       >
-        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white ${node.color}`}>
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-white ${node.color}`}>
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">{node.label}</span>
-            <span className="text-xs text-muted-foreground truncate">{node.description}</span>
+            <span className="font-semibold text-[13px] tracking-[-0.01em] text-foreground/85">{node.label}</span>
+            <span className="text-[12px] text-foreground/45 truncate">{node.description}</span>
           </div>
         </div>
         <Badge variant="outline" className="text-[10px] shrink-0 tabular-nums">
           {node.properties.length}
         </Badge>
         {isExpanded ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ChevronDown className="h-3.5 w-3.5 text-foreground/35 shrink-0" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <ChevronRight className="h-3.5 w-3.5 text-foreground/35 shrink-0" />
         )}
       </button>
 
       {isExpanded && (
-        <div className="border-t px-4 py-3 space-y-3">
-          <table className="w-full text-xs">
+        <div className="px-4 py-3 space-y-3" style={{ borderTop: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
+          <table className="w-full text-[12px]">
             <thead>
-              <tr className="text-muted-foreground">
-                <th className="text-left font-medium pb-1.5 w-[160px]">Property</th>
-                <th className="text-left font-medium pb-1.5 w-[100px]">Typ</th>
-                <th className="text-left font-medium pb-1.5">Beschreibung</th>
+              <tr>
+                <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 pb-1.5 w-[160px]">Property</th>
+                <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 pb-1.5 w-[100px]">Typ</th>
+                <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 pb-1.5">Beschreibung</th>
               </tr>
             </thead>
             <tbody>
               {node.properties.map((p) => (
-                <tr key={p.name} className="border-t border-border/50">
-                  <td className="py-1.5 font-mono text-[11px]">
+                <tr key={p.name} className="lg-inset-table-row">
+                  <td className="py-1.5 font-mono text-[11px] text-foreground/70">
                     {p.name}
                     {p.required && <span className="text-red-400 ml-0.5">*</span>}
                   </td>
-                  <td className="py-1.5 text-muted-foreground font-mono text-[11px]">{p.type}</td>
-                  <td className="py-1.5 text-muted-foreground">{p.description}</td>
+                  <td className="py-1.5 text-foreground/45 font-mono text-[11px]">{p.type}</td>
+                  <td className="py-1.5 text-foreground/45">{p.description}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/50">
+          <div className="flex items-center justify-between text-[10px] text-foreground/30 pt-1" style={{ borderTop: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
             <span>Quelle: {node.source}</span>
             {node.examples && (
               <span>z.B. {node.examples.join(", ")}</span>
@@ -853,17 +853,17 @@ function EdgeRow({ edge }: { edge: EdgeDef }) {
   const hasMeta = edge.properties || edge.temporal;
 
   return (
-    <div className="rounded border bg-card">
+    <div className="lg-inset rounded-[10px]">
       <button
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent/50 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-foreground/[0.02] transition-colors rounded-[10px]"
         onClick={() => hasMeta && setExpanded(!expanded)}
       >
         <NodeBadge nodeId={edge.from} />
-        <ChevronsRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-        <code className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
+        <ChevronsRight className="h-3 w-3 text-foreground/15 shrink-0" />
+        <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap text-foreground/70">
           {edge.label}
         </code>
-        <ChevronsRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+        <ChevronsRight className="h-3 w-3 text-foreground/15 shrink-0" />
         <NodeBadge nodeId={edge.to} />
         <span className="ml-auto flex items-center gap-1.5 shrink-0">
           {edge.temporal && (
@@ -871,12 +871,12 @@ function EdgeRow({ edge }: { edge: EdgeDef }) {
               temporal
             </Badge>
           )}
-          <span className="text-muted-foreground text-[10px] tabular-nums">{edge.cardinality}</span>
+          <span className="text-foreground/45 text-[10px] tabular-nums">{edge.cardinality}</span>
           {hasMeta ? (
             expanded ? (
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 text-foreground/45" />
             ) : (
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <ChevronRight className="h-3 w-3 text-foreground/45" />
             )
           ) : (
             <span className="w-3" />
@@ -885,16 +885,16 @@ function EdgeRow({ edge }: { edge: EdgeDef }) {
       </button>
 
       {expanded && (
-        <div className="border-t px-3 py-2 text-xs space-y-1.5">
-          <p className="text-muted-foreground">{edge.description}</p>
+        <div className="px-3 py-2 text-[12px] space-y-1.5" style={{ borderTop: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
+          <p className="text-foreground/45">{edge.description}</p>
           {edge.properties && (
             <table className="w-full">
               <tbody>
                 {edge.properties.map((p) => (
-                  <tr key={p.name} className="border-t border-border/30">
-                    <td className="py-1 font-mono text-[11px] w-[140px]">{p.name}</td>
-                    <td className="py-1 text-muted-foreground font-mono text-[11px] w-[80px]">{p.type}</td>
-                    <td className="py-1 text-muted-foreground">{p.description}</td>
+                  <tr key={p.name} className="lg-inset-table-row">
+                    <td className="py-1 font-mono text-[11px] text-foreground/70 w-[140px]">{p.name}</td>
+                    <td className="py-1 text-foreground/45 font-mono text-[11px] w-[80px]">{p.type}</td>
+                    <td className="py-1 text-foreground/45">{p.description}</td>
                   </tr>
                 ))}
               </tbody>
@@ -972,14 +972,14 @@ function GraphDiagram() {
   const NH = 28;
 
   return (
-    <div className="rounded-lg border bg-card p-3 overflow-x-auto">
+    <div className="lg-inset rounded-[16px] p-3 overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 700 }}>
         <defs>
           <marker id="ah" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
-            <polygon points="0 0, 6 2.5, 0 5" className="fill-muted-foreground/30" />
+            <polygon points="0 0, 6 2.5, 0 5" className="fill-foreground/30/30" />
           </marker>
           <marker id="ah-dash" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
-            <polygon points="0 0, 6 2.5, 0 5" className="fill-muted-foreground/20" />
+            <polygon points="0 0, 6 2.5, 0 5" className="fill-foreground/30/20" />
           </marker>
         </defs>
 
@@ -996,7 +996,7 @@ function GraphDiagram() {
                 y1={from.y + NH / 2}
                 x2={to.x + NW / 2}
                 y2={to.y + NH / 2}
-                className={e.dashed ? "stroke-muted-foreground/15" : "stroke-muted-foreground/25"}
+                className={e.dashed ? "stroke-foreground/15/15" : "stroke-foreground/15/25"}
                 strokeWidth={1}
                 strokeDasharray={e.dashed ? "4 3" : undefined}
                 markerEnd={e.dashed ? "url(#ah-dash)" : "url(#ah)"}
@@ -1005,7 +1005,7 @@ function GraphDiagram() {
                 x={mx + NW / 2}
                 y={my + NH / 2 + 3}
                 textAnchor="middle"
-                className="fill-muted-foreground/60 text-[6px] font-mono"
+                className="fill-foreground/30/60 text-[6px] font-mono"
               >
                 {e.label}
               </text>
@@ -1046,20 +1046,20 @@ function GraphDiagram() {
 
 function EntityResolutionTable() {
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
-      <table className="w-full text-xs">
+    <div className="lg-inset rounded-[16px] overflow-hidden">
+      <table className="w-full text-[12px]">
         <thead>
-          <tr className="bg-muted/50">
-            <th className="text-left font-medium px-3 py-2 w-[100px]">Entität</th>
-            <th className="text-left font-medium px-3 py-2 w-[60px]">Priorität</th>
-            <th className="text-left font-medium px-3 py-2">Strategie</th>
-            <th className="text-left font-medium px-3 py-2 w-[240px]">Beispiel</th>
+          <tr className="glass-table-header">
+            <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 px-3 py-2 w-[100px]">Entität</th>
+            <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 px-3 py-2 w-[60px]">Priorität</th>
+            <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 px-3 py-2">Strategie</th>
+            <th className="text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 px-3 py-2 w-[240px]">Beispiel</th>
           </tr>
         </thead>
         <tbody>
           {ER_ROWS.map((r) => (
-            <tr key={r.entity} className="border-t border-border/50">
-              <td className="px-3 py-2 font-medium">{r.entity}</td>
+            <tr key={r.entity} className="lg-inset-table-row">
+              <td className="px-3 py-2 font-semibold text-foreground/85">{r.entity}</td>
               <td className="px-3 py-2">
                 <Badge
                   variant="outline"
@@ -1074,8 +1074,8 @@ function EntityResolutionTable() {
                   {r.priority}
                 </Badge>
               </td>
-              <td className="px-3 py-2 text-muted-foreground">{r.strategy}</td>
-              <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">{r.example}</td>
+              <td className="px-3 py-2 text-foreground/45">{r.strategy}</td>
+              <td className="px-3 py-2 font-mono text-[10px] text-foreground/45">{r.example}</td>
             </tr>
           ))}
         </tbody>
@@ -1088,7 +1088,7 @@ function DataFlowDiagram() {
   const phases = [
     {
       label: "Ingestion",
-      color: "bg-slate-500",
+      color: "bg-foreground/[0.06]",
       steps: ["RSS Sync", "API Fetch", "Scraping"],
     },
     {
@@ -1119,23 +1119,23 @@ function DataFlowDiagram() {
   ];
 
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="lg-inset rounded-[16px] p-3">
       <div className="flex flex-wrap items-start gap-2">
         {phases.map((phase, i) => (
           <div key={phase.label} className="flex items-start gap-2">
-            <div className="rounded-lg border px-3 py-2 min-w-[130px]">
+            <div className="rounded-[8px] px-3 py-2 min-w-[130px]" style={{ border: "0.5px solid rgba(var(--foreground-rgb, 0 0 0) / 0.06)" }}>
               <div className="flex items-center gap-1.5 mb-1.5">
                 <div className={`h-2 w-2 rounded-full ${phase.color}`} />
-                <span className="text-xs font-semibold">{phase.label}</span>
+                <span className="text-[12px] font-semibold text-foreground/85">{phase.label}</span>
               </div>
               {phase.steps.map((s) => (
-                <p key={s} className="text-[10px] text-muted-foreground leading-relaxed">
+                <p key={s} className="text-[10px] text-foreground/45 leading-relaxed">
                   {s}
                 </p>
               ))}
             </div>
             {i < phases.length - 1 && (
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 mt-3" />
+              <ArrowRight className="h-3.5 w-3.5 text-foreground/15 shrink-0 mt-3" />
             )}
           </div>
         ))}
@@ -1152,7 +1152,7 @@ function StatsBar() {
   const temporalEdges = EDGES.filter((e) => e.temporal).length;
 
   return (
-    <div className="flex flex-wrap gap-4 text-xs tabular-nums">
+    <div className="flex flex-wrap gap-4 text-[12px] tabular-nums">
       {[
         { label: "Node-Typen", value: nodeCount, color: "text-blue-500" },
         { label: "Edge-Typen", value: edgeCount, color: "text-emerald-500" },
@@ -1161,8 +1161,8 @@ function StatsBar() {
         { label: "Temporale Edges", value: temporalEdges, color: "text-rose-500" },
       ].map((s) => (
         <div key={s.label} className="flex items-center gap-1.5">
-          <span className={`font-bold text-base ${s.color}`}>{s.value}</span>
-          <span className="text-muted-foreground">{s.label}</span>
+          <span className={`font-bold text-[15px] ${s.color}`}>{s.value}</span>
+          <span className="text-foreground/35">{s.label}</span>
         </div>
       ))}
     </div>
@@ -1204,36 +1204,40 @@ export default function OntologyPage() {
     : EDGES;
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">GraphRAG Ontologie</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Venture Capital Knowledge Graph — Ontologie für Startups, Finanzierungsrunden, Fonds, Investoren und das gesamte VC-Ökosystem.
-        </p>
-        <div className="mt-3">
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+      {/* Tier 2: Toolbar */}
+      <div className="glass-status-bar px-4 py-2.5 flex items-center gap-3">
+        <span className="text-[13px] font-semibold text-foreground/85">GraphRAG Ontologie</span>
+        <div className="ml-auto">
           <StatsBar />
         </div>
       </div>
 
+      {/* Tier 3: Content */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="space-y-6 max-w-5xl">
+          <p className="text-[13px] text-foreground/55 tracking-[-0.01em]">
+            Venture Capital Knowledge Graph -- Ontologie für Startups, Finanzierungsrunden, Fonds, Investoren und das gesamte VC-Ökosystem.
+          </p>
+
       {/* Graph Diagram */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Graph-Übersicht</h2>
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Graph-Übersicht</h2>
         <GraphDiagram />
       </section>
 
       {/* Nodes */}
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
             Nodes ({filteredNodes.length}{activeNodeCat ? ` / ${NODES.length}` : ""})
           </h2>
           <div className="flex items-center gap-1">
-            <button onClick={expandAll} className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-accent">
+            <button onClick={expandAll} className="glass-capsule-btn px-2 py-0.5 text-[10px]">
               Alle öffnen
             </button>
-            <span className="text-muted-foreground/30">|</span>
-            <button onClick={collapseAll} className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-accent">
+            <span className="text-foreground/15">|</span>
+            <button onClick={collapseAll} className="glass-capsule-btn px-2 py-0.5 text-[10px]">
               Alle schließen
             </button>
           </div>
@@ -1242,7 +1246,7 @@ export default function OntologyPage() {
           <button
             onClick={() => setActiveNodeCat(null)}
             className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-              !activeNodeCat ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+              !activeNodeCat ? "bg-foreground text-background" : "bg-foreground/[0.04] text-foreground/45 hover:text-foreground"
             }`}
           >
             Alle
@@ -1254,7 +1258,7 @@ export default function OntologyPage() {
                 key={cat.id}
                 onClick={() => setActiveNodeCat(activeNodeCat === cat.id ? null : cat.id)}
                 className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                  activeNodeCat === cat.id ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+                  activeNodeCat === cat.id ? "bg-foreground text-background" : "bg-foreground/[0.04] text-foreground/45 hover:text-foreground"
                 }`}
               >
                 {cat.label} ({count})
@@ -1276,14 +1280,14 @@ export default function OntologyPage() {
 
       {/* Edges */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
           Edges ({filteredEdges.length}{activeEdgeCat ? ` / ${EDGES.length}` : ""})
         </h2>
         <div className="flex flex-wrap gap-1 mb-1">
           <button
             onClick={() => setActiveEdgeCat(null)}
             className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-              !activeEdgeCat ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+              !activeEdgeCat ? "bg-foreground text-background" : "bg-foreground/[0.04] text-foreground/45 hover:text-foreground"
             }`}
           >
             Alle
@@ -1295,7 +1299,7 @@ export default function OntologyPage() {
                 key={cat.id}
                 onClick={() => setActiveEdgeCat(activeEdgeCat === cat.id ? null : cat.id)}
                 className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                  activeEdgeCat === cat.id ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
+                  activeEdgeCat === cat.id ? "bg-foreground text-background" : "bg-foreground/[0.04] text-foreground/45 hover:text-foreground"
                 }`}
               >
                 {cat.label} ({count})
@@ -1312,19 +1316,19 @@ export default function OntologyPage() {
 
       {/* Data Flow */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datenfluss-Pipeline</h2>
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Datenfluss-Pipeline</h2>
         <DataFlowDiagram />
       </section>
 
       {/* Entity Resolution */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Entity Resolution</h2>
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Entity Resolution</h2>
         <EntityResolutionTable />
       </section>
 
       {/* Example Queries */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Beispiel-Queries (Cypher)</h2>
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Beispiel-Queries (Cypher)</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {[
             {
@@ -1352,9 +1356,9 @@ export default function OntologyPage() {
               query: `MATCH (i:InvestorOrg)-[p:PARTICIPATED_IN]->(r:FundingRound)\nWITH i, COUNT(r) AS total,\n  SUM(CASE WHEN p.isNewInvestor = false THEN 1 ELSE 0 END) AS followOns\nRETURN i.name, total, followOns,\n  toFloat(followOns)/total AS followOnRate\nORDER BY total DESC LIMIT 20`,
             },
           ].map((q) => (
-            <div key={q.title} className="rounded-lg border bg-card overflow-hidden">
-              <div className="px-3 py-2 bg-muted/50 text-xs font-medium">{q.title}</div>
-              <pre className="px-3 py-2 text-[10px] text-muted-foreground font-mono overflow-x-auto leading-relaxed whitespace-pre-wrap">{q.query}</pre>
+            <div key={q.title} className="lg-inset rounded-[14px] overflow-hidden">
+              <div className="glass-table-header px-3 py-2 text-[12px] font-semibold text-foreground/70">{q.title}</div>
+              <pre className="px-3 py-2 text-[10px] text-foreground/45 font-mono overflow-x-auto leading-relaxed whitespace-pre-wrap">{q.query}</pre>
             </div>
           ))}
         </div>
@@ -1362,7 +1366,7 @@ export default function OntologyPage() {
 
       {/* Open Decisions */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Offene Design-Entscheidungen</h2>
+        <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Offene Design-Entscheidungen</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {[
             { q: "Graph-DB", desc: "Neo4j (Cypher, reif, AuraDB Cloud) vs. Memgraph (in-memory, Cypher-kompatibel) vs. Apache AGE (PostgreSQL Extension) vs. Amazon Neptune" },
@@ -1372,13 +1376,15 @@ export default function OntologyPage() {
             { q: "Confidence-Propagation", desc: "Wie propagiert Extraktions-Confidence über Kanten? Min/Max/Weighted Average? Threshold für Graph-Aufnahme?" },
             { q: "Temporal Modeling", desc: "Bi-temporal (valid-time + transaction-time) vs. einfache Start/End-Dates auf Edges? Event-Sourcing für Änderungshistorie?" },
           ].map((item) => (
-            <div key={item.q} className="rounded-lg border bg-card px-3 py-2">
-              <span className="text-xs font-medium">{item.q}</span>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+            <div key={item.q} className="lg-inset rounded-[14px] px-3 py-2">
+              <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{item.q}</span>
+              <p className="text-[10px] text-foreground/45 mt-0.5 leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
       </section>
+        </div>
+      </div>
     </div>
   );
 }

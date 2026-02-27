@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -37,7 +35,7 @@ import { StageChart, GeographyChart, TimelineChart, DealFlowChart } from "@/comp
 
 const NetworkGraph = dynamic(
   () => import("@/components/graph/network-graph").then((m) => ({ default: m.NetworkGraph })),
-  { ssr: false, loading: () => <div className="flex h-full items-center justify-center"><Skeleton className="h-[500px] w-full" /></div> },
+  { ssr: false, loading: () => <div className="flex h-full items-center justify-center"><Skeleton className="h-[500px] w-full rounded-[6px]" /></div> },
 );
 const NodeDetailPanel = dynamic(
   () => import("@/components/graph/node-detail-panel").then((m) => ({ default: m.NodeDetailPanel })),
@@ -159,7 +157,7 @@ function useSortable<T>(data: T[], defaultKey: keyof T & string, defaultDir: Sor
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
-  if (!active || !dir) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted-foreground/50" />;
+  if (!active || !dir) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-foreground/30" />;
   return dir === "asc"
     ? <ArrowUp className="ml-1 inline h-3 w-3" />
     : <ArrowDown className="ml-1 inline h-3 w-3" />;
@@ -250,19 +248,19 @@ export default function GraphExplorerPage() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-8 w-48 rounded-[6px]" />
+          <Skeleton className="h-9 w-64 rounded-[6px]" />
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-20" />
+            <Skeleton key={i} className="h-20 rounded-[6px]" />
           ))}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
+          <Skeleton className="h-64 rounded-[6px]" />
+          <Skeleton className="h-64 rounded-[6px]" />
         </div>
-        <Skeleton className="h-96" />
+        <Skeleton className="h-96 rounded-[6px]" />
       </div>
     );
   }
@@ -270,12 +268,12 @@ export default function GraphExplorerPage() {
   if (error || !data) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Graph Explorer</h1>
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">{error || "Failed to load graph data."}</p>
-          </CardContent>
-        </Card>
+        <h1 className="text-2xl font-bold tracking-tight">Graph Explorer</h1>
+        <div className="lg-inset rounded-[16px]">
+          <div className="py-12 text-center">
+            <p className="text-[13px] text-foreground/45">{error || "Failed to load graph data."}</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -288,12 +286,12 @@ export default function GraphExplorerPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Graph Explorer</h1>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="glass-status-bar px-4 py-2.5 flex items-center justify-between gap-4">
+        <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground/85">Graph Explorer</h1>
+        <div className="flex items-center gap-2 text-[11px] text-foreground/40">
           <Database className="h-3 w-3" />
           <span>{ingestion.ingested}/{ingestion.totalInDb} ingested</span>
-          <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
+          <div className="h-1.5 w-20 rounded-full bg-foreground/[0.04] overflow-hidden">
             <div className="h-full rounded-full bg-emerald-500" style={{ width: `${ingestionPct}%` }} />
           </div>
           <span>{ingestionPct}%</span>
@@ -312,7 +310,7 @@ export default function GraphExplorerPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ═══════════ DASHBOARD TAB ═══════════ */}
+        {/* DASHBOARD TAB */}
         <TabsContent value="dashboard" className="space-y-4">
           {/* Metric Bar */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -355,106 +353,88 @@ export default function GraphExplorerPage() {
           {/* Charts */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Timeline */}
-            <Card className="lg:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Funding Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.fundingTimeline.length > 0 ? (
-                  <TimelineChart data={data.fundingTimeline} height={220} />
-                ) : (
-                  <EmptyState text="No timeline data" />
-                )}
-              </CardContent>
-            </Card>
+            <div className="lg-inset rounded-[16px] p-4 lg:col-span-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 mb-3">Funding Timeline</p>
+              {data.fundingTimeline.length > 0 ? (
+                <TimelineChart data={data.fundingTimeline} height={220} />
+              ) : (
+                <EmptyState text="No timeline data" />
+              )}
+            </div>
 
             {/* Deal Flow Donut */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Deal Flow by Stage</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.fundingByStage.length > 0 ? (
-                  <DealFlowChart data={data.fundingByStage} height={220} />
-                ) : (
-                  <EmptyState text="No stage data" />
-                )}
-              </CardContent>
-            </Card>
+            <div className="lg-inset rounded-[16px] p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 mb-3">Deal Flow by Stage</p>
+              {data.fundingByStage.length > 0 ? (
+                <DealFlowChart data={data.fundingByStage} height={220} />
+              ) : (
+                <EmptyState text="No stage data" />
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Funding by Stage</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.fundingByStage.length > 0 ? (
-                  <StageChart data={data.fundingByStage} height={200} />
-                ) : (
-                  <EmptyState text="No stage data" />
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Top Geographies</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.fundingByCountry.length > 0 ? (
-                  <GeographyChart data={data.fundingByCountry} height={200} />
-                ) : (
-                  <EmptyState text="No geography data" />
-                )}
-              </CardContent>
-            </Card>
+            <div className="lg-inset rounded-[16px] p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 mb-3">Funding by Stage</p>
+              {data.fundingByStage.length > 0 ? (
+                <StageChart data={data.fundingByStage} height={200} />
+              ) : (
+                <EmptyState text="No stage data" />
+              )}
+            </div>
+            <div className="lg-inset rounded-[16px] p-4">
+              <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 mb-3">Top Geographies</p>
+              {data.fundingByCountry.length > 0 ? (
+                <GeographyChart data={data.fundingByCountry} height={200} />
+              ) : (
+                <EmptyState text="No geography data" />
+              )}
+            </div>
           </div>
 
           {/* Data Tables */}
-          <Card>
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between border-b px-4 py-3">
-                <Tabs value={entityTab} onValueChange={setEntityTab}>
-                  <TabsList className="h-8">
-                    <TabsTrigger value="deals" className="text-xs h-7 px-3">
-                      <CircleDollarSign className="mr-1 h-3 w-3" />
-                      Recent Deals
-                    </TabsTrigger>
-                    <TabsTrigger value="companies" className="text-xs h-7 px-3">
-                      <Building2 className="mr-1 h-3 w-3" />
-                      Companies
-                    </TabsTrigger>
-                    <TabsTrigger value="investors" className="text-xs h-7 px-3">
-                      <Users className="mr-1 h-3 w-3" />
-                      Investors
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Filter..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-8 w-48 pl-8 text-xs"
-                  />
-                </div>
+          <div className="lg-inset rounded-[16px] overflow-hidden">
+            <div className="glass-status-bar flex items-center justify-between px-4 py-2.5">
+              <Tabs value={entityTab} onValueChange={setEntityTab}>
+                <TabsList className="h-8">
+                  <TabsTrigger value="deals" className="text-[11px] h-7 px-3">
+                    <CircleDollarSign className="mr-1 h-3 w-3" />
+                    Recent Deals
+                  </TabsTrigger>
+                  <TabsTrigger value="companies" className="text-[11px] h-7 px-3">
+                    <Building2 className="mr-1 h-3 w-3" />
+                    Companies
+                  </TabsTrigger>
+                  <TabsTrigger value="investors" className="text-[11px] h-7 px-3">
+                    <Users className="mr-1 h-3 w-3" />
+                    Investors
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+                <input
+                  placeholder="Filter..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="glass-search-input h-8 w-48 pl-8 text-[13px]"
+                />
               </div>
+            </div>
 
-              {entityTab === "deals" && (
-                <DealsTable data={filteredDeals} onClickCompany={(name) => openSheet("company", name)} onClickInvestor={(name) => openSheet("investor", name)} />
-              )}
-              {entityTab === "companies" && (
-                <CompaniesTable data={filteredCompanies} onClick={(name) => openSheet("company", name)} />
-              )}
-              {entityTab === "investors" && (
-                <InvestorsTable data={filteredInvestors} onClick={(name) => openSheet("investor", name)} />
-              )}
-            </CardContent>
-          </Card>
+            {entityTab === "deals" && (
+              <DealsTable data={filteredDeals} onClickCompany={(name) => openSheet("company", name)} onClickInvestor={(name) => openSheet("investor", name)} />
+            )}
+            {entityTab === "companies" && (
+              <CompaniesTable data={filteredCompanies} onClick={(name) => openSheet("company", name)} />
+            )}
+            {entityTab === "investors" && (
+              <InvestorsTable data={filteredInvestors} onClick={(name) => openSheet("investor", name)} />
+            )}
+          </div>
         </TabsContent>
 
-        {/* ═══════════ NETWORK TAB ═══════════ */}
+        {/* NETWORK TAB */}
         <TabsContent value="network" className="relative" style={{ height: "calc(100vh - 160px)" }}>
           <NetworkGraph onNodeSelect={handleNodeSelect} />
           {selectedNode && (
@@ -496,23 +476,21 @@ function MetricCard({
   color: string;
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-3">
-        <div className={`rounded-lg bg-muted p-2 ${color}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-bold tabular-nums leading-tight">{value}</p>
-          {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="lg-inset rounded-[14px] flex items-center gap-3 p-3">
+      <div className={`rounded-[8px] bg-foreground/[0.04] p-2 ${color}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">{label}</p>
+        <p className="text-[17px] font-bold tabular-nums leading-tight text-foreground/85">{value}</p>
+        {sub && <p className="text-[10px] text-foreground/40">{sub}</p>}
+      </div>
+    </div>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <p className="py-8 text-center text-xs text-muted-foreground">{text}</p>;
+  return <p className="py-8 text-center text-[13px] text-foreground/40">{text}</p>;
 }
 
 // --- Deals Table ---
@@ -529,7 +507,7 @@ function DealsTable({
   const { sorted, sortKey, sortDir, toggle } = useSortable(data, "amount");
 
   const SH = ({ col, label, className }: { col: keyof Deal & string; label: string; className?: string }) => (
-    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-xs ${className ?? ""}`} onClick={() => toggle(col)}>
+    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 ${className ?? ""}`} onClick={() => toggle(col)}>
       {label}
       <SortIcon active={sortKey === col} dir={sortKey === col ? sortDir : null} />
     </TableHead>
@@ -540,7 +518,7 @@ function DealsTable({
   return (
     <Table>
       <TableHeader>
-        <TableRow className="hover:bg-transparent">
+        <TableRow className="glass-table-header hover:bg-transparent">
           <SH col="company" label="Company" />
           <SH col="amount" label="Amount" className="text-right" />
           <SH col="stage" label="Stage" />
@@ -552,40 +530,40 @@ function DealsTable({
       </TableHeader>
       <TableBody>
         {sorted.map((d, i) => (
-          <TableRow key={i} className="group">
-            <TableCell>
+          <TableRow key={i} className="lg-inset-table-row group">
+            <TableCell className="text-[13px]">
               <button
-                className="flex items-center gap-1.5 text-left font-medium hover:text-blue-600 hover:underline"
+                className="flex items-center gap-1.5 text-left font-semibold text-foreground/85 hover:text-blue-600 hover:underline"
                 onClick={() => onClickCompany(d.company)}
               >
                 <Building2 className="h-3 w-3 shrink-0 text-blue-500" />
                 <span className="truncate max-w-[200px]">{d.company}</span>
                 {d.companyCountry && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{d.companyCountry}</span>
+                  <span className="shrink-0 text-[10px] text-foreground/40">{d.companyCountry}</span>
                 )}
               </button>
             </TableCell>
-            <TableCell className="text-right font-semibold tabular-nums">{fmt(d.amount)}</TableCell>
+            <TableCell className="text-right text-[13px] font-semibold tabular-nums text-foreground/85">{fmt(d.amount)}</TableCell>
             <TableCell>
               {d.stage && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{d.stage}</Badge>}
             </TableCell>
             <TableCell>
               {d.leadInvestor ? (
                 <button
-                  className="flex items-center gap-1 text-left hover:text-green-600 hover:underline"
+                  className="flex items-center gap-1 text-left text-[13px] text-foreground/70 hover:text-green-600 hover:underline"
                   onClick={() => onClickInvestor(d.leadInvestor!)}
                 >
                   <Award className="h-3 w-3 shrink-0 text-yellow-500" />
-                  <span className="truncate max-w-[150px] text-xs">{d.leadInvestor}</span>
+                  <span className="truncate max-w-[150px]">{d.leadInvestor}</span>
                 </button>
               ) : (
-                <span className="text-xs text-muted-foreground">---</span>
+                <span className="text-[13px] text-foreground/30">---</span>
               )}
             </TableCell>
-            <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+            <TableCell className="text-right text-[13px] tabular-nums text-foreground/40">
               {d.participantCount > 0 ? d.participantCount : "---"}
             </TableCell>
-            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{fmtDate(d.publishedAt)}</TableCell>
+            <TableCell className="text-[13px] text-foreground/40 whitespace-nowrap">{fmtDate(d.publishedAt)}</TableCell>
             <TableCell>
               {d.articleUrl && (
                 <a
@@ -594,7 +572,7 @@ function DealsTable({
                   rel="noopener noreferrer"
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                  <ExternalLink className="h-3.5 w-3.5 text-foreground/30 hover:text-foreground/70" />
                 </a>
               )}
             </TableCell>
@@ -611,7 +589,7 @@ function CompaniesTable({ data, onClick }: { data: Company[]; onClick: (name: st
   const { sorted, sortKey, sortDir, toggle } = useSortable(data, "totalFunding");
 
   const SH = ({ col, label, className }: { col: keyof Company & string; label: string; className?: string }) => (
-    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-xs ${className ?? ""}`} onClick={() => toggle(col)}>
+    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 ${className ?? ""}`} onClick={() => toggle(col)}>
       {label}
       <SortIcon active={sortKey === col} dir={sortKey === col ? sortDir : null} />
     </TableHead>
@@ -622,7 +600,7 @@ function CompaniesTable({ data, onClick }: { data: Company[]; onClick: (name: st
   return (
     <Table>
       <TableHeader>
-        <TableRow className="hover:bg-transparent">
+        <TableRow className="glass-table-header hover:bg-transparent">
           <SH col="name" label="Company" />
           <SH col="country" label="Country" />
           <SH col="totalFunding" label="Total Funding" className="text-right" />
@@ -633,29 +611,29 @@ function CompaniesTable({ data, onClick }: { data: Company[]; onClick: (name: st
       </TableHeader>
       <TableBody>
         {sorted.map((c, i) => (
-          <TableRow key={i} className="cursor-pointer" onClick={() => onClick(c.name)}>
+          <TableRow key={i} className="lg-inset-table-row cursor-pointer" onClick={() => onClick(c.name)}>
             <TableCell>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-[13px]">
                 <Building2 className="h-3 w-3 shrink-0 text-blue-500" />
-                <span className="font-medium hover:text-blue-600">{c.name}</span>
+                <span className="font-semibold text-foreground/85 hover:text-blue-600">{c.name}</span>
               </div>
             </TableCell>
             <TableCell>
               {c.country ? (
-                <div className="flex items-center gap-1 text-xs">
-                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                <div className="flex items-center gap-1 text-[13px] text-foreground/55">
+                  <MapPin className="h-3 w-3 text-foreground/30" />
                   {c.country}
                 </div>
               ) : (
-                <span className="text-xs text-muted-foreground">---</span>
+                <span className="text-[13px] text-foreground/30">---</span>
               )}
             </TableCell>
-            <TableCell className="text-right font-semibold tabular-nums">{fmt(c.totalFunding)}</TableCell>
-            <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{c.roundCount}</TableCell>
+            <TableCell className="text-right text-[13px] font-semibold tabular-nums text-foreground/85">{fmt(c.totalFunding)}</TableCell>
+            <TableCell className="text-right text-[13px] tabular-nums text-foreground/40">{c.roundCount}</TableCell>
             <TableCell>
               {c.lastRoundStage && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{c.lastRoundStage}</Badge>}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-xs">{fmt(c.lastRoundAmount)}</TableCell>
+            <TableCell className="text-right text-[13px] tabular-nums text-foreground/55">{fmt(c.lastRoundAmount)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -669,7 +647,7 @@ function InvestorsTable({ data, onClick }: { data: Investor[]; onClick: (name: s
   const { sorted, sortKey, sortDir, toggle } = useSortable(data, "dealCount");
 
   const SH = ({ col, label, className }: { col: keyof Investor & string; label: string; className?: string }) => (
-    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-xs ${className ?? ""}`} onClick={() => toggle(col)}>
+    <TableHead className={`cursor-pointer select-none whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35 ${className ?? ""}`} onClick={() => toggle(col)}>
       {label}
       <SortIcon active={sortKey === col} dir={sortKey === col ? sortDir : null} />
     </TableHead>
@@ -680,21 +658,21 @@ function InvestorsTable({ data, onClick }: { data: Investor[]; onClick: (name: s
   return (
     <Table>
       <TableHeader>
-        <TableRow className="hover:bg-transparent">
+        <TableRow className="glass-table-header hover:bg-transparent">
           <SH col="name" label="Investor" />
           <SH col="dealCount" label="Deals" className="text-right" />
           <SH col="leadCount" label="Leads" className="text-right" />
           <SH col="totalDeployed" label="Total Deployed" className="text-right" />
-          <TableHead className="text-xs">Portfolio</TableHead>
+          <TableHead className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">Portfolio</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {sorted.map((inv, i) => (
-          <TableRow key={i} className="cursor-pointer" onClick={() => onClick(inv.name)}>
+          <TableRow key={i} className="lg-inset-table-row cursor-pointer" onClick={() => onClick(inv.name)}>
             <TableCell>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-[13px]">
                 <Users className="h-3 w-3 shrink-0 text-green-500" />
-                <span className="font-medium hover:text-green-600">{inv.name}</span>
+                <span className="font-semibold text-foreground/85 hover:text-green-600">{inv.name}</span>
               </div>
             </TableCell>
             <TableCell className="text-right tabular-nums">
@@ -707,17 +685,17 @@ function InvestorsTable({ data, onClick }: { data: Investor[]; onClick: (name: s
                   {inv.leadCount}
                 </Badge>
               ) : (
-                <span className="text-xs text-muted-foreground">---</span>
+                <span className="text-[13px] text-foreground/30">---</span>
               )}
             </TableCell>
-            <TableCell className="text-right font-semibold tabular-nums">{fmt(inv.totalDeployed)}</TableCell>
+            <TableCell className="text-right text-[13px] font-semibold tabular-nums text-foreground/85">{fmt(inv.totalDeployed)}</TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
                 {inv.portfolioCompanies?.filter(Boolean).slice(0, 3).map((c, j) => (
                   <Badge key={j} variant="outline" className="text-[10px] px-1 py-0 font-normal">{c}</Badge>
                 ))}
                 {(inv.portfolioCompanies?.length ?? 0) > 3 && (
-                  <span className="text-[10px] text-muted-foreground">+{inv.portfolioCompanies.length - 3}</span>
+                  <span className="text-[10px] text-foreground/40">+{inv.portfolioCompanies.length - 3}</span>
                 )}
               </div>
             </TableCell>

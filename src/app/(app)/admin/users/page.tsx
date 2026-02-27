@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Trash2, Plus, Shield, Eye } from "lucide-react";
+import { Trash2, Plus, Shield, Eye, Users } from "lucide-react";
 
 type User = {
   id: string;
@@ -77,133 +77,151 @@ export default function AdminUsersPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">User Management</h1>
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+        <div className="glass-status-bar px-4 py-2.5 flex items-center gap-2">
+          <Users className="h-4 w-4 text-foreground/40" />
+          <span className="text-[13px] font-semibold text-foreground/85">User Management</span>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          <div className="lg-inset rounded-[16px] p-8">
+            <p className="text-[13px] text-foreground/45">Loading...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">User Management</h1>
-        <Button onClick={() => setShowCreate(!showCreate)} size="sm">
-          <Plus className="h-4 w-4 mr-1" />
+    <div className="flex h-[calc(100vh-1.5rem)] flex-col">
+      {/* Tier 2: Toolbar */}
+      <div className="glass-status-bar px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-foreground/40" />
+          <span className="text-[13px] font-semibold text-foreground/85">User Management</span>
+          <span className="text-[11px] text-foreground/35 tabular-nums">{users.length} users</span>
+        </div>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="apple-btn-blue flex items-center gap-1.5 px-3 py-1.5 text-[13px]"
+        >
+          <Plus className="h-3.5 w-3.5" />
           Invite User
-        </Button>
+        </button>
       </div>
 
-      {showCreate && (
-        <form onSubmit={handleCreate} className="mb-6 rounded-lg border p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Optional"
-              />
+      {/* Tier 3: Content */}
+      <div className="flex-1 overflow-auto p-4">
+        {showCreate && (
+          <form onSubmit={handleCreate} className="lg-inset rounded-[16px] p-4 space-y-3 mb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="name" className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Name</Label>
+                <input
+                  id="name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Optional"
+                  className="glass-search-input w-full px-3 py-2 text-[13px] tracking-[-0.01em]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="email" className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Email</Label>
+                <input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                  className="glass-search-input w-full px-3 py-2 text-[13px] tracking-[-0.01em]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="password" className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Password</Label>
+                <input
+                  id="password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                  className="glass-search-input w-full px-3 py-2 text-[13px] tracking-[-0.01em]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="role" className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Role</Label>
+                <select
+                  id="role"
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value as "admin" | "viewer" })}
+                  className="glass-search-input w-full px-3 py-2 text-[13px] tracking-[-0.01em]"
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                required
-              />
+            <div className="flex gap-2">
+              <button type="submit" className="apple-btn-blue px-3 py-1.5 text-[13px]">Create</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="glass-capsule-btn px-3 py-1.5 text-[13px]">
+                Cancel
+              </button>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="role">Role</Label>
-              <select
-                id="role"
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value as "admin" | "viewer" })}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="viewer">Viewer</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="submit" size="sm">Create</Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      )}
+          </form>
+        )}
 
-      <div className="rounded-lg border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left font-medium">User</th>
-              <th className="px-4 py-3 text-left font-medium">Role</th>
-              <th className="px-4 py-3 text-left font-medium">Created</th>
-              <th className="px-4 py-3 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b last:border-0">
-                <td className="px-4 py-3">
-                  <div>
-                    <p className="font-medium">{user.name || "-"}</p>
-                    <p className="text-muted-foreground text-xs">{user.email}</p>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    user.role === "admin"
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}>
-                    {user.role === "admin" ? <Shield className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {new Date(user.createdAt).toLocaleDateString()}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleRole(user)}
-                      title={`Switch to ${user.role === "admin" ? "viewer" : "admin"}`}
-                    >
-                      {user.role === "admin" ? "Demote" : "Promote"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(user)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </td>
+        <div className="lg-inset rounded-[16px]">
+          <table className="w-full text-[13px] tracking-[-0.01em]">
+            <thead>
+              <tr className="glass-table-header">
+                <th className="px-4 py-2.5 text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">User</th>
+                <th className="px-4 py-2.5 text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Role</th>
+                <th className="px-4 py-2.5 text-left text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Created</th>
+                <th className="px-4 py-2.5 text-right text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id} className="lg-inset-table-row">
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{user.name || "-"}</p>
+                      <p className="text-[12px] tracking-[-0.01em] text-foreground/45">{user.email}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      user.role === "admin"
+                        ? "bg-blue-500/8 text-blue-600 dark:text-blue-400"
+                        : "bg-foreground/[0.04] text-foreground/45"
+                    }`}>
+                      {user.role === "admin" ? <Shield className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[13px] text-foreground/45">
+                    {new Date(user.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        onClick={() => handleToggleRole(user)}
+                        className="glass-capsule-btn px-2.5 py-1 text-[12px]"
+                        title={`Switch to ${user.role === "admin" ? "viewer" : "admin"}`}
+                      >
+                        {user.role === "admin" ? "Demote" : "Promote"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user)}
+                        className="glass-capsule-btn px-2 py-1 text-red-500 hover:text-red-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -10,10 +10,10 @@ export default function DashboardPage() {
 
   if (status === "loading") {
     return (
-      <div className="space-y-3">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-64" />
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-10 rounded-[10px]" />
+        <Skeleton className="h-24 rounded-[14px]" />
+        <Skeleton className="h-64 rounded-[16px]" />
       </div>
     );
   }

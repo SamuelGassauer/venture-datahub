@@ -212,17 +212,6 @@ type AttrCard = {
 };
 
 // ---------------------------------------------------------------------------
-// Glassmorphism class constants
-// ---------------------------------------------------------------------------
-
-const GLASS_HERO =
-  "rounded-2xl border border-white/10 bg-card/70 backdrop-blur-xl shadow-2xl dark:border-white/5 dark:bg-card/60";
-const GLASS_ATTR =
-  "rounded-xl border border-white/10 bg-card/50 backdrop-blur-md shadow-lg dark:border-white/5 dark:bg-card/40";
-const GLASS_INVESTOR =
-  "rounded-lg border border-white/10 bg-card/40 backdrop-blur-sm shadow-md dark:border-white/5 dark:bg-card/30";
-
-// ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
 
@@ -425,13 +414,13 @@ export default function CompanyProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 p-6">
+      <div className="p-6">
         <div className="mx-auto max-w-6xl space-y-8">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-64 w-full rounded-2xl" />
+          <Skeleton className="h-8 w-32 rounded-[8px]" />
+          <Skeleton className="h-64 w-full rounded-[16px]" />
           <div className="grid grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 rounded-xl" />
+              <Skeleton key={i} className="h-24 rounded-[14px]" />
             ))}
           </div>
         </div>
@@ -441,13 +430,13 @@ export default function CompanyProfilePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-4">
-          <Building2 className="h-12 w-12 text-muted-foreground mx-auto" />
-          <p className="text-muted-foreground">{error}</p>
+          <Building2 className="h-12 w-12 text-foreground/15 mx-auto" />
+          <p className="text-foreground/45 text-[13px]">{error}</p>
           <button
             onClick={() => router.push("/companies")}
-            className="text-sm text-blue-500 hover:text-blue-600"
+            className="glass-capsule-btn px-4 py-1.5 text-[13px] text-blue-600"
           >
             Back to companies
           </button>
@@ -457,372 +446,366 @@ export default function CompanyProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-10">
-        {/* Back button */}
+    <div className="flex flex-col min-h-screen">
+      {/* Tier 2: Navigation bar */}
+      <div className="glass-status-bar px-4 py-2.5 shrink-0">
         <button
           onClick={() => router.push("/companies")}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="glass-capsule-btn flex items-center gap-2 px-3 py-1 text-[13px] tracking-[-0.01em] text-foreground/55 hover:text-foreground/85 transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           Back to companies
         </button>
+      </div>
 
-        {/* ================================================================= */}
-        {/* Graph Section — Hero + Attribute Nodes                            */}
-        {/* ================================================================= */}
-        <div ref={containerRef} className="relative">
-          {/* SVG connections (desktop only) */}
-          <svg
-            className="absolute inset-0 pointer-events-none hidden lg:block"
-            width="100%"
-            height="100%"
-            style={{ zIndex: 0 }}
-          >
-            {lines.map((l) => (
-              <line
-                key={l.id}
-                x1={l.x1}
-                y1={l.y1}
-                x2={l.x2}
-                y2={l.y2}
-                stroke="currentColor"
-                strokeWidth={1}
-                opacity={0.12}
-                strokeDasharray="6 4"
-                style={{
-                  animation: "draw-line 0.8s ease forwards",
-                  strokeDashoffset: 200,
-                  strokeDasharray: "200",
-                }}
-              />
-            ))}
-          </svg>
-
-          {/* Grid layout */}
-          <div className="relative z-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-            {/* Top-left attribute cards */}
-            {attrCards.slice(0, 2).map((card, i) => (
-              <div
-                key={card.id}
-                ref={setAttrRef(card.id)}
-                data-node-id={card.id}
-                className={`${GLASS_ATTR} p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]`}
-                style={{ animationDelay: `${i * 80}ms` }}
-              >
-                <card.icon className="h-5 w-5 text-muted-foreground" />
-                <span className="text-lg font-bold tracking-tight">
-                  {card.value}
-                </span>
-                <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                  {card.label}
-                </span>
-              </div>
-            ))}
-
-            {/* HERO card — center, spans 2 rows on desktop */}
-            <div
-              ref={heroRef}
-              className={`${GLASS_HERO} p-6 sm:p-8 col-span-2 md:col-span-1 lg:row-span-2 flex flex-col items-center text-center gap-4 animate-in fade-in-0 zoom-in-95 duration-500`}
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4">
+        <div className="mx-auto max-w-6xl space-y-10">
+          {/* ================================================================= */}
+          {/* Graph Section -- Hero + Attribute Nodes                            */}
+          {/* ================================================================= */}
+          <div ref={containerRef} className="relative">
+            {/* SVG connections (desktop only) */}
+            <svg
+              className="absolute inset-0 pointer-events-none hidden lg:block"
+              width="100%"
+              height="100%"
+              style={{ zIndex: 0 }}
             >
-              {logoUrl ? (
-                <SmartLogo
-                  src={logoUrl}
-                  alt={name}
-                  className="h-16 w-16 rounded-xl"
-                  fallback={
-                    <div className="h-16 w-16 rounded-xl bg-muted flex items-center justify-center">
-                      <Building2 className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  }
+              {lines.map((l) => (
+                <line
+                  key={l.id}
+                  x1={l.x1}
+                  y1={l.y1}
+                  x2={l.x2}
+                  y2={l.y2}
+                  stroke="currentColor"
+                  strokeWidth={1}
+                  opacity={0.12}
+                  strokeDasharray="6 4"
+                  style={{
+                    animation: "draw-line 0.8s ease forwards",
+                    strokeDashoffset: 200,
+                    strokeDasharray: "200",
+                  }}
                 />
-              ) : (
-                <div className="h-16 w-16 rounded-xl bg-muted flex items-center justify-center">
-                  <Building2 className="h-8 w-8 text-muted-foreground" />
+              ))}
+            </svg>
+
+            {/* Grid layout */}
+            <div className="relative z-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+              {/* Top-left attribute cards */}
+              {attrCards.slice(0, 2).map((card, i) => (
+                <div
+                  key={card.id}
+                  ref={setAttrRef(card.id)}
+                  data-node-id={card.id}
+                  className="lg-inset rounded-[14px] p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]"
+                  style={{ animationDelay: `${i * 80}ms` }}
+                >
+                  <card.icon className="h-5 w-5 text-foreground/40" />
+                  <span className="text-[17px] font-bold tracking-[-0.02em] text-foreground/85">
+                    {card.value}
+                  </span>
+                  <span className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    {card.label}
+                  </span>
                 </div>
-              )}
-              <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
-              {description && (
-                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">
-                  {description}
-                </p>
-              )}
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {status && (
-                  <Badge variant="outline" className="text-xs">
-                    {status}
-                  </Badge>
-                )}
-                {sector && (
-                  <Badge variant="secondary" className="text-xs">
-                    {sector}
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                {website && (
-                  <a
-                    href={
-                      website.startsWith("http") ? website : `https://${website}`
+              ))}
+
+              {/* HERO card -- center, spans 2 rows on desktop */}
+              <div
+                ref={heroRef}
+                className="liquid-glass rounded-[24px] p-6 sm:p-8 col-span-2 md:col-span-1 lg:row-span-2 flex flex-col items-center text-center gap-4 animate-in fade-in-0 zoom-in-95 duration-500"
+              >
+                {logoUrl ? (
+                  <SmartLogo
+                    src={logoUrl}
+                    alt={name}
+                    className="h-16 w-16 rounded-[14px]"
+                    fallback={
+                      <div className="h-16 w-16 rounded-[14px] bg-foreground/[0.04] flex items-center justify-center">
+                        <Building2 className="h-8 w-8 text-foreground/15" />
+                      </div>
                     }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    <span className="text-xs">
-                      {website.replace(/^https?:\/\//, "")}
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-[14px] bg-foreground/[0.04] flex items-center justify-center">
+                    <Building2 className="h-8 w-8 text-foreground/15" />
+                  </div>
+                )}
+                <h1 className="text-2xl font-bold tracking-tight text-foreground/85">{name}</h1>
+                {description && (
+                  <p className="text-[13px] tracking-[-0.01em] text-foreground/45 leading-relaxed line-clamp-4">
+                    {description}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {status && (
+                    <span className="rounded-full bg-foreground/[0.04] px-2.5 py-0.5 text-[10px] font-medium text-foreground/55">
+                      {status}
                     </span>
-                  </a>
-                )}
-                {linkedinUrl && (
-                  <a
-                    href={linkedinUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-500 hover:text-blue-600"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    <span className="text-xs">LinkedIn</span>
-                  </a>
-                )}
+                  )}
+                  {sector && (
+                    <span className="rounded-full bg-blue-500/8 px-2.5 py-0.5 text-[10px] font-medium text-blue-600">
+                      {sector}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-[13px]">
+                  {website && (
+                    <a
+                      href={
+                        website.startsWith("http") ? website : `https://${website}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:text-blue-500"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      <span className="text-[12px]">
+                        {website.replace(/^https?:\/\//, "")}
+                      </span>
+                    </a>
+                  )}
+                  {linkedinUrl && (
+                    <a
+                      href={linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:text-blue-500"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span className="text-[12px]">LinkedIn</span>
+                    </a>
+                  )}
+                </div>
               </div>
+
+              {/* Top-right attribute cards */}
+              {attrCards.slice(2, 4).map((card, i) => (
+                <div
+                  key={card.id}
+                  ref={setAttrRef(card.id)}
+                  data-node-id={card.id}
+                  className="lg-inset rounded-[14px] p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]"
+                  style={{ animationDelay: `${(i + 2) * 80}ms` }}
+                >
+                  <card.icon className="h-5 w-5 text-foreground/40" />
+                  <span className="text-[17px] font-bold tracking-[-0.02em] text-foreground/85">
+                    {card.value}
+                  </span>
+                  <span className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    {card.label}
+                  </span>
+                </div>
+              ))}
+
+              {/* Bottom row attribute cards */}
+              {attrCards.slice(4).map((card, i) => (
+                <div
+                  key={card.id}
+                  ref={setAttrRef(card.id)}
+                  data-node-id={card.id}
+                  className="lg-inset rounded-[14px] p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]"
+                  style={{ animationDelay: `${(i + 4) * 80}ms` }}
+                >
+                  <card.icon className="h-5 w-5 text-foreground/40" />
+                  <span className="text-[17px] font-bold tracking-[-0.02em] text-foreground/85">
+                    {card.value}
+                  </span>
+                  <span className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                    {card.label}
+                  </span>
+                </div>
+              ))}
             </div>
-
-            {/* Top-right attribute cards */}
-            {attrCards.slice(2, 4).map((card, i) => (
-              <div
-                key={card.id}
-                ref={setAttrRef(card.id)}
-                data-node-id={card.id}
-                className={`${GLASS_ATTR} p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]`}
-                style={{ animationDelay: `${(i + 2) * 80}ms` }}
-              >
-                <card.icon className="h-5 w-5 text-muted-foreground" />
-                <span className="text-lg font-bold tracking-tight">
-                  {card.value}
-                </span>
-                <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                  {card.label}
-                </span>
-              </div>
-            ))}
-
-            {/* Bottom row attribute cards */}
-            {attrCards.slice(4).map((card, i) => (
-              <div
-                key={card.id}
-                ref={setAttrRef(card.id)}
-                data-node-id={card.id}
-                className={`${GLASS_ATTR} p-4 flex flex-col items-center gap-2 text-center animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]`}
-                style={{ animationDelay: `${(i + 4) * 80}ms` }}
-              >
-                <card.icon className="h-5 w-5 text-muted-foreground" />
-                <span className="text-lg font-bold tracking-tight">
-                  {card.value}
-                </span>
-                <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                  {card.label}
-                </span>
-              </div>
-            ))}
           </div>
-        </div>
 
-        {/* ================================================================= */}
-        {/* Investors Section                                                 */}
-        {/* ================================================================= */}
-        {investorMap.size > 0 && (
+          {/* ================================================================= */}
+          {/* Investors Section                                                 */}
+          {/* ================================================================= */}
+          {investorMap.size > 0 && (
+            <section className="space-y-4">
+              <h2 className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                Investors
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                {Array.from(investorMap.entries()).map(
+                  ([invName, role], i) => (
+                    <div
+                      key={invName}
+                      className="lg-inset rounded-[10px] px-4 py-3 flex items-center gap-2 animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]"
+                      style={{ animationDelay: `${i * 60}ms` }}
+                    >
+                      <Briefcase className="h-4 w-4 text-foreground/40 shrink-0" />
+                      <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85">{invName}</span>
+                      {role === "lead" && (
+                        <span className="rounded-full bg-blue-500/8 px-1.5 py-0 text-[10px] font-medium text-blue-600">
+                          Lead
+                        </span>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* ================================================================= */}
+          {/* Funding Timeline                                                  */}
+          {/* ================================================================= */}
+          {rounds.length > 0 && (
+            <section className="space-y-4">
+              <h2 className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                Funding Timeline
+              </h2>
+              <div className="relative pl-6 space-y-0">
+                {/* Vertical line */}
+                <div className="absolute left-2.5 top-2 bottom-2 w-px bg-foreground/[0.04]" />
+
+                {rounds.map((r, i) => {
+                  const amount = asNumber(r.amount);
+                  const leadInvestor = (r.investors ?? []).find(
+                    (inv) => inv.role === "lead"
+                  );
+                  const firstArticle = (r.articles ?? [])[0];
+                  const dateStr = formatDate(firstArticle?.publishedAt);
+                  return (
+                    <div
+                      key={r.roundKey ?? i}
+                      className="relative flex items-start gap-4 pb-6 last:pb-0 animate-in fade-in-0 slide-in-from-left-2 fill-mode-both duration-500"
+                      style={{ animationDelay: `${i * 100}ms` }}
+                    >
+                      {/* Node dot */}
+                      <div className="absolute -left-6 top-1.5 flex h-5 w-5 items-center justify-center">
+                        <div className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
+                      </div>
+
+                      <div className="lg-inset rounded-[14px] flex-1 p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-full bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-medium text-foreground/55 shrink-0">
+                            {r.stage ?? "Unknown"}
+                          </span>
+                          <span className="font-bold text-[17px] tracking-[-0.02em] tabular-nums text-foreground/85">
+                            {formatAmount(amount)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-foreground/40 text-[12px]">
+                          {leadInvestor?.name && (
+                            <span className="hidden sm:inline text-foreground/55">
+                              {leadInvestor.name}
+                            </span>
+                          )}
+                          {dateStr && (
+                            <span className="flex items-center gap-1 text-foreground/30">
+                              <Calendar className="h-3 w-3" />
+                              {dateStr}
+                            </span>
+                          )}
+                          {(r.articles ?? []).map((article, ai) =>
+                            article.url ? (
+                              <a
+                                key={ai}
+                                href={article.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-500"
+                                title={article.title ?? "Source article"}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : null
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ================================================================= */}
+          {/* Similar Companies                                                 */}
+          {/* ================================================================= */}
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-              Investors
+            <h2 className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+              Similar Companies
             </h2>
-            <div className="flex flex-wrap gap-3">
-              {Array.from(investorMap.entries()).map(
-                ([invName, role], i) => (
-                  <div
-                    key={invName}
-                    className={`${GLASS_INVESTOR} px-4 py-3 flex items-center gap-2 animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 hover:animate-[float_3s_ease-in-out_infinite]`}
+            {similarLoading && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-[14px]" />
+                ))}
+              </div>
+            )}
+            {similar && similar.length === 0 && (
+              <p className="text-[13px] text-foreground/40">
+                No similar companies found.
+              </p>
+            )}
+            {similar && similar.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {similar.map((c, i) => (
+                  <Link
+                    key={c.name}
+                    href={`/companies/${encodeURIComponent(c.name)}`}
+                    className="lg-inset rounded-[14px] p-4 flex flex-col gap-2 transition-colors hover:bg-foreground/[0.04] animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500"
                     style={{ animationDelay: `${i * 60}ms` }}
                   >
-                    <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium">{invName}</span>
-                    {role === "lead" && (
-                      <Badge
-                        variant="default"
-                        className="text-[10px] px-1.5 py-0"
-                      >
-                        Lead
-                      </Badge>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ================================================================= */}
-        {/* Funding Timeline                                                  */}
-        {/* ================================================================= */}
-        {rounds.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-              Funding Timeline
-            </h2>
-            <div className="relative pl-6 space-y-0">
-              {/* Vertical line */}
-              <div className="absolute left-2.5 top-2 bottom-2 w-px bg-border" />
-
-              {rounds.map((r, i) => {
-                const amount = asNumber(r.amount);
-                const leadInvestor = (r.investors ?? []).find(
-                  (inv) => inv.role === "lead"
-                );
-                const firstArticle = (r.articles ?? [])[0];
-                const dateStr = formatDate(firstArticle?.publishedAt);
-                return (
-                  <div
-                    key={r.roundKey ?? i}
-                    className="relative flex items-start gap-4 pb-6 last:pb-0 animate-in fade-in-0 slide-in-from-left-2 fill-mode-both duration-500"
-                    style={{ animationDelay: `${i * 100}ms` }}
-                  >
-                    {/* Node dot */}
-                    <div className="absolute -left-6 top-1.5 flex h-5 w-5 items-center justify-center">
-                      <div className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
-                    </div>
-
-                    <div
-                      className={`${GLASS_ATTR} flex-1 p-4 flex items-center justify-between gap-4`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          {r.stage ?? "Unknown"}
-                        </Badge>
-                        <span className="font-bold text-lg tabular-nums">
-                          {formatAmount(amount)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-muted-foreground text-xs">
-                        {leadInvestor?.name && (
-                          <span className="hidden sm:inline">
-                            {leadInvestor.name}
-                          </span>
-                        )}
-                        {dateStr && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {dateStr}
-                          </span>
-                        )}
-                        {(r.articles ?? []).map((article, ai) =>
-                          article.url ? (
-                            <a
-                              key={ai}
-                              href={article.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-500 hover:text-blue-600"
-                              title={article.title ?? "Source article"}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          ) : null
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* ================================================================= */}
-        {/* Similar Companies                                                 */}
-        {/* ================================================================= */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-            Similar Companies
-          </h2>
-          {similarLoading && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
-              ))}
-            </div>
-          )}
-          {similar && similar.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No similar companies found.
-            </p>
-          )}
-          {similar && similar.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {similar.map((c, i) => (
-                <Link
-                  key={c.name}
-                  href={`/companies/${encodeURIComponent(c.name)}`}
-                  className={`${GLASS_ATTR} p-4 flex flex-col gap-2 transition-colors hover:bg-card/70 animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500`}
-                  style={{ animationDelay: `${i * 60}ms` }}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {c.logoUrl ? (
-                      <SmartLogo
-                        src={c.logoUrl}
-                        alt={c.name}
-                        className="h-6 w-6 rounded shrink-0"
-                        fallback={
-                          <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                        }
-                      />
-                    ) : (
-                      <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-sm font-medium truncate">
-                      {c.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {c.totalFunding > 0 && (
-                      <span className="text-xs font-semibold text-muted-foreground tabular-nums">
-                        {formatAmount(c.totalFunding)}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {c.logoUrl ? (
+                        <SmartLogo
+                          src={c.logoUrl}
+                          alt={c.name}
+                          className="h-6 w-6 rounded-[6px] shrink-0"
+                          fallback={
+                            <Building2 className="h-5 w-5 text-foreground/15 shrink-0" />
+                          }
+                        />
+                      ) : (
+                        <Building2 className="h-5 w-5 text-foreground/15 shrink-0" />
+                      )}
+                      <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground/85 truncate">
+                        {c.name}
                       </span>
-                    )}
-                    {(c.subsector || c.sector) && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] px-1.5 py-0 h-4"
-                      >
-                        {c.subsector ?? c.sector}
-                      </Badge>
-                    )}
-                    {c.country && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0 h-4"
-                      >
-                        {c.country}
-                      </Badge>
-                    )}
-                  </div>
-                  {c.topInvestors.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {c.topInvestors.map((inv) => (
-                        <span
-                          key={inv}
-                          className="text-[10px] text-muted-foreground truncate max-w-[100px]"
-                        >
-                          {inv}
-                        </span>
-                      ))}
                     </div>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {c.totalFunding > 0 && (
+                        <span className="text-[12px] font-semibold text-foreground/55 tabular-nums">
+                          {formatAmount(c.totalFunding)}
+                        </span>
+                      )}
+                      {(c.subsector || c.sector) && (
+                        <span className="rounded-full bg-foreground/[0.04] px-1.5 py-0 text-[10px] font-medium text-foreground/55 h-4 flex items-center">
+                          {c.subsector ?? c.sector}
+                        </span>
+                      )}
+                      {c.country && (
+                        <span className="rounded-full bg-foreground/[0.04] px-1.5 py-0 text-[10px] font-medium text-foreground/40 h-4 flex items-center">
+                          {c.country}
+                        </span>
+                      )}
+                    </div>
+                    {c.topInvestors.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {c.topInvestors.map((inv) => (
+                          <span
+                            key={inv}
+                            className="text-[10px] text-foreground/35 truncate max-w-[100px]"
+                          >
+                            {inv}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );
