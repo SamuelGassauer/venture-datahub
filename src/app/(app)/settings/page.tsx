@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { updateSetting } from "@/lib/actions";
 import { toast } from "sonner";
-import { Settings, Database, Trash2 } from "lucide-react";
+import { Settings, Trash2 } from "lucide-react";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});

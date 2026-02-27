@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useGlobalFilters, resolveGeoFilter, STAGES } from "@/lib/global-filters";
+import { useGlobalFilters, STAGES } from "@/lib/global-filters";
 import { INVESTOR_TYPES, normalizeInvestorType } from "@/lib/investor-enricher";
 import {
   Table,

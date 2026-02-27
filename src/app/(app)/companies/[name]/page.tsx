@@ -18,7 +18,6 @@ import {
   Layers,
   Tag,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartLogo } from "@/components/ui/smart-logo";
 
