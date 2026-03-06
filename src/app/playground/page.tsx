@@ -888,13 +888,16 @@ export default function PlaygroundPage() {
                               const isUsd = usdFields.includes(field);
                               const isId = field === "externalId" || field.endsWith("ExternalId");
                               const isLogo = field === "logoUrl";
+                              const isInvestors = field === "investors" && Array.isArray(val);
                               return (
                                 <td
                                   key={field}
-                                  className={`px-3 py-2 text-[12px] font-mono whitespace-nowrap max-w-[200px] truncate ${
+                                  className={`px-3 py-2 text-[12px] font-mono max-w-[300px] ${
+                                    isInvestors ? "whitespace-normal" : "whitespace-nowrap truncate"
+                                  } ${
                                     isId ? "text-white/20" : isUsd ? "text-emerald-400/70" : "text-white/50"
                                   }`}
-                                  title={isLogo ? undefined : formatValue(val)}
+                                  title={isLogo || isInvestors ? undefined : formatValue(val)}
                                 >
                                   {isLogo ? (
                                     val ? (
@@ -902,6 +905,21 @@ export default function PlaygroundPage() {
                                     ) : (
                                       <span className="text-white/15">—</span>
                                     )
+                                  ) : isInvestors ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {(val as { name: string; role: string }[]).map((inv, j) => (
+                                        <span
+                                          key={j}
+                                          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                            inv.role === "lead"
+                                              ? "bg-amber-500/15 text-amber-400"
+                                              : "bg-white/[0.06] text-white/40"
+                                          }`}
+                                        >
+                                          {inv.name}
+                                        </span>
+                                      ))}
+                                    </div>
                                   ) : isUsd ? formatUsd(val) : formatValue(val)}
                                 </td>
                               );
@@ -913,10 +931,28 @@ export default function PlaygroundPage() {
                                 <div className="px-6 py-3">
                                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
                                     {Object.entries(record).map(([key, val]) => (
-                                      <div key={key} className="flex flex-col gap-0.5">
+                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" ? "col-span-2 lg:col-span-3" : ""}`}>
                                         <span className="text-[9px] uppercase tracking-[0.06em] font-medium text-white/15">{key}</span>
                                         {key === "logoUrl" && val ? (
                                           <img src={String(val)} alt="" className="h-8 w-8 rounded-[6px] object-contain bg-white/10" />
+                                        ) : key === "investors" && Array.isArray(val) ? (
+                                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                            {(val as { externalId?: string; name: string; role: string }[]).map((inv, j) => (
+                                              <span
+                                                key={j}
+                                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                                  inv.role === "lead"
+                                                    ? "bg-amber-500/15 text-amber-400"
+                                                    : "bg-white/[0.06] text-white/45"
+                                                }`}
+                                              >
+                                                {inv.name}
+                                                {inv.role === "lead" && (
+                                                  <span className="text-[9px] uppercase tracking-wider text-amber-500/60">Lead</span>
+                                                )}
+                                              </span>
+                                            ))}
+                                          </div>
                                         ) : (
                                           <span className={`text-[11px] font-mono break-all ${
                                             val === null ? "text-white/15 italic" : "text-white/50"
