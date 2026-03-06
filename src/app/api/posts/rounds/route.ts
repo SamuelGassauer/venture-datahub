@@ -26,12 +26,14 @@ export type InvestorDetail = {
   name: string;
   logoUrl: string | null;
   website: string | null;
+  hq: string | null;
 };
 
 export type RoundWithPostStatus = {
   roundKey: string;
   companyName: string;
   companyWebsite: string | null;
+  companyLocation: string | null;
   amountUsd: number | null;
   amountEur: number | null;
   stage: string | null;
@@ -41,6 +43,8 @@ export type RoundWithPostStatus = {
   investorDetails: InvestorDetail[];
   logoUrl: string | null;
   description: string | null;
+  sector: string | null;
+  subsector: string | null;
   articleDate: string | null;
   sources: ArticleSource[];
   hasPost: boolean;
@@ -57,13 +61,18 @@ export async function GET() {
     const result = await session.run(`
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
       WHERE c.country IN ${EUROPE_CYPHER_LIST}
+      OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
+      WITH c, fr, collect(DISTINCT loc.name)[0] AS companyLocation
       OPTIONAL MATCH (lead:InvestorOrg)-[:PARTICIPATED_IN {role: 'lead'}]->(fr)
       OPTIONAL MATCH (inv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
-      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
-      WITH c, fr,
+      OPTIONAL MATCH (inv)-[:HQ_IN]->(invLoc:Location)
+      WITH c, fr, companyLocation, lead, inv, collect(DISTINCT invLoc.name)[0] AS invHq
+      WITH c, fr, companyLocation,
            collect(DISTINCT lead.name)[0] AS leadInvestor,
            collect(DISTINCT inv.name) AS allInvestors,
-           collect(DISTINCT {name: inv.name, logoUrl: inv.logoUrl, website: inv.website}) AS investorDetails,
+           collect(DISTINCT {name: inv.name, logoUrl: inv.logoUrl, website: inv.website, hq: COALESCE(inv.hq, invHq)}) AS investorDetails
+      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+      WITH c, fr, companyLocation, leadInvestor, allInvestors, investorDetails,
            max(a.publishedAt) AS articleDate,
            collect(DISTINCT {title: a.title, url: a.url, publishedAt: toString(a.publishedAt)}) AS sources
       RETURN c.name AS companyName,
@@ -71,6 +80,9 @@ export async function GET() {
              c.description AS description,
              c.logoUrl AS logoUrl,
              c.website AS companyWebsite,
+             c.sector AS sector,
+             c.subsector AS subsector,
+             companyLocation,
              fr.amountUsd AS amountUsd,
              fr.stage AS stage,
              leadInvestor,
@@ -99,10 +111,10 @@ export async function GET() {
         .filter((s) => s.url)
         .map((s) => ({ title: s.title, url: s.url!, publishedAt: s.publishedAt }));
 
-      const rawInvestorDetails = r.get("investorDetails") as Array<{name: string | null; logoUrl: string | null; website: string | null}> | null;
+      const rawInvestorDetails = r.get("investorDetails") as Array<{name: string | null; logoUrl: string | null; website: string | null; hq: string | null}> | null;
       const investorDetails: InvestorDetail[] = (rawInvestorDetails ?? [])
         .filter((d) => d.name)
-        .map((d) => ({ name: d.name!, logoUrl: d.logoUrl ?? null, website: d.website ?? null }));
+        .map((d) => ({ name: d.name!, logoUrl: d.logoUrl ?? null, website: d.website ?? null, hq: d.hq ?? null }));
       // Deduplicate by name
       const seenInvestors = new Set<string>();
       const uniqueInvestorDetails = investorDetails.filter((d) => {
@@ -115,6 +127,7 @@ export async function GET() {
         roundKey,
         companyName,
         companyWebsite: r.get("companyWebsite") as string | null,
+        companyLocation: r.get("companyLocation") as string | null,
         amountUsd,
         amountEur: convertToEur(amountUsd),
         stage,
@@ -124,6 +137,8 @@ export async function GET() {
         investorDetails: uniqueInvestorDetails,
         logoUrl: r.get("logoUrl") as string | null,
         description: r.get("description") as string | null,
+        sector: r.get("sector") as string | null,
+        subsector: r.get("subsector") as string | null,
         articleDate,
         sources,
       };

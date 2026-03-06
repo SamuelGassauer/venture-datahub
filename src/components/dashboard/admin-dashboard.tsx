@@ -587,17 +587,17 @@ export function AdminDashboard() {
       <div className="lg-inset rounded-[16px] overflow-hidden">
         <PipelineRow
           label="Deals"
-          href="/funding"
+          href="/app/funding"
           bucket={pipeline.fundingRounds}
         />
         <PipelineRow
           label="Events"
-          href="/fund-events"
+          href="/app/fund-events"
           bucket={pipeline.fundEvents}
         />
         <PipelineRow
           label="KPIs"
-          href="/company-value-indicator"
+          href="/app/company-value-indicator"
           bucket={pipeline.valueIndicators}
         />
       </div>
@@ -757,7 +757,7 @@ export function AdminDashboard() {
         fundSummary.totalAum > 0 ||
         fundSummary.managingFirms > 0) && (
         <Link
-          href="/graph/fund-closings"
+          href="/app/graph/fund-closings"
           className="glass-status-bar flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 transition-colors hover:bg-foreground/[0.04]"
         >
           <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">

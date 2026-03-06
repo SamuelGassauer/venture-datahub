@@ -5,6 +5,7 @@ import { syncSingleRoundToGraph } from "@/lib/graph-sync";
 import { enrichCompany } from "@/lib/company-enricher";
 import { requireAdmin } from "@/lib/api-auth";
 import { enrichInvestor } from "@/lib/investor-enricher";
+import { scrapeArticleContent } from "@/lib/article-scraper";
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin();
@@ -33,12 +34,41 @@ export async function POST(request: NextRequest) {
     );
     const bestArticle = sortedArticles[0];
 
-    // LLM extraction with all article sources
+    // Live-scrape article URLs for fresh, clean content
+    // Fall back to stored content if scrape fails
+    const freshContents = await Promise.all(
+      sortedArticles.map(async (a) => {
+        const scraped = await scrapeArticleContent(a.url);
+        return {
+          title: a.title,
+          content: scraped || a.content || a.summary || a.title,
+          wasScraped: !!scraped,
+        };
+      })
+    );
+
+    const scrapedCount = freshContents.filter((c) => c.wasScraped).length;
+    console.log(`[ingest] ${key}: scraped ${scrapedCount}/${sortedArticles.length} articles live`);
+
+    // Collect existing regex extractions from all FundingRounds
+    const existingExtractions = sortedArticles
+      .filter((a) => a.fundingRound)
+      .map((a) => ({
+        companyName: a.fundingRound!.companyName,
+        amount: a.fundingRound!.amount,
+        currency: a.fundingRound!.currency,
+        amountUsd: a.fundingRound!.amountUsd,
+        stage: a.fundingRound!.stage,
+        investors: a.fundingRound!.investors,
+        leadInvestor: a.fundingRound!.leadInvestor,
+        country: a.fundingRound!.country,
+        confidence: a.fundingRound!.confidence,
+      }));
+
+    // LLM extraction with fresh content + existing regex data as context
     const llmResult = await extractFundingFromSources(
-      sortedArticles.map((a) => ({
-        title: a.title,
-        content: a.content || a.summary || a.title,
-      }))
+      freshContents.map((c) => ({ title: c.title, content: c.content })),
+      existingExtractions.length > 0 ? existingExtractions : undefined,
     );
 
     if (!llmResult) {
@@ -88,18 +118,14 @@ export async function POST(request: NextRequest) {
       ...(llmResult.investors ?? []),
       ...(llmResult.leadInvestor ? [llmResult.leadInvestor] : []),
     ];
-    // Deduplicate investor names
     const uniqueInvestors = [...new Set(investorNames)];
 
-    // Run enrichment in background — don't await, don't block the response
     (async () => {
       try {
-        // Enrich company first
         await enrichCompany(llmResult.companyName, () => {});
       } catch (e) {
         console.warn(`[auto-enrich] Company "${llmResult.companyName}" failed:`, e);
       }
-      // Then enrich investors sequentially (to avoid rate-limit issues)
       for (const inv of uniqueInvestors) {
         try {
           await enrichInvestor(inv, () => {});
@@ -110,7 +136,7 @@ export async function POST(request: NextRequest) {
       console.log(`[auto-enrich] Done: ${llmResult.companyName} + ${uniqueInvestors.length} investors`);
     })();
 
-    // Build pipeline input from the best article's funding round (regex extraction data from DB)
+    // Build pipeline input from the best article's funding round
     const regexRound = bestArticle.fundingRound;
 
     return NextResponse.json({
@@ -123,6 +149,7 @@ export async function POST(request: NextRequest) {
         country: llmResult.country,
         confidence: llmResult.confidence,
         articlesIngested: articles.length,
+        articlesFreshScraped: scrapedCount,
       },
       pipeline: {
         input: {

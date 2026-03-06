@@ -12,7 +12,7 @@ export async function createFeed(data: {
   description?: string;
 }) {
   const feed = await prisma.feed.create({ data });
-  revalidatePath("/feeds");
+  revalidatePath("/app/feeds");
   return feed;
 }
 
@@ -29,19 +29,19 @@ export async function updateFeed(
   }
 ) {
   const feed = await prisma.feed.update({ where: { id }, data });
-  revalidatePath("/feeds");
+  revalidatePath("/app/feeds");
   return feed;
 }
 
 export async function deleteFeed(id: string) {
   await prisma.feed.delete({ where: { id } });
-  revalidatePath("/feeds");
+  revalidatePath("/app/feeds");
 }
 
 // Article actions
 export async function markArticleRead(id: string, isRead: boolean) {
   await prisma.article.update({ where: { id }, data: { isRead } });
-  revalidatePath("/feed");
+  revalidatePath("/app/feed");
 }
 
 export async function toggleBookmark(id: string) {
@@ -50,8 +50,8 @@ export async function toggleBookmark(id: string) {
     where: { id },
     data: { isBookmarked: !article.isBookmarked },
   });
-  revalidatePath("/feed");
-  revalidatePath("/bookmarks");
+  revalidatePath("/app/feed");
+  revalidatePath("/app/bookmarks");
 }
 
 export async function markAllRead(feedId?: string) {
@@ -59,13 +59,13 @@ export async function markAllRead(feedId?: string) {
     where: feedId ? { feedId } : {},
     data: { isRead: true },
   });
-  revalidatePath("/feed");
+  revalidatePath("/app/feed");
 }
 
 // Category actions
 export async function createCategory(data: { name: string; color?: string }) {
   const category = await prisma.category.create({ data });
-  revalidatePath("/feeds");
+  revalidatePath("/app/feeds");
   return category;
 }
 
@@ -76,7 +76,7 @@ export async function updateSetting(key: string, value: string) {
     update: { value },
     create: { key, value },
   });
-  revalidatePath("/settings");
+  revalidatePath("/app/settings");
 }
 
 // OPML import
@@ -131,6 +131,6 @@ export async function importOpml(xmlContent: string) {
     }
   }
 
-  revalidatePath("/feeds");
+  revalidatePath("/app/feeds");
   return { imported };
 }

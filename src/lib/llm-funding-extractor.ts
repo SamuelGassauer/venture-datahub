@@ -60,6 +60,19 @@ type ArticleSource = {
   content: string;
 };
 
+/** Pre-extracted data from regex that the LLM should validate and enhance */
+export type ExistingExtraction = {
+  companyName: string;
+  amount: number | null;
+  currency: string;
+  amountUsd: number | null;
+  stage: string | null;
+  investors: string[];
+  leadInvestor: string | null;
+  country: string | null;
+  confidence: number;
+};
+
 function parseLLMResponse(text: string | null): FundingExtraction | null {
   if (!text) return null;
 
@@ -114,7 +127,8 @@ export async function extractFundingWithLLM(
 }
 
 export async function extractFundingFromSources(
-  sources: ArticleSource[]
+  sources: ArticleSource[],
+  existingData?: ExistingExtraction[],
 ): Promise<FundingExtraction | null> {
   const anthropic = getClient();
 
@@ -122,11 +136,11 @@ export async function extractFundingFromSources(
   let userContent: string;
   if (sources.length === 1) {
     const s = sources[0];
-    const truncated = (s.content || s.title).slice(0, 3000);
+    const truncated = (s.content || s.title).slice(0, 8000);
     userContent = `Title: ${s.title}\n\nContent: ${truncated}`;
   } else {
-    // Budget per source scales down with more articles, keeping total under ~6000 chars
-    const budgetPerSource = Math.floor(6000 / sources.length);
+    // Budget per source scales down with more articles, keeping total under ~12000 chars
+    const budgetPerSource = Math.floor(12000 / sources.length);
     const parts = sources.map((s, i) => {
       const truncated = (s.content || s.title).slice(0, budgetPerSource);
       return `--- Source ${i + 1} ---\nTitle: ${s.title}\n\nContent: ${truncated}`;
@@ -134,9 +148,24 @@ export async function extractFundingFromSources(
     userContent = `${sources.length} news articles report on the same funding round. Cross-reference all sources to extract the most complete and accurate data.\n\n${parts.join("\n\n")}`;
   }
 
+  // Append pre-extracted regex data as reference for the LLM
+  if (existingData?.length) {
+    const merged = mergeExistingExtractions(existingData);
+    const hint = [
+      "\n\n--- Pre-extracted data (from regex, may be incomplete — validate and enhance) ---",
+      `Company: ${merged.companyName}`,
+      merged.amount ? `Amount: ${merged.amount} ${merged.currency}` : null,
+      merged.stage ? `Stage: ${merged.stage}` : null,
+      merged.investors.length ? `Investors: ${merged.investors.join(", ")}` : null,
+      merged.leadInvestor ? `Lead investor: ${merged.leadInvestor}` : null,
+      merged.country ? `Country: ${merged.country}` : null,
+    ].filter(Boolean).join("\n");
+    userContent += hint;
+  }
+
   const message = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 512,
+    max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
@@ -144,12 +173,91 @@ export async function extractFundingFromSources(
   const text =
     message.content[0].type === "text" ? message.content[0].text : null;
 
-  const result = parseLLMResponse(text);
+  let result = parseLLMResponse(text);
+
+  // Merge LLM result with existing regex data — fill gaps, union investors
+  if (result && existingData?.length) {
+    const merged = mergeExistingExtractions(existingData);
+    result = mergeLlmWithRegex(result, merged);
+  } else if (!result && existingData?.length) {
+    // LLM didn't identify a round but regex did — use regex as fallback
+    const merged = mergeExistingExtractions(existingData);
+    if (merged.companyName && merged.confidence >= 0.35) {
+      result = {
+        companyName: merged.companyName,
+        amount: merged.amount,
+        currency: merged.currency,
+        amountUsd: merged.amountUsd,
+        stage: merged.stage,
+        investors: merged.investors,
+        leadInvestor: merged.leadInvestor,
+        country: merged.country,
+        confidence: merged.confidence,
+        rawExcerpt: sources[0].title,
+        signals: ["regex_fallback"],
+      };
+    }
+  }
+
   if (result) {
     result.rawExcerpt = sources[0].title;
     if (sources.length > 1) {
-      result.signals = ["llm_extraction", `multi_source_${sources.length}`];
+      result.signals = [...(result.signals || []), "llm_extraction", `multi_source_${sources.length}`];
     }
   }
   return result;
+}
+
+/** Merge multiple regex extractions from different articles about the same round */
+function mergeExistingExtractions(extractions: ExistingExtraction[]): ExistingExtraction {
+  // Pick the one with highest confidence as base
+  const sorted = [...extractions].sort((a, b) => b.confidence - a.confidence);
+  const base = { ...sorted[0] };
+
+  // Union all investors across all extractions
+  const allInvestors = new Set<string>();
+  let bestLead: string | null = null;
+
+  for (const e of extractions) {
+    for (const inv of e.investors) allInvestors.add(inv);
+    if (e.leadInvestor && !bestLead) bestLead = e.leadInvestor;
+    // Fill gaps from other extractions
+    if (!base.stage && e.stage) base.stage = e.stage;
+    if (!base.country && e.country) base.country = e.country;
+    if (!base.amount && e.amount) {
+      base.amount = e.amount;
+      base.currency = e.currency;
+      base.amountUsd = e.amountUsd;
+    }
+  }
+
+  base.investors = [...allInvestors];
+  base.leadInvestor = bestLead ?? base.leadInvestor;
+  return base;
+}
+
+/** Merge LLM output with regex data: LLM wins on most fields, but investors are unioned */
+function mergeLlmWithRegex(llm: FundingExtraction, regex: ExistingExtraction): FundingExtraction {
+  // Union investors: LLM + regex, deduplicated by normalized name
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const investorMap = new Map<string, string>();
+  for (const inv of [...regex.investors, ...llm.investors]) {
+    const key = normalize(inv);
+    if (!investorMap.has(key)) investorMap.set(key, inv);
+  }
+  const mergedInvestors = [...investorMap.values()];
+
+  return {
+    ...llm,
+    // LLM wins for most fields, but fill gaps from regex
+    companyName: llm.companyName || regex.companyName,
+    amount: llm.amount ?? regex.amount,
+    currency: llm.currency || regex.currency,
+    amountUsd: llm.amountUsd ?? regex.amountUsd,
+    stage: llm.stage || regex.stage,
+    investors: mergedInvestors,
+    leadInvestor: llm.leadInvestor || regex.leadInvestor,
+    country: llm.country || regex.country,
+    signals: [...(llm.signals || []), "merged_with_regex"],
+  };
 }

@@ -209,7 +209,7 @@ async function main() {
   console.log(`Created ${defaultSettings.length} settings`);
 
   // Create admin user
-  const adminPassword = process.env.ADMIN_SEED_PASSWORD || "admin123";
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || "Inv3ntur€-RSS#2026!";
   await prisma.user.upsert({
     where: { email: "admin@inventure.com" },
     update: {},

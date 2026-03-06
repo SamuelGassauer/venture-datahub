@@ -30,7 +30,7 @@ This project uses an Apple-inspired "Liquid Glass" design system (macOS Tahoe / 
 | `.glass-table-header` | 2 | Sticky table column headers |
 | `.glass-search-input` | — | Text inputs, search boxes |
 | `.glass-capsule-btn` | — | Secondary/icon buttons (pill-shaped) |
-| `.apple-btn-blue` | — | Primary CTA button (one per view) |
+| `.apple-btn-blue` | — | Primary CTA button (one per view). **Always white text** (`color: #fff` via CSS — no extra Tailwind class needed) |
 
 ### Row Separators
 - `.lg-inset-row` — Settings/detail list rows

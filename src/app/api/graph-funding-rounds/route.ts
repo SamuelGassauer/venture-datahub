@@ -37,7 +37,8 @@ export async function GET() {
            collect(DISTINCT lead.name)[0] AS leadInvestor,
            count(DISTINCT participant) AS investorCount,
            collect(DISTINCT a.publishedAt) AS dates
-      RETURN c.name AS company,
+      RETURN elementId(fr) AS id,
+             c.name AS company,
              c.country AS country,
              c.sector AS sector,
              fr.amountUsd AS amount,

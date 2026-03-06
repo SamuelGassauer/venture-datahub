@@ -156,6 +156,8 @@ MATCH (inv:InvestorOrg {name: '${safe}'})
 OPTIONAL MATCH (inv)-[p:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
 RETURN inv.name AS name,
        inv.type AS type,
+       inv.hqCity AS hqCity,
+       inv.hqCountry AS hqCountry,
        inv.stageFocus AS stageFocus,
        inv.sectorFocus AS sectorFocus,
        inv.geoFocus AS geoFocus,
@@ -887,7 +889,7 @@ function CompanyView({ data, onEnrichComplete, onOpenLogoPicker, onNavigateToCom
 
       {/* Full profile link */}
       <Link
-        href={`/companies/${encodeURIComponent(name)}`}
+        href={`/app/companies/${encodeURIComponent(name)}`}
         className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
       >
         <Maximize2 className="h-3.5 w-3.5" />
@@ -1334,6 +1336,8 @@ function InvestorView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Reco
     key in editedFields ? (editedFields[key] != null ? Number(editedFields[key]) : null) : (data[key] != null ? asNumber(data[key]) : null);
 
   const type = getStr("type");
+  const hqCity = getStr("hqCity");
+  const hqCountry = getStr("hqCountry");
   const stageFocus = Array.isArray(data.stageFocus) ? data.stageFocus as string[] : null;
   const sectorFocus = Array.isArray(data.sectorFocus) ? data.sectorFocus as string[] : null;
   const geoFocus = Array.isArray(data.geoFocus) ? data.geoFocus as string[] : null;
@@ -1370,6 +1374,8 @@ function InvestorView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Reco
   // Metadata completeness
   const metaFields = [
     { label: "Type", value: type },
+    { label: "HQ City", value: hqCity },
+    { label: "HQ Country", value: hqCountry },
     { label: "Stage Focus", value: stageFocus },
     { label: "Sector Focus", value: sectorFocus },
     { label: "Geo Focus", value: geoFocus },
@@ -1420,6 +1426,12 @@ function InvestorView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Reco
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {(hqCity || hqCountry) && (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {[hqCity, hqCountry].filter(Boolean).join(", ")}
+            </span>
+          )}
           {foundedYear && (
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
@@ -1521,6 +1533,8 @@ function InvestorView({ data, onEnrichComplete, onOpenLogoPicker }: { data: Reco
         </div>
         <div className="rounded-lg border divide-y">
           <LockableInfoRow label="Type" field="type" value={type} rawValue={type} missing={!type} locked={lockedFields.has("type")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
+          <LockableInfoRow label="HQ Stadt" field="hqCity" value={hqCity} rawValue={hqCity} missing={!hqCity} locked={lockedFields.has("hqCity")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} />
+          <LockableInfoRow label="HQ Land" field="hqCountry" value={hqCountry} rawValue={hqCountry} missing={!hqCountry} locked={lockedFields.has("hqCountry")} entityType="investor" entityName={name} onLockChange={handleLockChange} onValueChange={handleValueChange} />
           <LockableInfoRow label="Stage Focus" field="stageFocus" value={<span className="truncate block max-w-[200px]" title={stageFocus?.join(", ")}>{stageFocus?.join(", ")}</span>} missing={!stageFocus} locked={lockedFields.has("stageFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
           <LockableInfoRow label="Sector Focus" field="sectorFocus" value={<span className="truncate block max-w-[200px]" title={sectorFocus?.join(", ")}>{sectorFocus?.join(", ")}</span>} missing={!sectorFocus} locked={lockedFields.has("sectorFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
           <LockableInfoRow label="Geo Focus" field="geoFocus" value={<span className="truncate block max-w-[200px]" title={geoFocus?.join(", ")}>{geoFocus?.join(", ")}</span>} missing={!geoFocus} locked={lockedFields.has("geoFocus")} entityType="investor" entityName={name} onLockChange={handleLockChange} editable={false} />
@@ -1982,7 +1996,7 @@ export function EntitySheet({
         website={String(data.website)}
         entityType={entityType}
         onSelect={(url) => {
-          setData((prev) => prev ? { ...prev, logoUrl: url, lockedFields: [...(Array.isArray(prev.lockedFields) ? prev.lockedFields as string[] : []), "logoUrl"] } : prev);
+          setData((prev) => prev ? { ...prev, logoUrl: url ?? null, lockedFields: [...(Array.isArray(prev.lockedFields) ? prev.lockedFields as string[] : []), "logoUrl"] } : prev);
         }}
       />
     )}

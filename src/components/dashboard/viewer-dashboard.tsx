@@ -340,28 +340,28 @@ function HomeView({
             icon={Building2}
             title="Company Database"
             description="Browse all tracked companies with funding history, sector, geography, and enrichment data."
-            href="/companies"
+            href="/app/companies"
             accentColor="text-emerald-500 bg-emerald-500/10"
           />
           <UseCaseCard
             icon={Users}
             title="Investor Directory"
             description="Explore investor profiles, portfolio companies, deal counts, and check sizes."
-            href="/investors"
+            href="/app/investors"
             accentColor="text-violet-500 bg-violet-500/10"
           />
           <UseCaseCard
             icon={Handshake}
             title="Deal Explorer"
             description="Full table of all funding rounds with sorting and search. Click any deal to see the complete round details."
-            href="/graph/funding-rounds"
+            href="/app/graph/funding-rounds"
             accentColor="text-amber-500 bg-amber-500/10"
           />
           <UseCaseCard
             icon={Landmark}
             title="Fund Closings"
             description="Track LP fund raises, closings, and new fund launches from VCs and growth equity firms."
-            href="/graph/fund-closings"
+            href="/app/graph/fund-closings"
             accentColor="text-rose-500 bg-rose-500/10"
           />
         </div>
@@ -425,13 +425,13 @@ function HomeView({
             icon={Gauge}
             label="Valuations & KPIs"
             description="Revenue, ARR, and valuation signals extracted from news"
-            href="/graph/valuations"
+            href="/app/graph/valuations"
           />
           <MiniLink
             icon={Share2}
             label="Graph Explorer"
             description="Query the knowledge graph directly with Cypher"
-            href="/graph"
+            href="/app/graph"
           />
         </div>
       </div>

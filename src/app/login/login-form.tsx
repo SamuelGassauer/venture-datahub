@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
+  const callbackUrl = searchParams?.get("callbackUrl") || "/app/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -99,7 +99,6 @@ export function LoginForm() {
               disabled={loading}
               onClick={() => {
                 setEmail("admin@inventure.com");
-                setPassword("admin123");
               }}
             >
               Admin
@@ -109,7 +108,6 @@ export function LoginForm() {
               disabled={loading}
               onClick={() => {
                 setEmail("viewer@inventure.de");
-                setPassword("admin123");
               }}
             >
               Viewer

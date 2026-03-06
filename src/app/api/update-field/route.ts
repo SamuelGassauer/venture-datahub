@@ -60,6 +60,8 @@ const ALLOWED_FIELDS = new Set([
   "employeeRange",
   "linkedinUrl",
   "country",
+  "hqCity",
+  "hqCountry",
   "status",
   "location",
   "logoUrl",

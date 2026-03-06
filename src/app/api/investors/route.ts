@@ -40,7 +40,8 @@ export async function GET() {
             CASE WHEN inv.foundedYear IS NOT NULL THEN 1 ELSE 0 END +
             CASE WHEN inv.logoUrl IS NOT NULL THEN 1 ELSE 0 END +
             CASE WHEN inv.aum IS NOT NULL THEN 1 ELSE 0 END +
-            CASE WHEN inv.hq IS NOT NULL THEN 1 ELSE 0 END +
+            CASE WHEN inv.hqCity IS NOT NULL THEN 1 ELSE 0 END +
+            CASE WHEN inv.hqCountry IS NOT NULL THEN 1 ELSE 0 END +
             CASE WHEN size(COALESCE(inv.stageFocus, [])) > 0 THEN 1 ELSE 0 END +
             CASE WHEN size(COALESCE(inv.sectorFocus, [])) > 0 THEN 1 ELSE 0 END +
             CASE WHEN size(COALESCE(inv.geoFocus, [])) > 0 THEN 1 ELSE 0 END +
@@ -51,7 +52,8 @@ export async function GET() {
              inv.logoUrl AS logoUrl,
              inv.type AS type,
              enrichScore,
-             inv.hq AS hq,
+             inv.hqCity AS hqCity,
+             inv.hqCountry AS hqCountry,
              COALESCE(inv.stageFocus, []) AS stageFocus,
              COALESCE(inv.geoFocus, []) AS geoFocus,
              COALESCE(inv.sectorFocus, []) AS sectorFocus

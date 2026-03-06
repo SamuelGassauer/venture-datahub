@@ -52,6 +52,13 @@ async function ensureConstraints(session: Session) {
     "CREATE CONSTRAINT valuation_key IF NOT EXISTS FOR (v:Valuation) REQUIRE v.valuationKey IS UNIQUE",
     "CREATE CONSTRAINT article_url IF NOT EXISTS FOR (a:Article) REQUIRE a.url IS UNIQUE",
     "CREATE CONSTRAINT location_name IF NOT EXISTS FOR (l:Location) REQUIRE l.name IS UNIQUE",
+    "CREATE CONSTRAINT company_uuid IF NOT EXISTS FOR (c:Company) REQUIRE c.uuid IS UNIQUE",
+    "CREATE CONSTRAINT investor_uuid IF NOT EXISTS FOR (i:InvestorOrg) REQUIRE i.uuid IS UNIQUE",
+    "CREATE CONSTRAINT fundinground_uuid IF NOT EXISTS FOR (f:FundingRound) REQUIRE f.uuid IS UNIQUE",
+    "CREATE CONSTRAINT fund_uuid IF NOT EXISTS FOR (f:Fund) REQUIRE f.uuid IS UNIQUE",
+    "CREATE CONSTRAINT valuation_uuid IF NOT EXISTS FOR (v:Valuation) REQUIRE v.uuid IS UNIQUE",
+    "CREATE CONSTRAINT article_uuid IF NOT EXISTS FOR (a:Article) REQUIRE a.uuid IS UNIQUE",
+    "CREATE CONSTRAINT location_uuid IF NOT EXISTS FOR (l:Location) REQUIRE l.uuid IS UNIQUE",
     "CREATE INDEX company_sector IF NOT EXISTS FOR (c:Company) ON (c.sector)",
   ];
   for (const cypher of constraints) {
@@ -119,6 +126,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     const meta = data.companyMeta ?? {};
     await session.run(
       `MERGE (c:Company {normalizedName: $compNorm})
+       ON CREATE SET c.uuid = randomUUID()
        SET c.name = $name, c.country = $country,
            c.status = COALESCE(c.status, 'active')
        SET c.description = COALESCE($description, c.description)
@@ -142,7 +150,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     // Location
     if (data.country) {
       await session.run(
-        `MERGE (l:Location {name: $name}) SET l.type = 'country'`,
+        `MERGE (l:Location {name: $name}) ON CREATE SET l.uuid = randomUUID() SET l.type = 'country'`,
         { name: data.country }
       );
       nodes.push(`Location: ${data.country}`);
@@ -163,7 +171,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     for (const inv of allInvestorNames) {
       const invNorm = normalizeInvestor(inv);
       await session.run(
-        `MERGE (i:InvestorOrg {normalizedName: $invNorm}) SET i.name = $name`,
+        `MERGE (i:InvestorOrg {normalizedName: $invNorm}) ON CREATE SET i.uuid = randomUUID() SET i.name = $name`,
         { invNorm, name: inv }
       );
       nodes.push(`InvestorOrg: ${inv}`);
@@ -172,6 +180,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     // Single FundingRound node per company+stage
     await session.run(
       `MERGE (fr:FundingRound {roundKey: $roundKey})
+       ON CREATE SET fr.uuid = randomUUID()
        SET fr.amountUsd = $amountUsd, fr.currency = $currency,
            fr.stage = $stage, fr.confidence = $confidence,
            fr.articleId = $articleId`,
@@ -199,6 +208,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     for (const article of data.articles) {
       await session.run(
         `MERGE (a:Article {url: $url})
+         ON CREATE SET a.uuid = randomUUID()
          SET a.title = $title, a.publishedAt = $publishedAt, a.author = $author`,
         { url: article.url, title: article.title, publishedAt: article.publishedAt, author: article.author }
       );
@@ -274,7 +284,9 @@ export async function syncSingleFundEventToGraph(data: SingleFundEventData): Pro
 
     // InvestorOrg (the firm)
     await session.run(
-      `MERGE (i:InvestorOrg {normalizedName: $firmNorm}) SET i.name = $name`,
+      `MERGE (i:InvestorOrg {normalizedName: $firmNorm})
+       ON CREATE SET i.uuid = randomUUID()
+       SET i.name = $name`,
       { firmNorm, name: data.firmName }
     );
     nodes.push(`InvestorOrg: ${data.firmName}`);
@@ -282,6 +294,7 @@ export async function syncSingleFundEventToGraph(data: SingleFundEventData): Pro
     // Fund
     await session.run(
       `MERGE (f:Fund {fundKey: $fundKey})
+       ON CREATE SET f.uuid = randomUUID()
        SET f.name = $name, f.sizeUsd = $sizeUsd, f.type = $type,
            f.vintage = $vintage, f.status = COALESCE(f.status, 'closed')`,
       {
@@ -306,7 +319,7 @@ export async function syncSingleFundEventToGraph(data: SingleFundEventData): Pro
     // Location (optional)
     if (data.country) {
       await session.run(
-        `MERGE (l:Location {name: $name}) SET l.type = 'country'`,
+        `MERGE (l:Location {name: $name}) ON CREATE SET l.uuid = randomUUID() SET l.type = 'country'`,
         { name: data.country }
       );
       nodes.push(`Location: ${data.country}`);
@@ -323,6 +336,7 @@ export async function syncSingleFundEventToGraph(data: SingleFundEventData): Pro
     for (const article of data.articles) {
       await session.run(
         `MERGE (a:Article {url: $url})
+         ON CREATE SET a.uuid = randomUUID()
          SET a.title = $title, a.publishedAt = $publishedAt, a.author = $author`,
         { url: article.url, title: article.title, publishedAt: article.publishedAt, author: article.author }
       );
@@ -378,6 +392,7 @@ export async function syncSingleValueToGraph(data: SingleValueData): Promise<Gra
     // Company
     await session.run(
       `MERGE (c:Company {normalizedName: $compNorm})
+       ON CREATE SET c.uuid = randomUUID()
        SET c.name = $name,
            c.status = COALESCE(c.status, 'active')`,
       { compNorm, name: data.companyName }
@@ -387,6 +402,7 @@ export async function syncSingleValueToGraph(data: SingleValueData): Promise<Gra
     // Valuation node
     await session.run(
       `MERGE (v:Valuation {valuationKey: $valuationKey})
+       ON CREATE SET v.uuid = randomUUID()
        SET v.valueUsd = $valueUsd, v.metricType = $metricType,
            v.unit = $unit, v.period = $period,
            v.confidence = $confidence`,
@@ -414,6 +430,7 @@ export async function syncSingleValueToGraph(data: SingleValueData): Promise<Gra
     for (const article of data.articles) {
       await session.run(
         `MERGE (a:Article {url: $url})
+         ON CREATE SET a.uuid = randomUUID()
          SET a.title = $title, a.publishedAt = $publishedAt, a.author = $author`,
         { url: article.url, title: article.title, publishedAt: article.publishedAt, author: article.author }
       );
@@ -511,6 +528,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
       await session.run(
         `UNWIND $batch AS c
          MERGE (comp:Company {normalizedName: c.normalizedName})
+         ON CREATE SET comp.uuid = randomUUID()
          SET comp.name = c.name, comp.country = c.country, comp.totalFundingUsd = c.totalFundingUsd`,
         { batch }
       );
@@ -522,6 +540,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
       await session.run(
         `UNWIND $batch AS i
          MERGE (inv:InvestorOrg {normalizedName: i.normalizedName})
+         ON CREATE SET inv.uuid = randomUUID()
          SET inv.name = i.name`,
         { batch }
       );
@@ -533,6 +552,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
       await session.run(
         `UNWIND $batch AS l
          MERGE (loc:Location {name: l.name})
+         ON CREATE SET loc.uuid = randomUUID()
          SET loc.type = l.type`,
         { batch }
       );
@@ -544,6 +564,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
       await session.run(
         `UNWIND $batch AS a
          MERGE (art:Article {url: a.url})
+         ON CREATE SET art.uuid = randomUUID()
          SET art.title = a.title, art.publishedAt = a.publishedAt, art.author = a.author`,
         { batch }
       );
@@ -573,6 +594,7 @@ export async function syncToGraph(): Promise<GraphSyncResult> {
       await session.run(
         `UNWIND $batch AS f
          MERGE (fr:FundingRound {roundKey: f.roundKey})
+         ON CREATE SET fr.uuid = randomUUID()
          SET fr.amountUsd = f.amountUsd, fr.currency = f.currency, fr.stage = f.stage,
              fr.confidence = f.confidence, fr.articleId = f.articleId`,
         { batch }

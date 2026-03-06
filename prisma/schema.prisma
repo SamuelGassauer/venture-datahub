@@ -25,6 +25,7 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   accounts      Account[]
   sessions      Session[]
+  apiKeys       ApiKey[]
 
   @@map("users")
 }
@@ -215,6 +216,78 @@ model AppSetting {
   value String
 
   @@map("app_settings")
+}
+
+enum HistoricalUrlStatus {
+  discovered
+  scraped
+  processed
+  imported
+  skipped
+  error
+}
+
+model HistoricalUrl {
+  id              String              @id @default(cuid())
+  url             String              @unique
+  source          String                                    // e.g. "EU-Startups"
+  lastmod         DateTime?                                 // from sitemap
+  matchedKeywords String[]            @map("matched_keywords")
+  status          HistoricalUrlStatus @default(discovered)
+  errorMessage    String?             @map("error_message")
+  title           String?                                   // after scraping
+  content         String?             @db.Text              // after scraping
+  articleId       String?             @unique @map("article_id") // after import
+  crawlBatch      String?             @map("crawl_batch")   // groups crawl runs
+  scrapedAt       DateTime?           @map("scraped_at")
+  processedAt     DateTime?           @map("processed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([source])
+  @@index([crawlBatch])
+  @@index([createdAt(sort: Desc)])
+  @@map("historical_urls")
+}
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  name         String                              // Label, e.g. "inventure-2.0 production"
+  prefix       String                              // First 8 chars of key for display (e.g. "orb_a3f2...")
+  hashedKey    String    @unique @map("hashed_key") // SHA-256 hash of the full key
+  scopes       String[]  @default(["funding-rounds"]) // Which API endpoints this key can access
+  rateLimit    Int       @default(100) @map("rate_limit") // Requests per hour
+  isActive     Boolean   @default(true) @map("is_active")
+  expiresAt    DateTime? @map("expires_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+  requestCount Int       @default(0) @map("request_count")
+  createdById  String    @map("created_by_id")
+  createdBy    User      @relation(fields: [createdById], references: [id])
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  usageLogs    ApiKeyUsageLog[]
+
+  @@index([hashedKey])
+  @@index([isActive])
+  @@map("api_keys")
+}
+
+model ApiKeyUsageLog {
+  id        String   @id @default(cuid())
+  apiKeyId  String   @map("api_key_id")
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  endpoint  String
+  method    String
+  status    Int
+  ip        String?
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([apiKeyId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("api_key_usage_logs")
 }
 
 model Post {

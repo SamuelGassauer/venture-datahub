@@ -127,6 +127,8 @@ export function normalizeInvestorType(raw: string | null | undefined): InvestorT
 
 type InvestorFields = {
   type?: string | null;
+  hqCity?: string | null;
+  hqCountry?: string | null;
   stageFocus?: string[] | null;
   sectorFocus?: string[] | null;
   geoFocus?: string[] | null;
@@ -312,6 +314,8 @@ This is the investor's OWN website. All information here is about the investor i
 
 Rules:
 - For type use one of: "vc", "pe", "cvc", "angel_group", "family_office", "sovereign_wealth", "government", "accelerator", "incubator", "bank", "hedge_fund", "unknown"
+- For hqCity, extract the city where the firm is headquartered (e.g. "Berlin", "London", "San Francisco")
+- For hqCountry, extract the country where the firm is headquartered (e.g. "Germany", "UK", "USA")
 - For stageFocus, extract stages like ["Pre-Seed", "Seed", "Series A", "Series B", "Growth"]
 - For sectorFocus, use ONLY names from this list: ${JSON.stringify(SECTORS)}
 - For geoFocus, extract regions like ["DACH", "Europe", "Nordics", "Global"]
@@ -324,6 +328,8 @@ Rules:
 Respond with ONLY a JSON object, no markdown:
 {
   "type": string | null,
+  "hqCity": string | null,
+  "hqCountry": string | null,
   "stageFocus": string[] | null,
   "sectorFocus": string[] | null,
   "geoFocus": string[] | null,
@@ -333,7 +339,8 @@ Respond with ONLY a JSON object, no markdown:
   "foundedYear": number | null,
   "linkedinUrl": string | null,
   "fieldConfidence": {
-    "type": number, "stageFocus": number, "sectorFocus": number,
+    "type": number, "hqCity": number, "hqCountry": number,
+    "stageFocus": number, "sectorFocus": number,
     "geoFocus": number, "checkSizeMinUsd": number, "checkSizeMaxUsd": number,
     "aum": number, "foundedYear": number, "linkedinUrl": number
   }
@@ -391,6 +398,8 @@ async function extractFromWebsite(
     const p = JSON.parse(cleaned);
     return {
       type: p.type || null,
+      hqCity: p.hqCity || null,
+      hqCountry: p.hqCountry || null,
       stageFocus: Array.isArray(p.stageFocus) ? p.stageFocus : null,
       sectorFocus: Array.isArray(p.sectorFocus) ? p.sectorFocus : null,
       geoFocus: Array.isArray(p.geoFocus) ? p.geoFocus : null,
@@ -461,7 +470,7 @@ function mergeResults(websiteResult: LLMResult, articleResult: LLMResult): LLMRe
   const merged: LLMResult = { fieldConfidence: {} };
 
   const allFields: (keyof InvestorFields)[] = [
-    "type", "stageFocus", "sectorFocus", "geoFocus",
+    "type", "hqCity", "hqCountry", "stageFocus", "sectorFocus", "geoFocus",
     "checkSizeMinUsd", "checkSizeMaxUsd", "aum", "foundedYear",
     "website", "linkedinUrl",
   ];
@@ -509,7 +518,8 @@ async function saveToGraph(
   try {
     const current = await session.run(
       `MATCH (inv:InvestorOrg {normalizedName: $norm})
-       RETURN inv.type AS type, inv.stageFocus AS stageFocus,
+       RETURN inv.type AS type, inv.hqCity AS hqCity, inv.hqCountry AS hqCountry,
+              inv.stageFocus AS stageFocus,
               inv.sectorFocus AS sectorFocus, inv.geoFocus AS geoFocus,
               inv.checkSizeMinUsd AS checkSizeMinUsd, inv.checkSizeMaxUsd AS checkSizeMaxUsd,
               inv.aum AS aum, inv.foundedYear AS foundedYear,
@@ -532,6 +542,8 @@ async function saveToGraph(
     // Scalar fields
     const scalarFields: [keyof InvestorFields, string][] = [
       ["type", "type"],
+      ["hqCity", "hqCity"],
+      ["hqCountry", "hqCountry"],
       ["checkSizeMinUsd", "checkSizeMinUsd"],
       ["checkSizeMaxUsd", "checkSizeMaxUsd"],
       ["aum", "aum"],
@@ -600,6 +612,21 @@ async function saveToGraph(
       await session.run(
         `MATCH (inv:InvestorOrg {normalizedName: $norm}) SET inv.enrichedAt = datetime()`,
         { norm: normalizedName }
+      );
+    }
+
+    // Location node + HQ_IN relationship (from hqCountry)
+    const newCountry = params["hqCountry"] as string | undefined;
+    if (newCountry) {
+      await session.run(
+        `MERGE (l:Location {name: $country}) ON CREATE SET l.uuid = randomUUID(), l.type = 'country'`,
+        { country: newCountry }
+      );
+      await session.run(
+        `MATCH (inv:InvestorOrg {normalizedName: $norm})
+         MATCH (l:Location {name: $country})
+         MERGE (inv)-[:HQ_IN]->(l)`,
+        { norm: normalizedName, country: newCountry }
       );
     }
 

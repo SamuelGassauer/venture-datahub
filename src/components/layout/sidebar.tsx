@@ -22,12 +22,15 @@ import {
   BarChart3,
   Flame,
   Activity,
+  History,
   ChevronRight,
   ChevronDown,
   FileQuestion,
   LogOut,
   UserCog,
   Code2,
+  KeyRound,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,48 +51,53 @@ const navGroups: NavGroup[] = [
     label: "Monitor",
     adminOnly: true,
     items: [
-      { href: "/feed", label: "News Feed", icon: Newspaper },
-      { href: "/feeds", label: "Feed Sources", icon: Rss },
+      { href: "/app/feed", label: "News Feed", icon: Newspaper },
+      { href: "/app/feeds", label: "Feed Sources", icon: Rss },
+      { href: "/app/historical-import", label: "Historischer Import", icon: History },
     ],
   },
   {
     label: "Pipeline",
     adminOnly: true,
     items: [
-      { href: "/funding", label: "Deal Flow", icon: Flame },
-      { href: "/fund-events", label: "Fund Activity", icon: Landmark },
-      { href: "/company-value-indicator", label: "KPI Signals", icon: Activity },
+      { href: "/app/funding", label: "Deal Flow", icon: Flame },
+      { href: "/app/fund-events", label: "Fund Activity", icon: Landmark },
+      { href: "/app/company-value-indicator", label: "KPI Signals", icon: Activity },
     ],
   },
   {
     label: "Intelligence",
     items: [
-      { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-      { href: "/companies", label: "Companies", icon: Building2 },
-      { href: "/investors", label: "Investors", icon: Users },
-      { href: "/graph/funding-rounds", label: "Deals", icon: Handshake },
-      { href: "/graph/fund-closings", label: "Funds", icon: Landmark },
-      { href: "/graph/valuations", label: "Valuations", icon: BarChart3 },
-      { href: "/graph", label: "Explorer", icon: Share2, exact: true },
+      { href: "/app/dashboard", label: "Overview", icon: LayoutDashboard },
+      { href: "/app/companies", label: "Companies", icon: Building2 },
+      { href: "/app/investors", label: "Investors", icon: Users },
+      { href: "/app/graph/funding-rounds", label: "Deals", icon: Handshake },
+      { href: "/app/graph/fund-closings", label: "Funds", icon: Landmark },
+      { href: "/app/graph/valuations", label: "Valuations", icon: BarChart3 },
+      { href: "/app/graph", label: "Explorer", icon: Share2, exact: true },
     ],
   },
   {
     label: "Publish",
     adminOnly: true,
-    items: [{ href: "/posts", label: "Posts", icon: FileText }],
+    items: [{ href: "/app/posts", label: "Posts", icon: FileText }],
   },
   {
     label: "Admin",
     adminOnly: true,
-    items: [{ href: "/admin/users", label: "Users", icon: UserCog }],
+    items: [
+      { href: "/app/admin/users", label: "Users", icon: UserCog },
+      { href: "/app/admin/api-keys", label: "API Keys", icon: KeyRound },
+    ],
   },
 ];
 
 const docsItems: NavItem[] = [
-  { href: "/ontology", label: "Ontology", icon: GitFork },
-  { href: "/graphrag", label: "GraphRAG", icon: BookOpen },
-  { href: "/algorithms", label: "Algorithms", icon: Shield },
-  { href: "/docs/api", label: "API", icon: Code2 },
+  { href: "/app/ontology", label: "Ontology", icon: GitFork },
+  { href: "/app/graphrag", label: "GraphRAG", icon: BookOpen },
+  { href: "/app/algorithms", label: "Algorithms", icon: Shield },
+  { href: "/app/docs/api", label: "Orbit API", icon: Code2 },
+  { href: "/app/docs/data-api", label: "Data Provider API", icon: Database },
 ];
 
 export function Sidebar() {
@@ -142,7 +150,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-64 flex-col border-r border-foreground/[0.08] bg-foreground/[0.02] backdrop-blur-xl">
       <div className="flex h-14 items-center border-b border-foreground/[0.08] px-4">
         <Link
-          href="/dashboard"
+          href="/app/dashboard"
           className="flex items-center gap-2 font-semibold"
         >
           <Orbit className="h-5 w-5 text-primary" />
@@ -206,7 +214,7 @@ export function Sidebar() {
                 ))}
               </div>
             )}
-            <Link href="/settings" className={linkClasses({ href: "/settings", label: "Settings", icon: Settings })}>
+            <Link href="/app/settings" className={linkClasses({ href: "/app/settings", label: "Settings", icon: Settings })}>
               <Settings className="h-4 w-4" />
               Settings
             </Link>
