@@ -225,7 +225,24 @@ const responseCode = `{
 // Page
 // ---------------------------------------------------------------------------
 
+type LandingStats = {
+  investors: number;
+  startups: number;
+  rounds: number;
+  regions: number;
+  sectors: string[];
+};
+
 export default function HomePage() {
+  const [stats, setStats] = useState<LandingStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/landing-stats")
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white selection:bg-blue-500/30">
       {/* ── Nav ── */}
@@ -555,10 +572,10 @@ export default function HomePage() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
               {[
-                { value: 2800, suffix: "+", label: "Investors" },
-                { value: 12500, suffix: "+", label: "Startups" },
-                { value: 8400, suffix: "+", label: "Investments" },
-                { value: 15, label: "Regions" },
+                { value: stats?.investors ?? 0, suffix: "+", label: "Investors" },
+                { value: stats?.startups ?? 0, suffix: "+", label: "Startups" },
+                { value: stats?.rounds ?? 0, suffix: "+", label: "Funding Rounds" },
+                { value: stats?.regions ?? 0, label: "Countries" },
               ].map((stat) => (
                 <div key={stat.label} className="text-center">
                   <p className="text-[clamp(2rem,4vw,3rem)] font-black tracking-tight bg-gradient-to-b from-white to-white/50 bg-clip-text text-transparent">
@@ -570,20 +587,18 @@ export default function HomePage() {
             </div>
 
             {/* Sector pills */}
-            <div className="flex flex-wrap justify-center gap-2">
-              {[
-                "FINTECH", "CLIMATE", "DEEP TECH", "BIOTECH", "CYBERSECURITY",
-                "MACHINE LEARNING", "PROPTECH", "HEALTHCARE", "WEB3", "LOGISTICS",
-                "EDUCATION", "ENERGY", "ROBOTICS",
-              ].map((sector) => (
-                <span
-                  key={sector}
-                  className="rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-[11px] font-mono font-medium text-white/25"
-                >
-                  {sector}
-                </span>
-              ))}
-            </div>
+            {stats?.sectors && stats.sectors.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {stats.sectors.map((sector) => (
+                  <span
+                    key={sector}
+                    className="rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-[11px] font-mono font-medium text-white/25"
+                  >
+                    {sector}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
