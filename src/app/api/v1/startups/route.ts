@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     const companyNames = companyRecords.map((r) => toStr(r.get("c").properties.name)).filter(Boolean) as string[];
 
     // Second query: get funding rounds with investors for these companies
-    let roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[] }[]> = {};
+    const roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[] }[]> = {};
 
     if (companyNames.length > 0) {
       const roundsResult = await session.run(`

@@ -46,60 +46,6 @@ export default function ApiTestsPage() {
   const abortRef = useRef<AbortController | null>(null);
   const startTimeRef = useRef(0);
 
-  const runTests = useCallback(async () => {
-    setRunning(true);
-    setDone(false);
-    setSuites([]);
-    setTotalPassed(0);
-    setTotalFailed(0);
-    setTotalTime(0);
-    startTimeRef.current = Date.now();
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/admin/api-tests", {
-        method: "POST",
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        setRunning(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done: streamDone, value } = await reader.read();
-        if (streamDone) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const evt = JSON.parse(line.slice(6));
-            handleEvent(evt);
-          } catch { /* ignore parse errors */ }
-        }
-      }
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        console.error("Test stream error:", err);
-      }
-    } finally {
-      setRunning(false);
-      setDone(true);
-      setTotalTime(Date.now() - startTimeRef.current);
-    }
-  }, []);
-
   const handleEvent = useCallback((evt: Record<string, unknown>) => {
     switch (evt.type) {
       case "suite-start":
@@ -172,6 +118,60 @@ export default function ApiTestsPage() {
         break;
     }
   }, []);
+
+  const runTests = useCallback(async () => {
+    setRunning(true);
+    setDone(false);
+    setSuites([]);
+    setTotalPassed(0);
+    setTotalFailed(0);
+    setTotalTime(0);
+    startTimeRef.current = Date.now();
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch("/api/admin/api-tests", {
+        method: "POST",
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        setRunning(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            handleEvent(evt);
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        console.error("Test stream error:", err);
+      }
+    } finally {
+      setRunning(false);
+      setDone(true);
+      setTotalTime(Date.now() - startTimeRef.current);
+    }
+  }, [handleEvent]);
 
   const toggleSuite = (suite: string) => {
     setSuites((prev) =>

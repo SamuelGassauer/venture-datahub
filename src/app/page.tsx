@@ -600,7 +600,7 @@ export default function HomePage() {
             </span>
           </h2>
           <p className="text-[15px] text-white/35 mb-8 leading-relaxed">
-            We'll set up your scoped API key and support you with
+            We&apos;ll set up your scoped API key and support you with
             the integration. Write us — response within 24h.
           </p>
           <Link
