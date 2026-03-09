@@ -92,8 +92,10 @@ export type CompanyMetaInput = {
 
 export type SingleRoundData = {
   companyName: string;
+  amount?: number | null;
   amountUsd: number | null;
   currency: string;
+  fxRate?: number | null;
   stage: string | null;
   investors: string[];
   leadInvestor: string | null;
@@ -181,13 +183,15 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     await session.run(
       `MERGE (fr:FundingRound {roundKey: $roundKey})
        ON CREATE SET fr.uuid = randomUUID()
-       SET fr.amountUsd = $amountUsd, fr.currency = $currency,
-           fr.stage = $stage, fr.confidence = $confidence,
+       SET fr.amountUsd = $amountUsd, fr.amount = $amount, fr.currency = $currency,
+           fr.fxRate = $fxRate, fr.stage = $stage, fr.confidence = $confidence,
            fr.articleId = $articleId`,
       {
         roundKey,
+        amount: data.amount ?? null,
         amountUsd: data.amountUsd,
         currency: data.currency,
+        fxRate: data.fxRate ?? null,
         stage: data.stage,
         confidence: data.confidence,
         articleId: data.articles[0]?.id ?? roundKey,

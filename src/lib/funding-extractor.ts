@@ -181,6 +181,8 @@ const MULTIPLIERS: Record<string, number> = {
   billion: 1_000_000_000,
 };
 
+// Approximate rates for initial regex extraction. Real FX rates are applied
+// at ingest time via fx-rates.ts (frankfurter.app ECB data).
 const CURRENCY_TO_USD: Record<string, number> = {
   USD: 1, $: 1,
   EUR: 1.08, "€": 1.08,

@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { FundingExtraction } from "./funding-extractor";
 
+// Approximate rates for initial LLM extraction. Real FX rates are applied
+// at ingest time via fx-rates.ts (frankfurter.app ECB data).
 const CURRENCY_TO_USD: Record<string, number> = {
   USD: 1,
   EUR: 1.08,

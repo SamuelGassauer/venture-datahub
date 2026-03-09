@@ -75,11 +75,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "LLM did not identify a funding round" }, { status: 422 });
     }
 
+    // Re-calculate amountUsd with real FX rate from the article date
+    let fxRate: number | null = null;
+    if (llmResult.amount != null && llmResult.currency && llmResult.currency !== "USD") {
+      const articleDate = bestArticle.publishedAt?.toISOString().substring(0, 10)
+        ?? new Date().toISOString().substring(0, 10);
+      const { getUsdRate } = await import("@/lib/fx-rates");
+      fxRate = await getUsdRate(llmResult.currency, articleDate);
+      llmResult.amountUsd = Math.round(llmResult.amount * fxRate);
+      console.log(`[ingest] FX: ${llmResult.amount} ${llmResult.currency} × ${fxRate} = ${llmResult.amountUsd} USD (${articleDate})`);
+    } else if (llmResult.currency === "USD") {
+      fxRate = 1;
+    }
+
     // Sync to Neo4j
     const graphSummary = await syncSingleRoundToGraph({
       companyName: llmResult.companyName,
+      amount: llmResult.amount,
       amountUsd: llmResult.amountUsd,
       currency: llmResult.currency,
+      fxRate,
       stage: llmResult.stage,
       investors: llmResult.investors,
       leadInvestor: llmResult.leadInvestor,

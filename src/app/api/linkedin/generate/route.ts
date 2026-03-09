@@ -24,18 +24,18 @@ Deine Aufgabe: Schreibe LinkedIn-Posts auf Deutsch, die Insights aus dem europae
 Formatierungsregeln:
 - Nutze Zeilenumbrueche fuer Lesbarkeit
 - Bullet Points mit • statt -
-- Zahlen in Euro (nicht USD), gerundet
+- Zahlen in Euro (nicht USD), gerundet (Faktor ~0.92)
 - Firmennamen fett gedacht (auf LinkedIn: einfach normal schreiben)
 - Keine Links im Text
 
-Du bekommst echte Daten aus unserer GraphRAG-Datenbank mit europaeischen Startup-Funding-Daten.`;
+KRITISCH: Du bekommst echte Daten aus unserer GraphRAG-Datenbank. Verwende AUSSCHLIESSLICH die gelieferten Zahlen und Fakten. Erfinde NICHTS dazu. Wenn die Daten nicht ausreichen, schreib einen kuerzeren Post statt Zahlen zu erfinden.`;
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin();
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const { topic, data, style } = await request.json();
+    const { topic, graphData, style } = await request.json();
 
     const styleHint = style === "analysis"
       ? "Schreibe einen analytischen Post mit Daten-Einordnung und Trend-Analyse."
@@ -49,9 +49,13 @@ export async function POST(request: NextRequest) {
 
 Thema/Fokus: ${topic}
 
-Hier sind die aktuellen Daten aus unserer Datenbank:
+Die folgenden Daten wurden per GraphRAG direkt aus unserer Neo4j-Datenbank abgefragt. Jeder Block hat ein Label, das beschreibt was abgefragt wurde:
 
-${JSON.stringify(data, null, 2)}
+${graphData.map((block: { label: string; data: unknown[] }) =>
+  `### ${block.label}\n${JSON.stringify(block.data, null, 2)}`
+).join("\n\n")}
+
+WICHTIG: Nutze NUR die obigen Daten. Erfinde keine zusaetzlichen Zahlen, Firmennamen oder Fakten.
 
 Schreibe jetzt den LinkedIn-Post. Nur den Post-Text, keine Erklaerungen drumherum.`;
 

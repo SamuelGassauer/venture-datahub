@@ -79,14 +79,15 @@ export async function GET(request: NextRequest) {
       OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
       WITH fr, c, min(a.publishedAt) AS articleDate
       OPTIONAL MATCH (allInv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-      WITH fr.uuid AS roundUuid, fr.amountUsd AS amountUsd, fr.currency AS currency,
+      WITH fr.uuid AS roundUuid, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
+           fr.currency AS currency, fr.fxRate AS fxRate,
            fr.stage AS stage, fr.confidence AS confidence,
            c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
            articleDate,
            collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
       ${investorCondition}
       RETURN roundUuid, startupUuid, startupName, startupNormalizedName,
-             amountUsd, currency, stage, confidence, articleDate, investors
+             originalAmount, amountUsd, currency, fxRate, stage, confidence, articleDate, investors
       ORDER BY ${sortField} ${sortDir}
       SKIP $skip LIMIT $limit
     `, params);
@@ -106,8 +107,10 @@ export async function GET(request: NextRequest) {
         startupExternalId: startupId,
         startupName: toStr(r.get("startupName")),
         investmentDate: articleDate ? articleDate.substring(0, 10) : null,
+        originalAmount: toNum(r.get("originalAmount")) || null,
         totalRoundSizeUsd: toNum(r.get("amountUsd")),
         currency: toStr(r.get("currency")),
+        fxRate: toNum(r.get("fxRate")) || null,
         stage: toStr(r.get("stage")),
         confidence: toNum(r.get("confidence")),
         investors: rawInvestors
