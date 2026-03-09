@@ -32,6 +32,7 @@ import {
   KeyRound,
   FlaskConical,
   Database,
+  Linkedin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,10 @@ const navGroups: NavGroup[] = [
   {
     label: "Publish",
     adminOnly: true,
-    items: [{ href: "/app/posts", label: "Posts", icon: FileText }],
+    items: [
+      { href: "/app/posts", label: "Posts", icon: FileText },
+      { href: "/app/linkedin", label: "LinkedIn", icon: Linkedin },
+    ],
   },
   {
     label: "Admin",
