@@ -169,7 +169,7 @@ function AnimatedNumber({ target, suffix = "" }: { target: number; suffix?: stri
 
   return (
     <span ref={ref} className="tabular-nums">
-      {value.toLocaleString("de-DE")}{suffix}
+      {value.toLocaleString("en-US")}{suffix}
     </span>
   );
 }
@@ -246,7 +246,7 @@ export default function HomePage() {
               Sign in
             </Link>
             <Link
-              href="mailto:sam@inventure.capital?subject=Orbit%20API%20Access"
+              href="mailto:samuel.gassauer@inventure.de?subject=Orbit%20API%20Access"
               className="apple-btn-blue px-3.5 py-1.5 text-[13px] font-medium"
             >
               Get Access
@@ -288,24 +288,24 @@ export default function HomePage() {
 
           {/* Sub */}
           <p className="text-[17px] text-white/40 tracking-[-0.01em] max-w-xl mx-auto mb-10 leading-relaxed animate-fade-in-up animation-delay-100">
-            Strukturierte Daten zu Funds, Startups und Investments.
-            Cursor-paginiert, inkrementell synchronisiert, tagesaktuell.
+            Structured data on funds, startups, and investments.
+            Cursor-paginated, incrementally synced, updated daily.
           </p>
 
           {/* CTAs */}
           <div className="flex items-center justify-center gap-4 animate-fade-in-up animation-delay-200">
             <Link
-              href="mailto:sam@inventure.capital?subject=Orbit%20API%20Access"
+              href="mailto:samuel.gassauer@inventure.de?subject=Orbit%20API%20Access"
               className="apple-btn-blue flex items-center gap-2.5 px-6 py-3 text-[15px] font-semibold"
             >
-              API-Zugang anfragen
+              Request API Access
               <ArrowRight className="h-4 w-4" />
             </Link>
             <a
               href="#api"
               className="flex items-center gap-2 rounded-[14px] border border-white/[0.1] bg-white/[0.03] px-6 py-3 text-[15px] font-medium text-white/60 hover:text-white/80 hover:bg-white/[0.06] transition-all"
             >
-              Docs lesen
+              Read Docs
               <ChevronRight className="h-4 w-4" />
             </a>
           </div>
@@ -323,7 +323,7 @@ export default function HomePage() {
               Three Endpoints. One API.
             </p>
             <h2 className="text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight">
-              Alles was du brauchst
+              Everything you need
             </h2>
           </div>
 
@@ -335,7 +335,7 @@ export default function HomePage() {
                 endpoint: "/api/v1/investors",
                 color: "blue",
                 fields: "16 fields",
-                desc: "Investment-Profile, Ticket-Sizes, AUM, Sektor- und Geo-Fokus. Website als primaerer Dedup-Key.",
+                desc: "Investment profiles, ticket sizes, AUM, sector & geo focus. Website as primary dedup key.",
               },
               {
                 icon: Building2,
@@ -343,7 +343,7 @@ export default function HomePage() {
                 endpoint: "/api/v1/startups",
                 color: "emerald",
                 fields: "10 fields",
-                desc: "Firmendaten, Gruender, Funding-Stage und Sektor-Zuordnung. Inkl. optionaler Founder-Objekte.",
+                desc: "Company data, founders, funding stage, and sector classification. Incl. optional founder objects.",
               },
               {
                 icon: Handshake,
@@ -351,7 +351,7 @@ export default function HomePage() {
                 endpoint: "/api/v1/investments",
                 color: "violet",
                 fields: "11 fields",
-                desc: "Einzelne Beteiligungen: Cheque Size vs. Rundengroesse, Co-Investoren und Round Type.",
+                desc: "Individual participations: cheque size vs. round size, co-investors, and round type.",
               },
             ].map((entity) => (
               <div
@@ -414,7 +414,7 @@ export default function HomePage() {
               Developer Experience
             </p>
             <h2 className="text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight">
-              Ein Request. Alle Daten.
+              One request. All data.
             </h2>
           </div>
 
@@ -465,7 +465,7 @@ export default function HomePage() {
               href="/playground"
               className="inline-flex items-center gap-2 rounded-[14px] border border-white/[0.1] bg-white/[0.03] px-5 py-2.5 text-[13px] font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-all"
             >
-              Im Playground ausprobieren
+              Try in Playground
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -494,18 +494,18 @@ export default function HomePage() {
                 <h3 className="text-[17px] font-semibold tracking-[-0.02em]">Incremental Sync</h3>
               </div>
               <p className="text-[14px] text-white/35 leading-relaxed mb-6 max-w-lg">
-                Speichere den Timestamp deines letzten Syncs und fordere nur geaenderte Records an.
-                Kein Full-Dump noetig — wir liefern nur das Delta.
+                Store the timestamp of your last sync and request only changed records.
+                No full dump needed — we deliver only the delta.
               </p>
               <div className="rounded-[10px] border border-white/[0.06] bg-[#0f0f11] p-4">
                 <pre className="text-[12px] font-mono leading-relaxed">
                   <code>
-                    <span className="text-white/30">{"// Erster Sync"}</span>
+                    <span className="text-white/30">{"// First sync"}</span>
                     {"\n"}
                     <span className="text-violet-400">GET</span>{" "}
                     <span className="text-white/60">/api/v1/investors</span>
                     {"\n\n"}
-                    <span className="text-white/30">{"// Ab jetzt nur Deltas"}</span>
+                    <span className="text-white/30">{"// From now on, deltas only"}</span>
                     {"\n"}
                     <span className="text-violet-400">GET</span>{" "}
                     <span className="text-white/60">/api/v1/investors</span>
@@ -523,7 +523,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-[15px] font-semibold tracking-[-0.02em] mb-2">Scoped API Keys</h3>
                 <p className="text-[13px] text-white/35 leading-relaxed">
-                  Bearer Token Auth mit granularen Scopes, Rate Limiting und realtime Usage-Tracking.
+                  Bearer token auth with granular scopes, rate limiting, and real-time usage tracking.
                 </p>
               </div>
               <div className="rounded-[16px] border border-white/[0.06] bg-white/[0.02] p-6">
@@ -532,7 +532,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-[15px] font-semibold tracking-[-0.02em] mb-2">Cursor Pagination</h3>
                 <p className="text-[13px] text-white/35 leading-relaxed">
-                  Stabile Cursor statt fragiler Offsets. Konsistent auch bei Millionen Records.
+                  Stable cursors instead of fragile offsets. Consistent even with millions of records.
                 </p>
               </div>
             </div>
@@ -549,7 +549,7 @@ export default function HomePage() {
                 Live Data
               </p>
               <h2 className="text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight">
-                Das europaeische Oekosystem — quantifiziert
+                The European ecosystem — quantified
               </h2>
             </div>
 
@@ -558,7 +558,7 @@ export default function HomePage() {
                 { value: 2800, suffix: "+", label: "Investors" },
                 { value: 12500, suffix: "+", label: "Startups" },
                 { value: 8400, suffix: "+", label: "Investments" },
-                { value: 15, label: "Regionen" },
+                { value: 15, label: "Regions" },
               ].map((stat) => (
                 <div key={stat.label} className="text-center">
                   <p className="text-[clamp(2rem,4vw,3rem)] font-black tracking-tight bg-gradient-to-b from-white to-white/50 bg-clip-text text-transparent">
@@ -593,21 +593,21 @@ export default function HomePage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-blue-500/[0.06] blur-[120px]" />
         <div className="max-w-2xl mx-auto text-center relative">
           <h2 className="text-[clamp(1.8rem,4vw,3rem)] font-black tracking-tight mb-4">
-            Bereit fuer den
+            Ready for
             <br />
             <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              API-Zugang?
+              API access?
             </span>
           </h2>
           <p className="text-[15px] text-white/35 mb-8 leading-relaxed">
-            Wir richten deinen Scoped API Key ein und unterstuetzen
-            bei der Integration. Schreib uns — Antwort innerhalb 24h.
+            We'll set up your scoped API key and support you with
+            the integration. Write us — response within 24h.
           </p>
           <Link
-            href="mailto:sam@inventure.capital?subject=Orbit%20API%20Access"
+            href="mailto:samuel.gassauer@inventure.de?subject=Orbit%20API%20Access"
             className="apple-btn-blue inline-flex items-center gap-2.5 px-7 py-3.5 text-[15px] font-semibold"
           >
-            sam@inventure.capital
+            samuel.gassauer@inventure.de
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

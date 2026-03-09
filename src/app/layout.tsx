@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "RSS Scraper - EU Startup Funding Tracker",
-  description: "Track European startup funding rounds from RSS feeds",
+  title: "Orbit — European Startup Funding Intelligence",
+  description: "European startup funding data, investor profiles, and deal intelligence by Inventure Capital",
 };
 
 export default function RootLayout({

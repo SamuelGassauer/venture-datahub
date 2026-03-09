@@ -19,7 +19,7 @@ export async function GET() {
     grouped.get(cat)!.push(feed);
   }
 
-  let opml = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n<head><title>RSS Scraper Feeds</title></head>\n<body>\n`;
+  let opml = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n<head><title>Orbit Feeds</title></head>\n<body>\n`;
 
   for (const [category, catFeeds] of Array.from(grouped.entries())) {
     opml += `  <outline text="${escapeXml(category)}" title="${escapeXml(category)}">\n`;

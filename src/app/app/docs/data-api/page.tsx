@@ -10,10 +10,10 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={() => {
         navigator.clipboard.writeText(text);
-        toast.success("Kopiert");
+        toast.success("Copied");
       }}
       className="absolute top-2 right-2 glass-capsule-btn p-1.5 text-foreground/40 hover:text-foreground/70"
-      title="Kopieren"
+      title="Copy"
     >
       <Copy className="h-3.5 w-3.5" />
     </button>
@@ -301,12 +301,12 @@ const curlExample = `curl -X GET "https://orbit.inventure.capital/api/v1/investo
   -H "Authorization: Bearer orb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"`;
 
 const errors = [
-  { status: "401", body: '{"error": "Missing or invalid API key"}', desc: "Kein oder ungueltiger API Key" },
-  { status: "403", body: '{"error": "API key has been revoked"}', desc: "Key wurde deaktiviert" },
-  { status: "403", body: '{"error": "API key has expired"}', desc: "Key ist abgelaufen" },
-  { status: "403", body: '{"error": "Insufficient scope"}', desc: "Fehlende Berechtigung fuer diesen Endpoint" },
-  { status: "429", body: '{"error": "Rate limit exceeded"}', desc: "Rate Limit ueberschritten" },
-  { status: "500", body: '{"error": "Internal server error"}', desc: "Interner Serverfehler" },
+  { status: "401", body: '{"error": "Missing or invalid API key"}', desc: "Missing or invalid API key" },
+  { status: "403", body: '{"error": "API key has been revoked"}', desc: "Key has been deactivated" },
+  { status: "403", body: '{"error": "API key has expired"}', desc: "Key has expired" },
+  { status: "403", body: '{"error": "Insufficient scope"}', desc: "Missing permission for this endpoint" },
+  { status: "429", body: '{"error": "Rate limit exceeded"}', desc: "Rate limit exceeded" },
+  { status: "500", body: '{"error": "Internal server error"}', desc: "Internal server error" },
 ];
 
 export default function DataApiDocsPage() {
@@ -331,10 +331,10 @@ export default function DataApiDocsPage() {
         <div className="max-w-4xl space-y-6 pb-8">
           {/* Overview */}
           <section>
-            <SectionHeading>Uebersicht</SectionHeading>
+            <SectionHeading>Overview</SectionHeading>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Die Data Provider API stellt strukturierte Daten zu Investors, Startups und Investments
-              ueber drei paginierte REST-Endpoints bereit. Alle Endpoints unterstuetzen Incremental Sync
+              The Data Provider API provides structured data on investors, startups, and investments
+              via three paginated REST endpoints. All endpoints support incremental sync
               via <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">updated_since</code>.
             </p>
             <div className="lg-inset rounded-[16px]">
@@ -348,7 +348,7 @@ export default function DataApiDocsPage() {
                       Endpoint
                     </th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                      Beschreibung
+                      Description
                     </th>
                   </tr>
                 </thead>
@@ -359,7 +359,7 @@ export default function DataApiDocsPage() {
                       GET /api/v1/investors
                     </td>
                     <td className="px-3 py-2 text-foreground/45">
-                      VC-Firmen und deren Investment-Profile
+                      VC firms and their investment profiles
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
@@ -368,7 +368,7 @@ export default function DataApiDocsPage() {
                       GET /api/v1/startups
                     </td>
                     <td className="px-3 py-2 text-foreground/45">
-                      Unternehmen mit Venture Funding
+                      Companies with venture funding
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
@@ -377,7 +377,7 @@ export default function DataApiDocsPage() {
                       GET /api/v1/investments
                     </td>
                     <td className="px-3 py-2 text-foreground/45">
-                      Einzelne Beteiligungen eines Funds an einer Runde
+                      Individual fund participations in a funding round
                     </td>
                   </tr>
                 </tbody>
@@ -387,35 +387,33 @@ export default function DataApiDocsPage() {
 
           {/* Auth */}
           <section>
-            <SectionHeading>Authentifizierung</SectionHeading>
+            <SectionHeading>Authentication</SectionHeading>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Alle Endpoints erfordern einen API Key als Bearer Token im{" "}
+              All endpoints require an API key as a Bearer token in the{" "}
               <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">
                 Authorization
               </code>{" "}
-              Header. Keys koennen unter{" "}
+              header. Keys can be created under{" "}
               <Link
                 href="/app/admin/api-keys"
                 className="text-blue-600 dark:text-blue-400 hover:underline"
               >
                 Admin &rarr; API Keys
-              </Link>{" "}
-              erstellt werden.
+              </Link>.
             </p>
             <CodeBlock code="Authorization: Bearer orb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
             <div className="mt-3 space-y-1 text-[12px] text-foreground/45">
               <p>
-                &bull; Keys beginnen mit{" "}
-                <code className="font-mono bg-foreground/[0.04] px-1 rounded">orb_</code> und
-                werden beim Erstellen einmalig angezeigt
+                &bull; Keys start with{" "}
+                <code className="font-mono bg-foreground/[0.04] px-1 rounded">orb_</code> and
+                are displayed once upon creation
               </p>
               <p>
-                &bull; Jeder Key hat definierte <strong>Scopes</strong> — fuer Data Provider API
-                wird der Scope{" "}
-                <code className="font-mono bg-foreground/[0.04] px-1 rounded">data-provider</code>{" "}
-                benoetigt
+                &bull; Each key has defined <strong>Scopes</strong> — the Data Provider API
+                requires the scope{" "}
+                <code className="font-mono bg-foreground/[0.04] px-1 rounded">data-provider</code>
               </p>
-              <p>&bull; Rate Limits gelten pro Key (Standard: 1.000 req/h)</p>
+              <p>&bull; Rate limits apply per key (default: 1,000 req/h)</p>
             </div>
           </section>
 
@@ -423,10 +421,10 @@ export default function DataApiDocsPage() {
           <section>
             <SectionHeading>Pagination & Incremental Sync</SectionHeading>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Alle drei Endpoints verwenden Cursor-basierte Pagination. Fuer effiziente Syncs
-              kann <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">updated_since</code>{" "}
-              uebergeben werden — es werden nur Records zurueckgegeben, bei denen{" "}
-              <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">updatedAt &gt;= updated_since</code>.
+              All three endpoints use cursor-based pagination. For efficient syncs,
+              pass <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">updated_since</code>{" "}
+              — only records where{" "}
+              <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">updatedAt &gt;= updated_since</code> are returned.
             </p>
             <div className="lg-inset rounded-[16px]">
               <table className="w-full text-[13px] tracking-[-0.01em]">
@@ -439,7 +437,7 @@ export default function DataApiDocsPage() {
                       Type
                     </th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                      Beschreibung
+                      Description
                     </th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
                       Default
@@ -482,7 +480,7 @@ export default function DataApiDocsPage() {
 
           {/* Request example */}
           <section>
-            <SectionHeading>Beispiel-Request</SectionHeading>
+            <SectionHeading>Example Request</SectionHeading>
             <CodeBlock code={curlExample} />
           </section>
 
@@ -497,8 +495,8 @@ export default function DataApiDocsPage() {
           <CollapsibleSection title="Investors" defaultOpen>
             <EndpointBadge method="GET" path="/api/v1/investors" scope="data-provider" />
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em]">
-              Liefert alle Investors mit Investment-Profil, Ticket-Sizes und Fokus-Bereichen.
-              Website ist der primaere Dedup-Key, LinkedIn URL der Fallback.
+              Returns all investors with investment profile, ticket sizes, and focus areas.
+              Website is the primary dedup key, LinkedIn URL is the fallback.
             </p>
             <FieldTable fields={fundFields} />
             <div>
@@ -514,7 +512,7 @@ export default function DataApiDocsPage() {
           <CollapsibleSection title="Startups">
             <EndpointBadge method="GET" path="/api/v1/startups" scope="data-provider" />
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em]">
-              Liefert alle Startups mit Firmendaten, Sektor-Zuordnung und optionalen Gruender-Infos.
+              Returns all startups with company data, sector classification, and optional founder information.
             </p>
             <FieldTable fields={startupFields} />
             <div>
@@ -536,11 +534,11 @@ export default function DataApiDocsPage() {
           <CollapsibleSection title="Investments">
             <EndpointBadge method="GET" path="/api/v1/investments" scope="data-provider" />
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-2">
-              Jeder Record repraesentiert die Beteiligung eines einzelnen Investors an einer Funding-Runde.{" "}
+              Each record represents a single investor&apos;s participation in a funding round.{" "}
               <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">investmentAmountUsd</code>{" "}
-              ist der Cheque dieses Funds,{" "}
+              is this fund&apos;s cheque size,{" "}
               <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">totalRoundSizeUsd</code>{" "}
-              die gesamte Rundengroesse.
+              is the total round size.
             </p>
             <FieldTable fields={investmentFields} />
             <div>
@@ -554,16 +552,16 @@ export default function DataApiDocsPage() {
 
           {/* Data Format */}
           <section>
-            <SectionHeading>Datenformat</SectionHeading>
+            <SectionHeading>Data Format</SectionHeading>
             <div className="lg-inset rounded-[16px]">
               <table className="w-full text-[13px] tracking-[-0.01em]">
                 <thead>
                   <tr className="glass-table-header">
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                      Regel
+                      Rule
                     </th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                      Detail
+                      Details
                     </th>
                   </tr>
                 </thead>
@@ -571,26 +569,26 @@ export default function DataApiDocsPage() {
                   <tr className="lg-inset-table-row">
                     <td className="px-3 py-2 font-semibold text-foreground/85">IDs</td>
                     <td className="px-3 py-2 text-foreground/45">
-                      Jeder Record hat eine stabile <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">externalId</code> die sich zwischen Syncs nicht aendert
+                      Each record has a stable <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">externalId</code> that does not change between syncs
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
-                    <td className="px-3 py-2 font-semibold text-foreground/85">Geldbetraege</td>
+                    <td className="px-3 py-2 font-semibold text-foreground/85">Monetary Amounts</td>
                     <td className="px-3 py-2 text-foreground/45">
-                      Raw Numbers in USD (keine formatierten Strings wie &quot;$1.5M&quot;)
+                      Raw numbers in USD (no formatted strings like &quot;$1.5M&quot;)
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
-                    <td className="px-3 py-2 font-semibold text-foreground/85">Daten</td>
+                    <td className="px-3 py-2 font-semibold text-foreground/85">Dates</td>
                     <td className="px-3 py-2 text-foreground/45">
-                      ISO 8601 — <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">YYYY-MM-DD</code> fuer Daten,{" "}
-                      <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">YYYY-MM-DDTHH:mm:ssZ</code> fuer Timestamps
+                      ISO 8601 — <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">YYYY-MM-DD</code> for dates,{" "}
+                      <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">YYYY-MM-DDTHH:mm:ssZ</code> for timestamps
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
                     <td className="px-3 py-2 font-semibold text-foreground/85">Multi-Selects</td>
                     <td className="px-3 py-2 text-foreground/45">
-                      JSON Arrays von Strings — keine Komma-getrennten Strings
+                      JSON arrays of strings — no comma-separated strings
                     </td>
                   </tr>
                   <tr className="lg-inset-table-row">
@@ -616,7 +614,7 @@ export default function DataApiDocsPage() {
                       Body
                     </th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                      Beschreibung
+                      Description
                     </th>
                   </tr>
                 </thead>
@@ -639,19 +637,19 @@ export default function DataApiDocsPage() {
           <section>
             <SectionHeading>Rate Limiting</SectionHeading>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Jeder API Key hat ein individuelles Rate Limit. Response-Header bei jeder Anfrage:
+              Each API key has an individual rate limit. Response headers on every request:
             </p>
             <CodeBlock
               code={`X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 997
-Retry-After: 60          // nur bei 429`}
+Retry-After: 60          // only on 429`}
             />
           </section>
 
           {/* Appendix: Sectors */}
           <CollapsibleSection title="Appendix A — Sector Codes">
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Kanonische Sector-Codes fuer <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">sectorFocus</code> und{" "}
+              Canonical sector codes for <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">sectorFocus</code> and{" "}
               <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">sector</code>.
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -669,7 +667,7 @@ Retry-After: 60          // nur bei 429`}
           {/* Appendix: Geo */}
           <CollapsibleSection title="Appendix B — Geography Codes">
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Kanonische Geo-Codes fuer <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">geoFocus</code>.
+              Canonical geography codes for <code className="font-mono bg-foreground/[0.04] px-1 rounded text-[12px]">geoFocus</code>.
             </p>
             <div className="flex flex-wrap gap-1.5">
               {geoCodes.map((code) => (
@@ -684,7 +682,7 @@ Retry-After: 60          // nur bei 429`}
           </CollapsibleSection>
 
           {/* Appendix: Round Types */}
-          <CollapsibleSection title="Appendix C — Enum-Werte">
+          <CollapsibleSection title="Appendix C — Enum Values">
             <div className="space-y-3">
               <div>
                 <p className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-2">
@@ -715,7 +713,7 @@ Retry-After: 60          // nur bei 429`}
 
           {/* Sync Strategy */}
           <section>
-            <SectionHeading>Sync-Strategie</SectionHeading>
+            <SectionHeading>Sync Strategy</SectionHeading>
             <div className="lg-inset rounded-[14px] p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/8 text-[12px] font-semibold text-blue-600 dark:text-blue-400">
@@ -724,8 +722,8 @@ Retry-After: 60          // nur bei 429`}
                 <div>
                   <p className="text-[13px] font-semibold text-foreground/85">Initial Import</p>
                   <p className="text-[12px] text-foreground/45">
-                    Alle drei Endpoints ohne <code className="font-mono bg-foreground/[0.04] px-1 rounded">updated_since</code> aufrufen.
-                    Cursor-Pagination bis <code className="font-mono bg-foreground/[0.04] px-1 rounded">hasMore: false</code>.
+                    Call all three endpoints without <code className="font-mono bg-foreground/[0.04] px-1 rounded">updated_since</code>.
+                    Use cursor pagination until <code className="font-mono bg-foreground/[0.04] px-1 rounded">hasMore: false</code>.
                   </p>
                 </div>
               </div>
@@ -736,9 +734,9 @@ Retry-After: 60          // nur bei 429`}
                 <div>
                   <p className="text-[13px] font-semibold text-foreground/85">Incremental Syncs</p>
                   <p className="text-[12px] text-foreground/45">
-                    Timestamp des letzten erfolgreichen Syncs speichern und als{" "}
-                    <code className="font-mono bg-foreground/[0.04] px-1 rounded">updated_since</code> mitgeben.
-                    Empfohlen: taeglich oder woechentlich.
+                    Store the timestamp of the last successful sync and pass it as{" "}
+                    <code className="font-mono bg-foreground/[0.04] px-1 rounded">updated_since</code>.
+                    Recommended: daily or weekly.
                   </p>
                 </div>
               </div>
@@ -749,9 +747,9 @@ Retry-After: 60          // nur bei 429`}
                 <div>
                   <p className="text-[13px] font-semibold text-foreground/85">Deletions</p>
                   <p className="text-[12px] text-foreground/45">
-                    Geloeschte Records werden mit einem{" "}
-                    <code className="font-mono bg-foreground/[0.04] px-1 rounded">deletedAt</code> Timestamp
-                    zurueckgegeben und koennen lokal entfernt werden.
+                    Deleted records are returned with a{" "}
+                    <code className="font-mono bg-foreground/[0.04] px-1 rounded">deletedAt</code> timestamp
+                    and can be removed locally.
                   </p>
                 </div>
               </div>

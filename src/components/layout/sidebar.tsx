@@ -30,6 +30,7 @@ import {
   UserCog,
   Code2,
   KeyRound,
+  FlaskConical,
   Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/app/admin/users", label: "Users", icon: UserCog },
       { href: "/app/admin/api-keys", label: "API Keys", icon: KeyRound },
+      { href: "/app/admin/api-tests", label: "API Tests", icon: FlaskConical },
     ],
   },
 ];

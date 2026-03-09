@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
 
   // Filters
+  const idSearch = searchParams.get("id");
   const nameSearch = searchParams.get("name");
   const country = searchParams.get("country");
   const sector = searchParams.get("sector");
@@ -43,15 +45,23 @@ export async function GET(request: NextRequest) {
       } catch { /* invalid cursor */ }
     }
 
-    const conditions: string[] = [];
+    const matchConditions: string[] = [];
     const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
 
-    if (updatedSince) { conditions.push(`c.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
-    if (nameSearch) { conditions.push(`toLower(c.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
-    if (country) { conditions.push(`(c.country = $country OR loc.name = $country)`); params.country = country; }
-    if (sector) { conditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) CONTAINS toLower($sector))`); params.sector = sector; }
+    if (updatedSince) { matchConditions.push(`c.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
+    if (idSearch) { matchConditions.push(`c.uuid = $idSearch`); params.idSearch = idSearch; }
+    if (nameSearch) { matchConditions.push(`toLower(c.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
+    if (sector) { matchConditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) CONTAINS toLower($sector))`); params.sector = sector; }
+    const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    // Country filter: defaults to Europe-only, pass country=all to disable
+    let countryFilter = "";
+    if (country && country.toLowerCase() !== "all") {
+      countryFilter = `WHERE (c.country = $country OR hq = $country)`;
+      params.country = country;
+    } else if (!country) {
+      countryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
+    }
 
     // Stage filter is applied after aggregation
     const havingClause = stage ? `WHERE toLower(latestStage) = toLower($stage)` : "";
@@ -59,39 +69,80 @@ export async function GET(request: NextRequest) {
 
     const sortField = sortBy === "founded" ? "c.foundedYear" : sortBy === "updated" ? "c.updatedAt" : "c.name";
 
-    const result = await session.run(`
+    // First query: get companies (paginated)
+    const companyResult = await session.run(`
       MATCH (c:Company)
+      ${matchWhereClause}
       OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
-      ${whereClause}
-      OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
-      WITH c,
-           collect(DISTINCT loc.name)[0] AS hq,
-           max(fr.stage) AS latestStage
+      WITH c, collect(DISTINCT loc.name)[0] AS hq
+      ${countryFilter}
+      OPTIONAL MATCH (c)-[:RAISED]->(fr0:FundingRound)
+      WITH c, hq, max(fr0.stage) AS latestStage
       ${havingClause}
       RETURN c, hq, latestStage
       ORDER BY ${sortField} ${sortDir}
       SKIP $skip LIMIT $limit
     `, params);
 
-    const hasMore = result.records.length > limit;
-    const records = result.records.slice(0, limit);
+    const hasMore = companyResult.records.length > limit;
+    const companyRecords = companyResult.records.slice(0, limit);
 
-    const data = records.map((r) => {
+    // Collect company names for funding round query
+    const companyNames = companyRecords.map((r) => toStr(r.get("c").properties.name)).filter(Boolean) as string[];
+
+    // Second query: get funding rounds with investors for these companies
+    let roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[] }[]> = {};
+
+    if (companyNames.length > 0) {
+      const roundsResult = await session.run(`
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.name IN $companyNames
+        OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
+        WITH c.name AS companyName, fr,
+             collect(CASE WHEN inv.name IS NOT NULL THEN { uuid: inv.uuid, name: inv.name, role: rel.role } ELSE NULL END) AS rawInvestors
+        RETURN companyName, fr.uuid AS roundUuid, fr.stage AS stage, fr.amountUsd AS amountUsd,
+               COALESCE(fr.date, fr.announcedDate) AS date,
+               [i IN rawInvestors WHERE i IS NOT NULL] AS investors
+        ORDER BY date DESC
+      `, { companyNames });
+
+      for (const r of roundsResult.records) {
+        const name = r.get("companyName") as string;
+        if (!roundsByCompany[name]) roundsByCompany[name] = [];
+        const invs = (r.get("investors") as { uuid: string | null; name: string | null; role: string | null }[])
+          .map((i) => ({
+            externalId: toStr(i.uuid),
+            name: toStr(i.name),
+            role: i.role ? toStr(i.role) : "participant",
+          }));
+        const amountRaw = r.get("amountUsd");
+        roundsByCompany[name].push({
+          roundExternalId: toStr(r.get("roundUuid")),
+          stage: toStr(r.get("stage")),
+          amountUsd: amountRaw != null ? (typeof amountRaw === "object" && "toNumber" in amountRaw ? (amountRaw as { toNumber: () => number }).toNumber() : Number(amountRaw)) : null,
+          date: toStr(r.get("date")),
+          investors: invs,
+        });
+      }
+    }
+
+    const data = companyRecords.map((r) => {
       const c = r.get("c").properties;
       const sector = toStrArr(c.sector);
       const subsector = toStr(c.subsector);
       if (subsector && !sector.includes(subsector)) sector.push(subsector);
+      const name = toStr(c.name);
 
       return {
         externalId: toStr(c.uuid) || toStr(c.normalizedName),
-        name: toStr(c.name),
+        name,
         website: toStr(c.website),
         hq: toStr(r.get("hq")) || toStr(c.country),
         description: toStr(c.description),
         foundedAt: c.foundedYear ? `${c.foundedYear}-01-01` : null,
         sector,
         stage: toStr(r.get("latestStage")),
-        founders: null, // Not stored in graph yet
+        fundingRounds: roundsByCompany[name || ""] || [],
         updatedAt: toStr(c.updatedAt) || toStr(c.enrichedAt) || new Date().toISOString(),
       };
     });

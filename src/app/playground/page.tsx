@@ -25,6 +25,7 @@ import {
   Trash2,
   Keyboard,
   ArrowUpRight,
+  CircleDollarSign,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -48,8 +49,8 @@ const ENDPOINTS: Endpoint[] = [
     path: "/api/v1/investors",
     icon: Landmark,
     color: "blue",
-    description: "VC Funds, Angels & Investment-Firmen",
-    fields: ["externalId", "name", "logoUrl", "dealCount", "hqCity", "hqCountry", "stages", "sectors", "geoFocus", "roundRole", "website"],
+    description: "VC funds, angels & investment firms",
+    fields: ["externalId", "name", "logoUrl", "dealCount", "hq", "sectorFocus", "geoFocus", "roundRole", "stages", "website"],
   },
   {
     id: "startups",
@@ -57,8 +58,8 @@ const ENDPOINTS: Endpoint[] = [
     path: "/api/v1/startups",
     icon: Building2,
     color: "emerald",
-    description: "Venture-finanzierte Unternehmen",
-    fields: ["externalId", "name", "hq", "sector", "stage", "foundedAt", "website"],
+    description: "Venture-funded companies",
+    fields: ["externalId", "name", "hq", "sector", "stage", "fundingRounds", "foundedAt", "website"],
   },
   {
     id: "investments",
@@ -66,8 +67,17 @@ const ENDPOINTS: Endpoint[] = [
     path: "/api/v1/investments",
     icon: Handshake,
     color: "violet",
-    description: "Beteiligungen & Funding Rounds",
-    fields: ["roundExternalId", "startupName", "stage", "amountUsd", "investors", "date"],
+    description: "1 record per fund participation",
+    fields: ["fundName", "startupName", "stage", "totalRoundSizeUsd", "role", "coInvestors", "investmentDate"],
+  },
+  {
+    id: "funding-rounds",
+    label: "Funding Rounds",
+    path: "/api/v1/funding-rounds",
+    icon: CircleDollarSign,
+    color: "amber",
+    description: "Round-based with all investors",
+    fields: ["roundExternalId", "startupName", "stage", "totalRoundSizeUsd", "investors", "investmentDate"],
   },
 ];
 
@@ -90,30 +100,41 @@ type MetaData = {
 
 const ENDPOINT_FILTERS: Record<string, FilterDef[]> = {
   investors: [
-    { key: "name", label: "Name", type: "text", placeholder: "z.B. Earlybird" },
-    { key: "country", label: "Land", type: "select", placeholder: "Alle", dynamicOptions: "countries" },
-    { key: "sector", label: "Sektor", type: "select", placeholder: "Alle", dynamicOptions: "sectors" },
-    { key: "geo", label: "Geo-Fokus", type: "select", placeholder: "Alle", dynamicOptions: "geoFocus" },
-    { key: "role", label: "Rolle", type: "select", placeholder: "Alle", options: ["lead", "co-investor", "both"] },
-    { key: "sort", label: "Sortierung", type: "select", placeholder: "Aktivitaet", options: ["activity", "name", "aum", "updated"] },
-    { key: "dir", label: "Richtung", type: "select", placeholder: "Absteigend", options: ["asc", "desc"] },
+    { key: "id", label: "External ID", type: "text", placeholder: "UUID" },
+    { key: "name", label: "Name", type: "text", placeholder: "e.g. Earlybird" },
+    { key: "country", label: "HQ Country", type: "select", placeholder: "All", dynamicOptions: "countries" },
+    { key: "sector", label: "Sector Focus", type: "select", placeholder: "All", dynamicOptions: "sectors" },
+    { key: "geo", label: "Geo Focus", type: "select", placeholder: "All", dynamicOptions: "geoFocus" },
+    { key: "role", label: "Round Role", type: "select", placeholder: "All", options: ["LEAD", "FOLLOW", "BOTH"] },
+    { key: "sort", label: "Sort By", type: "select", placeholder: "Activity", options: ["activity", "name", "aum", "updated"] },
+    { key: "dir", label: "Direction", type: "select", placeholder: "Descending", options: ["asc", "desc"] },
   ],
   startups: [
-    { key: "name", label: "Name", type: "text", placeholder: "z.B. Celonis" },
-    { key: "country", label: "Land", type: "select", placeholder: "Alle", dynamicOptions: "countries" },
-    { key: "sector", label: "Sektor", type: "select", placeholder: "Alle", dynamicOptions: "sectors" },
-    { key: "stage", label: "Stage", type: "select", placeholder: "Alle", dynamicOptions: "stages" },
-    { key: "sort", label: "Sortierung", type: "select", placeholder: "Name", options: ["name", "founded", "updated"] },
-    { key: "dir", label: "Richtung", type: "select", placeholder: "Aufsteigend", options: ["asc", "desc"] },
+    { key: "id", label: "External ID", type: "text", placeholder: "UUID" },
+    { key: "name", label: "Name", type: "text", placeholder: "e.g. Celonis" },
+    { key: "country", label: "HQ Country", type: "select", placeholder: "All", dynamicOptions: "countries" },
+    { key: "sector", label: "Sector", type: "select", placeholder: "All", dynamicOptions: "sectors" },
+    { key: "stage", label: "Funding Stage", type: "select", placeholder: "All", dynamicOptions: "stages" },
+    { key: "sort", label: "Sort By", type: "select", placeholder: "Name", options: ["name", "founded", "updated"] },
+    { key: "dir", label: "Direction", type: "select", placeholder: "Ascending", options: ["asc", "desc"] },
   ],
   investments: [
-    { key: "investor", label: "Investor", type: "text", placeholder: "Name oder UUID" },
-    { key: "startup", label: "Startup", type: "text", placeholder: "Name oder UUID" },
-    { key: "stage", label: "Stage", type: "select", placeholder: "Alle", dynamicOptions: "stages" },
-    { key: "min_amount", label: "Min USD", type: "number", placeholder: "z.B. 1000000" },
-    { key: "max_amount", label: "Max USD", type: "number", placeholder: "z.B. 50000000" },
-    { key: "sort", label: "Sortierung", type: "select", placeholder: "Datum", options: ["date", "amount"] },
-    { key: "dir", label: "Richtung", type: "select", placeholder: "Absteigend", options: ["asc", "desc"] },
+    { key: "fund", label: "Fund (Name/UUID)", type: "text", placeholder: "e.g. Sequoia" },
+    { key: "startup", label: "Startup (Name/UUID)", type: "text", placeholder: "e.g. Klarna" },
+    { key: "stage", label: "Funding Stage", type: "select", placeholder: "All", dynamicOptions: "stages" },
+    { key: "min_amount", label: "Min Round Size (USD)", type: "number", placeholder: "e.g. 1000000" },
+    { key: "max_amount", label: "Max Round Size (USD)", type: "number", placeholder: "e.g. 50000000" },
+    { key: "sort", label: "Sort By", type: "select", placeholder: "Date", options: ["date", "amount"] },
+    { key: "dir", label: "Direction", type: "select", placeholder: "Descending", options: ["asc", "desc"] },
+  ],
+  "funding-rounds": [
+    { key: "investor", label: "Investor (Name/UUID)", type: "text", placeholder: "e.g. Earlybird" },
+    { key: "startup", label: "Startup (Name/UUID)", type: "text", placeholder: "e.g. Celonis" },
+    { key: "stage", label: "Funding Stage", type: "select", placeholder: "All", dynamicOptions: "stages" },
+    { key: "min_amount", label: "Min Round Size (USD)", type: "number", placeholder: "e.g. 1000000" },
+    { key: "max_amount", label: "Max Round Size (USD)", type: "number", placeholder: "e.g. 50000000" },
+    { key: "sort", label: "Sort By", type: "select", placeholder: "Date", options: ["date", "amount"] },
+    { key: "dir", label: "Direction", type: "select", placeholder: "Descending", options: ["asc", "desc"] },
   ],
 };
 
@@ -146,7 +167,7 @@ function CopyBtn({ text, size = "sm" }: { text: string; size?: "sm" | "xs" }) {
       className={`rounded-[6px] transition-all text-white/30 hover:text-white/60 hover:bg-white/[0.06] ${
         size === "xs" ? "p-1" : "p-1.5"
       }`}
-      title="Kopieren"
+      title="Copy"
     >
       {copied ? (
         <Check className={size === "xs" ? "h-3 w-3 text-emerald-400" : "h-3.5 w-3.5 text-emerald-400"} />
@@ -203,6 +224,7 @@ function formatUsd(val: unknown): string {
 function getEndpointColor(color: string) {
   if (color === "blue") return { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20", dot: "bg-blue-400" };
   if (color === "emerald") return { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20", dot: "bg-emerald-400" };
+  if (color === "amber") return { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20", dot: "bg-amber-400" };
   return { bg: "bg-violet-500/10", text: "text-violet-400", border: "border-violet-500/20", dot: "bg-violet-400" };
 }
 
@@ -290,7 +312,7 @@ export default function PlaygroundPage() {
       const elapsed = Math.round(performance.now() - start);
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        const text = JSON.stringify({ error: "Endpoint nicht verfuegbar", status: res.status }, null, 2);
+        const text = JSON.stringify({ error: "Endpoint not available", status: res.status }, null, 2);
         setResponse(text);
         setStatus(res.status);
         setDuration(elapsed);
@@ -317,7 +339,7 @@ export default function PlaygroundPage() {
         ]);
       }
     } catch (err) {
-      const text = JSON.stringify({ error: "Verbindungsfehler", detail: String(err) }, null, 2);
+      const text = JSON.stringify({ error: "Connection error", detail: String(err) }, null, 2);
       setResponse(text);
       setStatus(0);
       setDuration(Math.round(performance.now() - start));
@@ -392,7 +414,7 @@ export default function PlaygroundPage() {
 
   // Determine which columns to show in table
   const visibleFields = selectedEndpoint.fields;
-  const usdFields = ["aumUsdMillions", "totalRoundSizeUsd", "investmentAmountUsd", "minTicketUsd", "maxTicketUsd"];
+  const usdFields = ["aumUsdMillions", "totalRoundSizeUsd", "investmentAmountUsd", "minTicketUsd", "maxTicketUsd", "minRoundUsd", "maxRoundUsd"];
 
   return (
     <div className="h-screen flex flex-col bg-[#09090b] text-white selection:bg-blue-500/30 overflow-hidden">
@@ -438,7 +460,7 @@ export default function PlaygroundPage() {
               Sign in
             </Link>
             <Link
-              href="mailto:sam@inventure.capital?subject=Orbit%20API%20Access"
+              href="mailto:samuel.gassauer@inventure.de?subject=Orbit%20API%20Access"
               className="apple-btn-blue px-3 py-1 text-[12px] font-medium flex items-center gap-1.5"
             >
               Get Access
@@ -544,7 +566,7 @@ export default function PlaygroundPage() {
                       type="text"
                       value={cursor}
                       onChange={(e) => setCursor(e.target.value)}
-                      placeholder="Automatisch bei Pagination"
+                      placeholder="Auto-filled on pagination"
                       className="flex-1 rounded-[6px] border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-[11px] font-mono text-white/60 placeholder:text-white/15 focus:border-blue-500/30 focus:outline-none transition-all"
                     />
                     {cursor && (
@@ -613,12 +635,12 @@ export default function PlaygroundPage() {
             <div className="border-t border-white/[0.06] p-3 max-h-[200px] overflow-auto">
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-white/20">
-                  Verlauf
+                  History
                 </span>
                 <button
                   onClick={() => setHistory([])}
                   className="text-white/15 hover:text-white/40 transition-colors"
-                  title="Verlauf loeschen"
+                  title="Clear history"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -828,7 +850,7 @@ export default function PlaygroundPage() {
                     </div>
                     <Loader2 className="absolute -top-1 -right-1 h-4 w-4 text-blue-400 animate-spin" />
                   </div>
-                  <span className="text-[12px] text-white/25">Lade {selectedEndpoint.label}...</span>
+                  <span className="text-[12px] text-white/25">Loading {selectedEndpoint.label}...</span>
                 </div>
               </div>
             )}
@@ -840,12 +862,12 @@ export default function PlaygroundPage() {
                     <Zap className="h-6 w-6 text-white/10" />
                   </div>
                   <div>
-                    <p className="text-[13px] text-white/25">Waehle einen Endpoint und sende einen Request</p>
+                    <p className="text-[13px] text-white/25">Select an endpoint and send a request</p>
                     <p className="text-[11px] text-white/15 mt-1">
                       <kbd className="rounded border border-white/[0.08] bg-white/[0.04] px-1 py-0.5 text-[9px] font-mono">⌘</kbd>
                       {" + "}
                       <kbd className="rounded border border-white/[0.08] bg-white/[0.04] px-1 py-0.5 text-[9px] font-mono">↵</kbd>
-                      {" zum Senden"}
+                      {" to send"}
                     </p>
                   </div>
                 </div>
@@ -889,15 +911,18 @@ export default function PlaygroundPage() {
                               const isId = field === "externalId" || field.endsWith("ExternalId");
                               const isLogo = field === "logoUrl";
                               const isInvestors = field === "investors" && Array.isArray(val);
+                              const isCoInvestors = field === "coInvestors" && Array.isArray(val);
+                              const isFundingRounds = field === "fundingRounds" && Array.isArray(val);
+                              const isChips = isInvestors || isFundingRounds || isCoInvestors;
                               return (
                                 <td
                                   key={field}
                                   className={`px-3 py-2 text-[12px] font-mono max-w-[300px] ${
-                                    isInvestors ? "whitespace-normal" : "whitespace-nowrap truncate"
+                                    isChips ? "whitespace-normal" : "whitespace-nowrap truncate"
                                   } ${
                                     isId ? "text-white/20" : isUsd ? "text-emerald-400/70" : "text-white/50"
                                   }`}
-                                  title={isLogo || isInvestors ? undefined : formatValue(val)}
+                                  title={isLogo || isChips ? undefined : formatValue(val)}
                                 >
                                   {isLogo ? (
                                     val ? (
@@ -905,18 +930,43 @@ export default function PlaygroundPage() {
                                     ) : (
                                       <span className="text-white/15">—</span>
                                     )
+                                  ) : isFundingRounds ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {(val as { stage: string | null; amountUsd: number | null; investors: { name: string; role: string }[] }[]).map((round, j) => (
+                                        <span
+                                          key={j}
+                                          className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-emerald-500/12 text-emerald-400"
+                                        >
+                                          {round.stage || "Round"}{round.amountUsd ? ` $${(round.amountUsd / 1e6).toFixed(1)}M` : ""}
+                                          {round.investors.length > 0 && (
+                                            <span className="ml-1 text-white/25">({round.investors.length})</span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </div>
                                   ) : isInvestors ? (
                                     <div className="flex flex-wrap gap-1">
                                       {(val as { name: string; role: string }[]).map((inv, j) => (
                                         <span
                                           key={j}
                                           className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                                            inv.role === "lead"
+                                            inv.role === "LEAD"
                                               ? "bg-amber-500/15 text-amber-400"
                                               : "bg-white/[0.06] text-white/40"
                                           }`}
                                         >
                                           {inv.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : isCoInvestors ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {(val as string[]).map((name, j) => (
+                                        <span
+                                          key={j}
+                                          className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-white/[0.06] text-white/40"
+                                        >
+                                          {name}
                                         </span>
                                       ))}
                                     </div>
@@ -931,27 +981,83 @@ export default function PlaygroundPage() {
                                 <div className="px-6 py-3">
                                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
                                     {Object.entries(record).map(([key, val]) => (
-                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" ? "col-span-2 lg:col-span-3" : ""}`}>
+                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" || key === "fundingRounds" || key === "coInvestors" ? "col-span-2 lg:col-span-3" : ""}`}>
                                         <span className="text-[9px] uppercase tracking-[0.06em] font-medium text-white/15">{key}</span>
                                         {key === "logoUrl" && val ? (
                                           <img src={String(val)} alt="" className="h-8 w-8 rounded-[6px] object-contain bg-white/10" />
+                                        ) : key === "fundingRounds" && Array.isArray(val) ? (
+                                          <div className="flex flex-col gap-2 mt-1">
+                                            {(val as { roundExternalId?: string; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId?: string; name: string; role: string }[] }[]).map((round, j) => (
+                                              <div key={j} className="rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-3 py-2">
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                  <span className="text-[11px] font-semibold text-emerald-400">
+                                                    {round.stage || "Round"}
+                                                  </span>
+                                                  {round.amountUsd != null && (
+                                                    <span className="text-[11px] font-mono text-emerald-400/60">
+                                                      ${(round.amountUsd / 1e6).toFixed(1)}M
+                                                    </span>
+                                                  )}
+                                                  {round.date && (
+                                                    <span className="text-[10px] text-white/20 ml-auto">{round.date}</span>
+                                                  )}
+                                                </div>
+                                                {round.investors.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1">
+                                                    {round.investors.map((inv, k) => (
+                                                      <span
+                                                        key={k}
+                                                        className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                                          inv.role === "LEAD"
+                                                            ? "bg-amber-500/15 text-amber-400"
+                                                            : "bg-white/[0.06] text-white/40"
+                                                        }`}
+                                                      >
+                                                        {inv.name}
+                                                        {inv.role === "LEAD" && (
+                                                          <span className="text-[8px] uppercase tracking-wider text-amber-500/60">Lead</span>
+                                                        )}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                            {(val as unknown[]).length === 0 && (
+                                              <span className="text-[11px] text-white/15 italic">No funding rounds</span>
+                                            )}
+                                          </div>
                                         ) : key === "investors" && Array.isArray(val) ? (
                                           <div className="flex flex-wrap gap-1.5 mt-0.5">
                                             {(val as { externalId?: string; name: string; role: string }[]).map((inv, j) => (
                                               <span
                                                 key={j}
                                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                                                  inv.role === "lead"
+                                                  inv.role === "LEAD"
                                                     ? "bg-amber-500/15 text-amber-400"
                                                     : "bg-white/[0.06] text-white/45"
                                                 }`}
                                               >
                                                 {inv.name}
-                                                {inv.role === "lead" && (
+                                                {inv.role === "LEAD" && (
                                                   <span className="text-[9px] uppercase tracking-wider text-amber-500/60">Lead</span>
                                                 )}
                                               </span>
                                             ))}
+                                          </div>
+                                        ) : key === "coInvestors" && Array.isArray(val) ? (
+                                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                            {(val as string[]).map((name, j) => (
+                                              <span
+                                                key={j}
+                                                className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-white/[0.06] text-white/45"
+                                              >
+                                                {name}
+                                              </span>
+                                            ))}
+                                            {(val as string[]).length === 0 && (
+                                              <span className="text-[11px] text-white/15 italic">No co-investors</span>
+                                            )}
                                           </div>
                                         ) : (
                                           <span className={`text-[11px] font-mono break-all ${
@@ -968,8 +1074,8 @@ export default function PlaygroundPage() {
                                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-[11px] font-medium text-white/50 hover:text-white/70 transition-colors"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        const investmentsEp = ENDPOINTS.find((ep) => ep.id === "investments")!;
-                                        setSelectedEndpoint(investmentsEp);
+                                        const fundingRoundsEp = ENDPOINTS.find((ep) => ep.id === "funding-rounds")!;
+                                        setSelectedEndpoint(fundingRoundsEp);
                                         setFilters({ investor: String(record.externalId) });
                                         setCursor("");
                                         setExpandedRow(null);
@@ -977,7 +1083,7 @@ export default function PlaygroundPage() {
                                       }}
                                     >
                                       <Handshake className="h-3 w-3" />
-                                      Investments anzeigen
+                                      View investments
                                       <ArrowUpRight className="h-3 w-3" />
                                     </button>
                                   )}
@@ -995,7 +1101,7 @@ export default function PlaygroundPage() {
                 {(hasMore || hasCursor) && (
                   <div className="flex items-center justify-between mt-3 px-1">
                     <span className="text-[10px] text-white/15 font-mono">
-                      {records.length} Records{hasMore ? " (weitere verfuegbar)" : ""}
+                      {records.length} Records{hasMore ? " (more available)" : ""}
                     </span>
                     <div className="flex items-center gap-2">
                       {hasCursor && (
@@ -1029,8 +1135,8 @@ export default function PlaygroundPage() {
                   <div className={`h-12 w-12 rounded-[10px] ${ec.bg} flex items-center justify-center`}>
                     <selectedEndpoint.icon className={`h-5 w-5 ${ec.text} opacity-30`} />
                   </div>
-                  <p className="text-[13px] text-white/25">Keine Daten gefunden</p>
-                  <p className="text-[11px] text-white/15">Probier andere Filter oder einen anderen Endpoint</p>
+                  <p className="text-[13px] text-white/25">No data found</p>
+                  <p className="text-[11px] text-white/15">Try different filters or another endpoint</p>
                 </div>
               </div>
             )}

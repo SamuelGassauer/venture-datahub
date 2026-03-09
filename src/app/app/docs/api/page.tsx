@@ -9,10 +9,10 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={() => {
         navigator.clipboard.writeText(text);
-        toast.success("Kopiert");
+        toast.success("Copied");
       }}
       className="absolute top-2 right-2 glass-capsule-btn p-1.5 text-foreground/40 hover:text-foreground/70"
-      title="Kopieren"
+      title="Copy"
     >
       <Copy className="h-3.5 w-3.5" />
     </button>
@@ -86,13 +86,13 @@ const queryParams: { name: string; type: string; desc: string; default_: string 
 ];
 
 const errors = [
-  { status: "401", body: '{"error": "Missing API key..."}', desc: "Kein API Key im Header" },
-  { status: "401", body: '{"error": "Invalid API key"}', desc: "Key existiert nicht" },
-  { status: "403", body: '{"error": "API key has been revoked"}', desc: "Key wurde deaktiviert" },
-  { status: "403", body: '{"error": "API key has expired"}', desc: "Key ist abgelaufen" },
-  { status: "403", body: '{"error": "API key does not have scope: ..."}', desc: "Fehlende Berechtigung" },
-  { status: "429", body: '{"error": "Rate limit exceeded", ...}', desc: "Rate Limit erreicht" },
-  { status: "500", body: '{"error": "Failed to fetch..."}', desc: "Interner Serverfehler" },
+  { status: "401", body: '{"error": "Missing API key..."}', desc: "No API key in header" },
+  { status: "401", body: '{"error": "Invalid API key"}', desc: "Key does not exist" },
+  { status: "403", body: '{"error": "API key has been revoked"}', desc: "Key has been deactivated" },
+  { status: "403", body: '{"error": "API key has expired"}', desc: "Key has expired" },
+  { status: "403", body: '{"error": "API key does not have scope: ..."}', desc: "Missing permission" },
+  { status: "429", body: '{"error": "Rate limit exceeded", ...}', desc: "Rate limit reached" },
+  { status: "500", body: '{"error": "Failed to fetch..."}', desc: "Internal server error" },
 ];
 
 export default function ApiDocsPage() {
@@ -110,36 +110,35 @@ export default function ApiDocsPage() {
         <div className="max-w-3xl space-y-6 pb-8">
           {/* Auth */}
           <section>
-            <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-2">Authentifizierung</h2>
+            <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-2">Authentication</h2>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Alle API-Endpunkte erfordern einen API Key im <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">Authorization</code> Header.
-              Keys können unter{" "}
+              All API endpoints require an API key in the <code className="rounded-[6px] bg-foreground/[0.04] px-1.5 py-0.5 text-[12px] font-mono">Authorization</code> header.
+              Keys can be created and managed under{" "}
               <Link href="/app/admin/api-keys" className="text-blue-600 dark:text-blue-400 hover:underline">
                 Admin &rarr; API Keys
-              </Link>{" "}
-              erstellt und verwaltet werden.
+              </Link>.
             </p>
             <div className="relative lg-inset rounded-[10px] p-3">
               <CopyButton text="Authorization: ApiKey orb_xxxxxxxxxxxxxx" />
               <code className="text-[12px] font-mono text-foreground/70">Authorization: ApiKey orb_xxxxxxxxxxxxxx</code>
             </div>
             <div className="mt-3 space-y-1 text-[12px] text-foreground/45">
-              <p>&bull; Keys beginnen mit <code className="font-mono bg-foreground/[0.04] px-1 rounded">orb_</code></p>
-              <p>&bull; Jeder Key hat definierte <strong>Scopes</strong> (Berechtigungen) und ein <strong>Rate Limit</strong></p>
-              <p>&bull; Nutzung wird pro Key getrackt (Requests, IP, Zeitstempel)</p>
-              <p>&bull; Keys können jederzeit deaktiviert oder mit Ablaufdatum versehen werden</p>
+              <p>&bull; Keys start with <code className="font-mono bg-foreground/[0.04] px-1 rounded">orb_</code></p>
+              <p>&bull; Each key has defined <strong>Scopes</strong> (permissions) and a <strong>Rate Limit</strong></p>
+              <p>&bull; Usage is tracked per key (requests, IP, timestamp)</p>
+              <p>&bull; Keys can be deactivated or given an expiration date at any time</p>
             </div>
           </section>
 
           {/* Scopes */}
           <section>
-            <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-3">Verfügbare Scopes</h2>
+            <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-3">Available Scopes</h2>
             <div className="lg-inset rounded-[16px]">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="glass-table-header">
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Scope</th>
-                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Zugriff auf</th>
+                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Access to</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -149,15 +148,15 @@ export default function ApiDocsPage() {
                   </tr>
                   <tr className="lg-inset-table-row">
                     <td className="px-3 py-2 font-mono text-[12px] text-blue-600 dark:text-blue-400">companies</td>
-                    <td className="px-3 py-2 text-foreground/45">GET /api/v1/companies (geplant)</td>
+                    <td className="px-3 py-2 text-foreground/45">GET /api/v1/companies (planned)</td>
                   </tr>
                   <tr className="lg-inset-table-row">
                     <td className="px-3 py-2 font-mono text-[12px] text-blue-600 dark:text-blue-400">fund-events</td>
-                    <td className="px-3 py-2 text-foreground/45">GET /api/v1/fund-events (geplant)</td>
+                    <td className="px-3 py-2 text-foreground/45">GET /api/v1/fund-events (planned)</td>
                   </tr>
                   <tr className="lg-inset-table-row">
                     <td className="px-3 py-2 font-mono text-[12px] text-blue-600 dark:text-blue-400">*</td>
-                    <td className="px-3 py-2 text-foreground/45">Zugriff auf alle Endpoints</td>
+                    <td className="px-3 py-2 text-foreground/45">Access to all endpoints</td>
                   </tr>
                 </tbody>
               </table>
@@ -168,7 +167,7 @@ export default function ApiDocsPage() {
           <section>
             <h2 className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 mb-2">Rate Limiting</h2>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em] mb-3">
-              Jeder API Key hat ein individuelles Rate Limit (Standard: 100 req/h). Bei Überschreitung wird HTTP 429 zurückgegeben.
+              Each API key has an individual rate limit (default: 100 req/h). When exceeded, HTTP 429 is returned.
             </p>
             <div className="lg-inset rounded-[10px] p-3 space-y-1 text-[12px] font-mono text-foreground/55">
               <p>X-RateLimit-Limit: 100</p>
@@ -189,8 +188,8 @@ export default function ApiDocsPage() {
               </span>
             </div>
             <p className="text-[13px] text-foreground/55 tracking-[-0.01em]">
-              Liefert alle Funding-Runden mit Firmendaten, Investoren (inkl. Logos) und Beitrags-Content.
-              Sortiert nach Artikeldatum (neueste zuerst).
+              Returns all funding rounds with company data, investors (incl. logos), and post content.
+              Sorted by article date (newest first).
             </p>
           </section>
 
@@ -202,7 +201,7 @@ export default function ApiDocsPage() {
                 <thead>
                   <tr className="glass-table-header">
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Parameter</th>
-                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Werte</th>
+                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Values</th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Default</th>
                   </tr>
                 </thead>
@@ -273,7 +272,7 @@ export default function ApiDocsPage() {
                   <tr className="glass-table-header">
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35 w-16">Status</th>
                     <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Body</th>
-                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Beschreibung</th>
+                    <th className="text-left px-3 py-2 text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">Description</th>
                   </tr>
                 </thead>
                 <tbody>

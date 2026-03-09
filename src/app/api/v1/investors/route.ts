@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
+import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
 
   // Filters
+  const idSearch = searchParams.get("id");
   const nameSearch = searchParams.get("name");
   const country = searchParams.get("country");
   const sector = searchParams.get("sector");
@@ -51,14 +53,28 @@ export async function GET(request: NextRequest) {
       } catch { /* invalid cursor, start from 0 */ }
     }
 
-    const conditions: string[] = [];
+    const matchConditions: string[] = [];
     const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
 
-    if (updatedSince) { conditions.push(`inv.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
-    if (nameSearch) { conditions.push(`toLower(inv.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
-    if (country) { conditions.push(`(inv.country = $country OR loc.name = $country)`); params.country = country; }
-    if (geo) { conditions.push(`ANY(g IN inv.geoFocus WHERE toLower(g) CONTAINS toLower($geo))`); params.geo = geo; }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    if (updatedSince) { matchConditions.push(`inv.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
+    if (idSearch) { matchConditions.push(`inv.uuid = $idSearch`); params.idSearch = idSearch; }
+    if (nameSearch) { matchConditions.push(`toLower(inv.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
+    if (geo) { matchConditions.push(`ANY(g IN inv.geoFocus WHERE toLower(g) CONTAINS toLower($geo))`); params.geo = geo; }
+    const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
+
+    // Country filter on investor HQ (explicit country param only)
+    let countryFilter = "";
+    if (country && country.toLowerCase() !== "all") {
+      countryFilter = `WHERE (inv.country = $country OR hq = $country)`;
+      params.country = country;
+    }
+
+    // Europe default: filter on the COMPANY's country (not investor HQ)
+    // This ensures non-European investors who invest in Europe still appear
+    let dealCountryFilter = "";
+    if (!country) {
+      dealCountryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
+    }
 
     // Sector and role filters applied after aggregation (derived from investments)
     const havingConditions: string[] = [];
@@ -71,22 +87,28 @@ export async function GET(request: NextRequest) {
 
     const result = await session.run(`
       MATCH (inv:InvestorOrg)
+      ${matchWhereClause}
       OPTIONAL MATCH (inv)-[:HQ_IN]->(loc:Location)
-      ${whereClause}
+      WITH inv, collect(DISTINCT loc.name)[0] AS hq
+      ${countryFilter}
       OPTIONAL MATCH (inv)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
-      WITH inv,
-           collect(DISTINCT loc.name)[0] AS hq,
+      ${dealCountryFilter}
+      WITH inv, hq,
            count(DISTINCT fr) AS dealCount,
            min(fr.amountUsd) AS minRoundUsd,
            max(fr.amountUsd) AS maxRoundUsd,
-           CASE WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') THEN 'lead' ELSE 'participant' END AS roundRole,
+           CASE
+             WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') AND ANY(r IN collect(rel.role) WHERE r IS NULL OR toLower(r) <> 'lead') THEN 'both'
+             WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') THEN 'lead'
+             ELSE 'follow'
+           END AS roundRole,
            [st IN collect(DISTINCT fr.stage) WHERE st IS NOT NULL] AS stages,
            REDUCE(acc = [], s IN collect(DISTINCT c.sector) | CASE WHEN s IS NOT NULL THEN acc + s ELSE acc END) AS rawSectors
       WITH inv, hq, dealCount, minRoundUsd, maxRoundUsd, roundRole, stages,
            [s IN rawSectors WHERE s IS NOT NULL | s] AS sectors
       ${havingClause}
       RETURN inv, hq, dealCount, minRoundUsd, maxRoundUsd, roundRole, stages, sectors
-      ORDER BY ${sortField} ${sortDir}
+      ORDER BY ${sortField} ${sortDir}, inv.uuid ASC
       SKIP $skip LIMIT $limit
     `, params);
 
@@ -95,23 +117,26 @@ export async function GET(request: NextRequest) {
 
     const data = records.map((r) => {
       const inv = r.get("inv").properties;
+      const city = toStr(inv.hqCity);
+      const country = toStr(inv.hqCountry) || toStr(r.get("hq")) || toStr(inv.country);
+      const hq = city && country ? `${city}, ${country}` : city || country;
+
       return {
         externalId: toStr(inv.uuid) || toStr(inv.normalizedName),
         name: toStr(inv.name),
         logoUrl: toStr(inv.logoUrl),
         website: toStr(inv.website),
         linkedinUrl: toStr(inv.linkedinUrl),
-        hqCity: toStr(inv.hqCity),
-        hqCountry: toStr(inv.hqCountry) || toStr(r.get("hq")) || toStr(inv.country),
+        hq,
         foundedAt: inv.foundedYear ? `${inv.foundedYear}-01-01` : null,
         description: toStr(inv.description),
         aumUsdMillions: toNum(inv.aum),
         minRoundUsd: toNum(r.get("minRoundUsd")),
         maxRoundUsd: toNum(r.get("maxRoundUsd")),
         dealCount: toNum(r.get("dealCount")) ?? 0,
-        roundRole: toStr(r.get("roundRole")),
+        roundRole: mapRoundRole(r.get("roundRole") as string | null),
         stages: toStrArr(r.get("stages")),
-        sectors: [...new Set(toStrArr(r.get("sectors")))],
+        sectorFocus: [...new Set(toStrArr(r.get("sectors")))],
         geoFocus: toStrArr(inv.geoFocus),
         updatedAt: toStr(inv.updatedAt) || toStr(inv.enrichedAt) || new Date().toISOString(),
       };
@@ -131,6 +156,14 @@ export async function GET(request: NextRequest) {
   } finally {
     await session.close();
   }
+}
+
+function mapRoundRole(role: string | null): string {
+  if (!role) return "FOLLOW";
+  const r = role.toLowerCase();
+  if (r === "lead") return "LEAD";
+  if (r === "both") return "BOTH";
+  return "FOLLOW";
 }
 
 function neo4jInt(n: number) {

@@ -1,4 +1,4 @@
-# RSS Scraper - EU Startup Funding Tracker
+# Orbit — European Startup Funding Intelligence
 
 ## Tech Stack
 - Next.js 14+ (App Router), React, TypeScript, Tailwind CSS
@@ -113,3 +113,39 @@ This project uses an Apple-inspired "Liquid Glass" design system (macOS Tahoe / 
 - `rounded-lg`, `rounded-xl` → use specific `rounded-[Npx]` from scale
 - `border` (default 1px) on containers → use glass class borders (0.5px)
 - Single-layer shadows → always multi-stop
+
+## V1 Data Provider API
+
+### Europe-Only Default
+
+All v1 API endpoints default to **European data** using `c.country IN [...]` from `src/lib/european-countries.ts`.
+
+- `/api/v1/investors` — filters by **startup country** (not investor HQ!), so non-European VCs investing in Europe still appear
+- `/api/v1/startups` — filters by company's country (`c.country`)
+- `/api/v1/funding-rounds` — filters by startup's country (`c.country`)
+- `/api/v1/investments` — filters by startup's country (`c.country`)
+
+To override, pass the `country` query parameter:
+- `?country=Germany` — filter to a specific country
+- `?country=all` — disable the Europe filter, return worldwide data
+- *(no param)* — default: Europe-only
+
+**Important:** For investors, the default Europe filter is on the deal's company (`c.country`), NOT `inv.country`. This is intentional — a US-based VC that invests in European startups must show up.
+
+The canonical European countries list is in `src/lib/european-countries.ts` (`EUROPEAN_COUNTRIES`). Keep it in sync when adding new countries.
+
+### Endpoints Overview
+
+| Endpoint | Description | Key Filters |
+|----------|-------------|-------------|
+| `/api/v1/investors` | Investors with deal stats | `id`, `name`, `country`, `sector`, `geo`, `role` |
+| `/api/v1/startups` | Startups with nested funding rounds | `id`, `name`, `country`, `sector`, `stage` |
+| `/api/v1/funding-rounds` | Round-centric (1 row per round) | `investor`, `startup`, `country`, `stage`, `min_amount`, `max_amount` |
+| `/api/v1/investments` | Participation-centric (1 row per fund per round) | `fund`, `startup`, `country`, `stage`, `min_amount`, `max_amount` |
+| `/api/v1/meta` | Filter dropdown values | — |
+
+### Testing
+
+- **Vitest integration tests**: `pnpm test` (54+ tests in `tests/api/`)
+- **Admin UI test runner**: `/admin/api-tests` (SSE streaming, requires admin login)
+- Tests run against a live dev server (`TEST_API_URL` env var, defaults to `localhost:3000`)
