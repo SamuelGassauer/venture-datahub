@@ -101,6 +101,7 @@ export type SingleRoundData = {
   leadInvestor: string | null;
   country: string | null;
   confidence: number;
+  announcedDate?: string | null;
   companyMeta?: CompanyMetaInput;
   articles: {
     id: string;
@@ -180,12 +181,18 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
     }
 
     // Single FundingRound node per company+stage
+    // Resolve announced date: explicit > article publishedAt > null
+    const resolvedDate = data.announcedDate
+      ?? data.articles.find((a) => a.publishedAt)?.publishedAt
+      ?? null;
+
     await session.run(
       `MERGE (fr:FundingRound {roundKey: $roundKey})
        ON CREATE SET fr.uuid = randomUUID()
        SET fr.amountUsd = $amountUsd, fr.amount = $amount, fr.currency = $currency,
            fr.fxRate = $fxRate, fr.stage = $stage, fr.confidence = $confidence,
-           fr.articleId = $articleId`,
+           fr.articleId = $articleId,
+           fr.announcedDate = COALESCE($announcedDate, fr.announcedDate)`,
       {
         roundKey,
         amount: data.amount ?? null,
@@ -195,6 +202,7 @@ export async function syncSingleRoundToGraph(data: SingleRoundData): Promise<Gra
         stage: data.stage,
         confidence: data.confidence,
         articleId: data.articles[0]?.id ?? roundKey,
+        announcedDate: resolvedDate,
       }
     );
     nodes.push(`FundingRound: ${data.companyName} ${data.stage ?? ""}`);

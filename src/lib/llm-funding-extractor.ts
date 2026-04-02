@@ -25,6 +25,7 @@ Rules:
 - For country, use the country name (e.g. "Germany", "France", "UK")
 - Confidence should reflect how certain you are this is a specific funding announcement (0.0-1.0). Multiple corroborating sources should increase confidence.
 - Amount should be a raw number (e.g. 10000000 for $10M)
+- For announcedDate, extract the date the funding round was announced or closed. Use YYYY-MM-DD format. If only month+year is available, use YYYY-MM-01. If only year, use YYYY-01-01. Return null if no date found.
 
 Also extract any available company metadata from the article(s).
 
@@ -38,6 +39,7 @@ Respond with ONLY a JSON object, no markdown, no explanation:
   "investors": string[],
   "leadInvestor": string | null,
   "country": string | null,
+  "announcedDate": "YYYY-MM-DD" | null,
   "confidence": number,
   "companyMeta": {
     "description": string | null,
@@ -107,6 +109,7 @@ function parseLLMResponse(text: string | null): FundingExtraction | null {
     leadInvestor: parsed.leadInvestor || null,
     country: parsed.country || null,
     confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
+    announcedDate: typeof parsed.announcedDate === "string" ? parsed.announcedDate : null,
     rawExcerpt: parsed.companyName,
     signals: ["llm_extraction"],
     companyMeta: meta
@@ -195,6 +198,7 @@ export async function extractFundingFromSources(
         leadInvestor: merged.leadInvestor,
         country: merged.country,
         confidence: merged.confidence,
+        announcedDate: null,
         rawExcerpt: sources[0].title,
         signals: ["regex_fallback"],
       };

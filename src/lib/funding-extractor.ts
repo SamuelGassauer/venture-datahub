@@ -209,6 +209,7 @@ export type FundingExtraction = {
   leadInvestor: string | null;
   country: string | null;
   confidence: number;
+  announcedDate: string | null; // YYYY-MM-DD or partial date from article
   rawExcerpt: string;
   signals: string[]; // debug: which signals fired
   companyMeta?: CompanyMeta;
@@ -502,6 +503,7 @@ export function extractFundingRegex(title: string, content: string): FundingExtr
     leadInvestor,
     country,
     confidence,
+    announcedDate: null,
     rawExcerpt,
     signals,
   };

@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       leadInvestor: llmResult.leadInvestor,
       country: llmResult.country,
       confidence: llmResult.confidence,
+      announcedDate: llmResult.announcedDate,
       companyMeta: llmResult.companyMeta,
       articles: articles.map((a) => ({
         id: a.id,

@@ -17,7 +17,21 @@ import {
   ExternalLink,
   Layers,
   Tag,
+  Search,
+  Pencil,
+  Check,
+  X,
+  Loader2,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SmartLogo } from "@/components/ui/smart-logo";
 
@@ -46,6 +60,30 @@ function formatAmount(amount: number | null | undefined): string {
   if (amount >= 1e6) return `$${(amount / 1e6).toFixed(1)}M`;
   if (amount >= 1e3) return `$${(amount / 1e3).toFixed(0)}K`;
   return `$${amount.toFixed(0)}`;
+}
+
+// Estimated post-money valuation multiples by stage (Carta/PitchBook 2023-2025)
+// Multiple = 1 / dilution%. Low multiple = 1 / high dilution, high multiple = 1 / low dilution.
+// Pre-Seed: 5-20% dilution → 5-20x | Seed: 10-30% → 3.3-10x | Series A: 15-30% → 3.3-6.7x
+// Series B: 10-25% → 4-10x | Series C: 8-20% → 5-12.5x | D+: 5-15% → 6.7-20x | Growth: 3-12% → 8.3-33x
+const VALUATION_MULTIPLES: Record<string, { low: number; high: number }> = {
+  "pre-seed": { low: 5, high: 20 },
+  seed: { low: 3.3, high: 10 },
+  "series a": { low: 3.3, high: 6.7 },
+  "series b": { low: 4, high: 10 },
+  "series c": { low: 5, high: 12.5 },
+  "series d": { low: 6.7, high: 20 },
+  "series d+": { low: 6.7, high: 20 },
+  "series e": { low: 6.7, high: 20 },
+  "series e+": { low: 6.7, high: 20 },
+  growth: { low: 8.3, high: 33 },
+};
+
+function estimateValuation(stage: string | null, amountUsd: number): { low: number; high: number } | null {
+  if (!stage || amountUsd <= 0) return null;
+  const mult = VALUATION_MULTIPLES[stage.toLowerCase()];
+  if (!mult) return null;
+  return { low: amountUsd * mult.low, high: amountUsd * mult.high };
 }
 
 function formatDate(raw: unknown): string | null {
@@ -77,7 +115,7 @@ WITH c, collect(loc.name)[0] AS location
 OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
 OPTIONAL MATCH (inv:InvestorOrg)-[p:PARTICIPATED_IN]->(fr)
 WITH c, location, fr,
-     collect(DISTINCT {name: inv.name, role: p.role}) AS roundInvestors
+     collect(DISTINCT {name: inv.name, role: p.role, logoUrl: inv.logoUrl, country: inv.country}) AS roundInvestors
 OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
 WITH c, location, fr, roundInvestors,
      collect(DISTINCT {url: a.url, title: a.title, publishedAt: a.publishedAt}) AS articles
@@ -85,6 +123,12 @@ WITH c, location,
      collect(CASE WHEN fr IS NOT NULL THEN {
        stage: fr.stage,
        amount: fr.amountUsd,
+       currency: fr.currency,
+       originalAmount: fr.amount,
+       fxRate: fr.fxRate,
+       confidence: fr.confidence,
+       date: fr.date,
+       announcedDate: fr.announcedDate,
        roundKey: fr.roundKey,
        investors: roundInvestors,
        articles: articles
@@ -174,8 +218,14 @@ RETURN c.name AS name,
 type RoundRow = {
   stage: string | null;
   amount: unknown;
+  currency: string | null;
+  originalAmount: unknown;
+  fxRate: unknown;
+  confidence: unknown;
+  date: unknown;
+  announcedDate: unknown;
   roundKey: string | null;
-  investors: { name: string | null; role: string | null }[];
+  investors: { name: string | null; role: string | null; logoUrl: string | null; country: string | null }[];
   articles: {
     url: string | null;
     title: string | null;
@@ -225,6 +275,15 @@ export default function CompanyProfilePage() {
   const [similar, setSimilar] = useState<SimilarCompany[] | null>(null);
   const [similarLoading, setSimilarLoading] = useState(false);
 
+  // Round editing state
+  const [editingRoundKey, setEditingRoundKey] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    announcedDate: string;
+    stage: string;
+    amountUsd: string;
+  }>({ announcedDate: "", stage: "", amountUsd: "" });
+  const [editSaving, setEditSaving] = useState(false);
+
   // Refs for SVG line drawing
   const containerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -234,33 +293,62 @@ export default function CompanyProfilePage() {
   >([]);
 
   // Fetch main company data
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/graph-query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: companyQuery(companyName) }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as DetailData;
-        if (json.records?.[0]) {
-          setData(json.records[0]);
-        } else {
-          setError("Company not found.");
-        }
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load company."
-        );
-      } finally {
-        setLoading(false);
+  const loadCompany = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/graph-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: companyQuery(companyName) }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as DetailData;
+      if (json.records?.[0]) {
+        setData(json.records[0]);
+      } else {
+        setError("Company not found.");
       }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load company."
+      );
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [companyName]);
+
+  useEffect(() => {
+    loadCompany();
+  }, [loadCompany]);
+
+  // Save round edits
+  const saveRoundEdit = useCallback(async (roundKey: string) => {
+    setEditSaving(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (editForm.announcedDate) payload.announcedDate = editForm.announcedDate;
+      else payload.announcedDate = null;
+      if (editForm.stage) payload.stage = editForm.stage;
+      if (editForm.amountUsd) payload.amountUsd = parseFloat(editForm.amountUsd);
+
+      const res = await fetch(`/api/graph-funding-rounds/${encodeURIComponent(roundKey)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      setEditingRoundKey(null);
+      await loadCompany();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editForm, loadCompany]);
 
   // Fetch similar companies lazily after main data loads
   useEffect(() => {
@@ -344,7 +432,28 @@ export default function CompanyProfilePage() {
   const subsector = data?.subsector ? String(data.subsector) : null;
 
   const rawRounds = (data?.rounds as RoundRow[]) ?? [];
-  const rounds = rawRounds.filter((r) => r.stage || asNumber(r.amount) > 0);
+
+  // Stage order for fallback sorting when dates are missing
+  const STAGE_ORDER: Record<string, number> = {
+    "pre-seed": 0, seed: 1, "series a": 2, "series b": 3,
+    "series c": 4, "series d": 5, "series e": 6, "series e+": 6,
+    bridge: 7, growth: 8, debt: 9, grant: 10,
+  };
+
+  const rounds = rawRounds
+    .filter((r) => r.stage || asNumber(r.amount) > 0)
+    .sort((a, b) => {
+      // Resolve the best available date for each round
+      const dateA = String(a.announcedDate ?? a.date ?? (a.articles ?? [])[0]?.publishedAt ?? "");
+      const dateB = String(b.announcedDate ?? b.date ?? (b.articles ?? [])[0]?.publishedAt ?? "");
+      if (dateA && dateB) return dateA.localeCompare(dateB);
+      if (dateA) return -1;
+      if (dateB) return 1;
+      // Fallback: sort by stage order
+      const stageA = STAGE_ORDER[(a.stage ?? "").toLowerCase()] ?? 99;
+      const stageB = STAGE_ORDER[(b.stage ?? "").toLowerCase()] ?? 99;
+      return stageA - stageB;
+    });
   const roundCount = rounds.length;
   const latestStage = rounds.find((r) => r.stage)?.stage ?? null;
 
@@ -447,7 +556,7 @@ export default function CompanyProfilePage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Tier 2: Navigation bar */}
-      <div className="glass-status-bar px-4 py-2.5 shrink-0">
+      <div className="glass-status-bar px-4 py-2.5 shrink-0 flex items-center justify-between">
         <button
           onClick={() => router.push("/app/companies")}
           className="glass-capsule-btn flex items-center gap-2 px-3 py-1 text-[13px] tracking-[-0.01em] text-foreground/55 hover:text-foreground/85 transition-colors"
@@ -455,6 +564,13 @@ export default function CompanyProfilePage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to companies
         </button>
+        <Link
+          href={`/app/companies/${encodeURIComponent(companyName)}/history`}
+          className="glass-capsule-btn flex items-center gap-2 px-3 py-1 text-[13px] tracking-[-0.01em] text-foreground/55 hover:text-foreground/85 transition-colors"
+        >
+          <Search className="h-3.5 w-3.5" />
+          Historische Rounds suchen
+        </Link>
       </div>
 
       {/* Content */}
@@ -652,6 +768,117 @@ export default function CompanyProfilePage() {
           )}
 
           {/* ================================================================= */}
+          {/* Valuation Range Chart                                             */}
+          {/* ================================================================= */}
+          {(() => {
+            const chartData = rounds
+              .map((r) => {
+                const amt = asNumber(r.amount);
+                const val = estimateValuation(r.stage, amt);
+                const dateRaw = r.announcedDate ?? r.date ?? (r.articles ?? [])[0]?.publishedAt;
+                if (!val || !dateRaw) return null;
+                const d = new Date(String(dateRaw));
+                if (Number.isNaN(d.getTime())) return null;
+                return {
+                  date: d.getTime(),
+                  label: d.toLocaleDateString("de-DE", { month: "short", year: "numeric" }),
+                  stage: r.stage ?? "Unknown",
+                  low: val.low,
+                  high: val.high,
+                  amount: amt,
+                };
+              })
+              .filter(Boolean) as { date: number; label: string; stage: string; low: number; high: number; amount: number }[];
+
+            if (chartData.length < 2) return null;
+
+            return (
+              <section className="space-y-4">
+                <h2 className="text-[11px] font-medium uppercase tracking-[0.04em] text-foreground/35">
+                  Geschätzte Bewertung über Zeit
+                </h2>
+                <div className="lg-inset rounded-[16px] p-4">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="valRangeFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="rgb(59,130,246)" stopOpacity={0.15} />
+                          <stop offset="100%" stopColor="rgb(59,130,246)" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="rgba(0,0,0,0.04)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11, fill: "rgba(0,0,0,0.35)" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(v: number) =>
+                          v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`
+                        }
+                        tick={{ fontSize: 11, fill: "rgba(0,0,0,0.35)" }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={60}
+                      />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0].payload as (typeof chartData)[number];
+                          return (
+                            <div className="glass-popover rounded-[10px] px-3 py-2 text-[12px] space-y-1">
+                              <p className="font-semibold text-foreground/85">{d.stage}</p>
+                              <p className="text-foreground/55">Runde: {formatAmount(d.amount)}</p>
+                              <p className="text-foreground/55">
+                                Bewertung: {formatAmount(d.low)} – {formatAmount(d.high)}
+                              </p>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="high"
+                        stroke="rgb(59,130,246)"
+                        strokeWidth={1.5}
+                        fill="url(#valRangeFill)"
+                        strokeOpacity={0.6}
+                        dot={{ r: 3, fill: "rgb(59,130,246)", strokeWidth: 0 }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="low"
+                        stroke="rgb(59,130,246)"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                        fill="white"
+                        fillOpacity={1}
+                        strokeOpacity={0.4}
+                        dot={{ r: 3, fill: "white", stroke: "rgb(59,130,246)", strokeWidth: 1 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  <div className="flex items-center justify-center gap-4 mt-2 text-[11px] text-foreground/40">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-0.5 w-4 bg-blue-500 rounded-full inline-block" />
+                      Obere Schätzung
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-0.5 w-4 bg-blue-500/40 rounded-full inline-block" style={{ backgroundImage: "repeating-linear-gradient(90deg, rgb(59,130,246) 0 4px, transparent 4px 7px)" }} />
+                      Untere Schätzung
+                    </span>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
+
+          {/* ================================================================= */}
           {/* Funding Timeline                                                  */}
           {/* ================================================================= */}
           {rounds.length > 0 && (
@@ -665,11 +892,20 @@ export default function CompanyProfilePage() {
 
                 {rounds.map((r, i) => {
                   const amount = asNumber(r.amount);
+                  const originalAmt = asNumber(r.originalAmount);
+                  const fxRate = asNumber(r.fxRate);
+                  const confidence = asNumber(r.confidence);
                   const leadInvestor = (r.investors ?? []).find(
                     (inv) => inv.role === "lead"
                   );
+                  const participants = (r.investors ?? []).filter(
+                    (inv) => inv.name && inv.role !== "lead"
+                  );
                   const firstArticle = (r.articles ?? [])[0];
-                  const dateStr = formatDate(firstArticle?.publishedAt);
+                  const dateStr = formatDate(r.date) ?? formatDate(r.announcedDate) ?? formatDate(firstArticle?.publishedAt);
+                  const hasCurrencyDetail = r.currency && r.currency !== "USD" && originalAmt > 0;
+                  const valuation = estimateValuation(r.stage, amount);
+
                   return (
                     <div
                       key={r.roundKey ?? i}
@@ -681,42 +917,205 @@ export default function CompanyProfilePage() {
                         <div className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
                       </div>
 
-                      <div className="lg-inset rounded-[14px] flex-1 p-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <span className="rounded-full bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-medium text-foreground/55 shrink-0">
-                            {r.stage ?? "Unknown"}
-                          </span>
-                          <span className="font-bold text-[17px] tracking-[-0.02em] tabular-nums text-foreground/85">
-                            {formatAmount(amount)}
-                          </span>
+                      <div className="lg-inset rounded-[14px] flex-1 p-4 space-y-3">
+                        {/* Row 1: Stage, amount, valuation, date */}
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <span className="rounded-full bg-foreground/[0.04] px-2.5 py-0.5 text-[10px] font-medium text-foreground/55 shrink-0">
+                              {r.stage ?? "Unknown"}
+                            </span>
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[17px] tracking-[-0.02em] tabular-nums text-foreground/85">
+                                  {formatAmount(amount)}
+                                </span>
+                                {hasCurrencyDetail && (
+                                  <span className="text-[11px] text-foreground/30 tabular-nums">
+                                    ({r.currency} {formatAmount(originalAmt)}{fxRate > 0 ? ` × ${fxRate.toFixed(3)}` : ""})
+                                  </span>
+                                )}
+                              </div>
+                              {valuation && (
+                                <span className="text-[11px] text-foreground/35 tabular-nums tracking-[-0.01em]">
+                                  Est. Bewertung {formatAmount(valuation.low)} – {formatAmount(valuation.high)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            {confidence > 0 && (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                confidence >= 0.8
+                                  ? "bg-emerald-500/8 text-emerald-600"
+                                  : confidence >= 0.6
+                                    ? "bg-amber-500/8 text-amber-600"
+                                    : "bg-foreground/[0.04] text-foreground/40"
+                              }`}>
+                                {Math.round(confidence * 100)}%
+                              </span>
+                            )}
+                            {dateStr && (
+                              <span className="flex items-center gap-1 text-foreground/30 text-[12px]">
+                                <Calendar className="h-3 w-3" />
+                                {dateStr}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 text-foreground/40 text-[12px]">
-                          {leadInvestor?.name && (
-                            <span className="hidden sm:inline text-foreground/55">
-                              {leadInvestor.name}
-                            </span>
-                          )}
-                          {dateStr && (
-                            <span className="flex items-center gap-1 text-foreground/30">
-                              <Calendar className="h-3 w-3" />
-                              {dateStr}
-                            </span>
-                          )}
-                          {(r.articles ?? []).map((article, ai) =>
-                            article.url ? (
-                              <a
-                                key={ai}
-                                href={article.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-500"
-                                title={article.title ?? "Source article"}
+
+                        {/* Row 2: Investors with logos */}
+                        {(leadInvestor || participants.length > 0) && (
+                          <div className="flex flex-wrap gap-2">
+                            {leadInvestor?.name && (
+                              <div className="flex items-center gap-1.5 rounded-full bg-blue-500/8 pl-1 pr-2.5 py-0.5">
+                                {leadInvestor.logoUrl ? (
+                                  <SmartLogo
+                                    src={leadInvestor.logoUrl}
+                                    alt={leadInvestor.name}
+                                    className="h-4 w-4 rounded-full"
+                                    fallback={
+                                      <Briefcase className="h-3.5 w-3.5 text-blue-500/50" />
+                                    }
+                                  />
+                                ) : (
+                                  <Briefcase className="h-3.5 w-3.5 text-blue-500/50" />
+                                )}
+                                <span className="text-[11px] font-semibold text-blue-600">
+                                  {leadInvestor.name}
+                                </span>
+                                <span className="text-[9px] font-medium text-blue-500/60 uppercase">
+                                  Lead
+                                </span>
+                              </div>
+                            )}
+                            {participants.map((inv) => (
+                              <div
+                                key={inv.name}
+                                className="flex items-center gap-1.5 rounded-full bg-foreground/[0.04] pl-1 pr-2.5 py-0.5"
                               >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            ) : null
+                                {inv.logoUrl ? (
+                                  <SmartLogo
+                                    src={inv.logoUrl}
+                                    alt={inv.name ?? ""}
+                                    className="h-4 w-4 rounded-full"
+                                    fallback={
+                                      <Briefcase className="h-3.5 w-3.5 text-foreground/25" />
+                                    }
+                                  />
+                                ) : (
+                                  <Briefcase className="h-3.5 w-3.5 text-foreground/25" />
+                                )}
+                                <span className="text-[11px] font-medium text-foreground/55">
+                                  {inv.name}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Row 3: Source articles + Edit button */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            {(r.articles ?? []).map((article, ai) =>
+                              article.url ? (
+                                <a
+                                  key={ai}
+                                  href={article.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-500 transition-colors"
+                                >
+                                  <ExternalLink className="h-3 w-3 shrink-0" />
+                                  <span className="truncate max-w-[200px]">
+                                    {article.title ?? "Source"}
+                                  </span>
+                                </a>
+                              ) : null
+                            )}
+                          </div>
+                          {r.roundKey && editingRoundKey !== r.roundKey && (
+                            <button
+                              onClick={() => {
+                                setEditingRoundKey(r.roundKey);
+                                setEditForm({
+                                  announcedDate: String(r.announcedDate ?? r.date ?? ""),
+                                  stage: String(r.stage ?? ""),
+                                  amountUsd: amount > 0 ? String(amount) : "",
+                                });
+                              }}
+                              className="glass-capsule-btn flex items-center gap-1 px-2 py-0.5 text-[11px] text-foreground/35 hover:text-foreground/60 transition-colors shrink-0"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
                           )}
                         </div>
+
+                        {/* Inline edit form */}
+                        {r.roundKey && editingRoundKey === r.roundKey && (
+                          <div className="rounded-[10px] bg-foreground/[0.02] border border-foreground/[0.06] p-3 space-y-3">
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                                  Datum
+                                </label>
+                                <input
+                                  type="date"
+                                  value={editForm.announcedDate}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, announcedDate: e.target.value }))}
+                                  className="glass-search-input w-full px-2 py-1 text-[13px] text-foreground/85"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                                  Stage
+                                </label>
+                                <select
+                                  value={editForm.stage}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, stage: e.target.value }))}
+                                  className="glass-search-input w-full px-2 py-1 text-[13px] text-foreground/85"
+                                >
+                                  <option value="">—</option>
+                                  {["Pre-Seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "Series E+", "Bridge", "Growth", "Debt", "Grant"].map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                                  Betrag (USD)
+                                </label>
+                                <input
+                                  type="number"
+                                  value={editForm.amountUsd}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, amountUsd: e.target.value }))}
+                                  placeholder="z.B. 10000000"
+                                  className="glass-search-input w-full px-2 py-1 text-[13px] text-foreground/85 tabular-nums"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => saveRoundEdit(r.roundKey!)}
+                                disabled={editSaving}
+                                className="apple-btn-blue px-3 py-1 text-[11px] font-semibold rounded-[8px] flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {editSaving ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Check className="h-3 w-3" />
+                                )}
+                                Speichern
+                              </button>
+                              <button
+                                onClick={() => setEditingRoundKey(null)}
+                                className="glass-capsule-btn px-3 py-1 text-[11px] text-foreground/45 flex items-center gap-1"
+                              >
+                                <X className="h-3 w-3" />
+                                Abbrechen
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
