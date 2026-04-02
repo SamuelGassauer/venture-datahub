@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       ? `WHERE ${[...conditions, ...(startup ? [`(c.uuid = $startup OR toLower(c.name) CONTAINS toLower($startup))`] : [])].join(" AND ")}`
       : "";
 
-    const sortField = sortBy === "amount" ? "amountUsd" : "articleDate";
+    const sortField = sortBy === "amount" ? "amountUsd" : "effectiveDate";
 
     const result = await session.run(`
       MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
@@ -82,12 +82,15 @@ export async function GET(request: NextRequest) {
       WITH fr.uuid AS roundUuid, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
            fr.currency AS currency, fr.fxRate AS fxRate,
            fr.stage AS stage, fr.confidence AS confidence,
+           fr.announcedDate AS announcedDate,
            c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+           COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
            articleDate,
            collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
       ${investorCondition}
       RETURN roundUuid, startupUuid, startupName, startupNormalizedName,
-             originalAmount, amountUsd, currency, fxRate, stage, confidence, articleDate, investors
+             originalAmount, amountUsd, currency, fxRate, stage, confidence,
+             announcedDate, articleDate, effectiveDate, investors
       ORDER BY ${sortField} ${sortDir}
       SKIP $skip LIMIT $limit
     `, params);
@@ -99,14 +102,16 @@ export async function GET(request: NextRequest) {
       const roundUuid = toStr(r.get("roundUuid"));
       const startupUuid = toStr(r.get("startupUuid"));
       const startupId = startupUuid || toStr(r.get("startupNormalizedName"));
+      const announcedDate = toStr(r.get("announcedDate"));
       const articleDate = toStr(r.get("articleDate"));
+      const effectiveDate = announcedDate || (articleDate ? articleDate.substring(0, 10) : null);
       const rawInvestors = r.get("investors") as { uuid: string | null; name: string | null; role: string | null }[];
 
       return {
         roundExternalId: roundUuid,
         startupExternalId: startupId,
         startupName: toStr(r.get("startupName")),
-        investmentDate: articleDate ? articleDate.substring(0, 10) : null,
+        investmentDate: effectiveDate,
         originalAmount: toNum(r.get("originalAmount")) || null,
         totalRoundSizeUsd: toNum(r.get("amountUsd")),
         currency: toStr(r.get("currency")),
@@ -120,7 +125,7 @@ export async function GET(request: NextRequest) {
             name: toStr(i.name),
             role: mapRole(i.role),
           })),
-        updatedAt: articleDate || new Date().toISOString(),
+        updatedAt: effectiveDate || new Date().toISOString(),
       };
     });
 

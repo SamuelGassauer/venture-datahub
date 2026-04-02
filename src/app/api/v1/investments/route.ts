@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const sortField = sortBy === "amount" ? "fr.amountUsd" : "articleDate";
+    const sortField = sortBy === "amount" ? "fr.amountUsd" : "effectiveDate";
 
     const result = await session.run(`
       MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
@@ -80,11 +80,13 @@ export async function GET(request: NextRequest) {
            rel.role AS role,
            fr.uuid AS roundUuid, fr.amountUsd AS amountUsd, fr.currency AS currency,
            fr.stage AS stage, fr.confidence AS confidence,
+           fr.announcedDate AS announcedDate,
            c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+           COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
            articleDate,
            collect(DISTINCT coInv.name) AS coInvestorNames
       RETURN fundUuid, fundName, role, roundUuid, startupUuid, startupName, startupNormalizedName,
-             amountUsd, currency, stage, confidence, articleDate, coInvestorNames
+             amountUsd, currency, stage, confidence, announcedDate, articleDate, effectiveDate, coInvestorNames
       ORDER BY ${sortField} ${sortDir}
       SKIP $skip LIMIT $limit
     `, params);
@@ -97,7 +99,9 @@ export async function GET(request: NextRequest) {
       const roundUuid = toStr(r.get("roundUuid"));
       const startupUuid = toStr(r.get("startupUuid"));
       const startupId = startupUuid || toStr(r.get("startupNormalizedName"));
+      const announcedDate = toStr(r.get("announcedDate"));
       const articleDate = toStr(r.get("articleDate"));
+      const effectiveDate = announcedDate || (articleDate ? articleDate.substring(0, 10) : null);
       const coInvestorNames = (r.get("coInvestorNames") as (string | null)[]).filter(Boolean) as string[];
 
       return {
@@ -106,14 +110,14 @@ export async function GET(request: NextRequest) {
         fundName: toStr(r.get("fundName")),
         startupExternalId: startupId,
         startupName: toStr(r.get("startupName")),
-        investmentDate: articleDate ? articleDate.substring(0, 10) : null,
+        investmentDate: effectiveDate,
         investmentAmountUsd: null,
         totalRoundSizeUsd: toNum(r.get("amountUsd")),
         stage: toStr(r.get("stage")),
         role: mapRole(r.get("role") as string | null),
         confidence: toNum(r.get("confidence")),
         coInvestors: coInvestorNames,
-        updatedAt: articleDate || new Date().toISOString(),
+        updatedAt: effectiveDate || new Date().toISOString(),
       };
     });
 
