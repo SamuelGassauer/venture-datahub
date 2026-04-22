@@ -161,4 +161,24 @@ describe("/api/v1/investors", () => {
       expect(inv.dealCount).toBeGreaterThan(0);
     }
   });
+
+  // ── sector_focus filter (was a no-op before fix) ────────────────────
+
+  it("sector_focus filter restricts investors to those active in that sector", async () => {
+    const pool = await fetchInvestors({ limit: "50" });
+    const sample = pool.data.flatMap((d) => d.sectorFocus).find((s) => typeof s === "string" && s.length > 0);
+    if (!sample) return;
+    const res = await fetchInvestors({ sector_focus: sample, limit: "50" });
+    expect(res.data.length).toBeGreaterThan(0);
+    for (const inv of res.data) {
+      const lowered = inv.sectorFocus.map((x) => x.toLowerCase());
+      expect(lowered).toContain(sample.toLowerCase());
+    }
+  });
+
+  it("sector_focus with nonexistent value returns empty data", async () => {
+    const res = await fetchInvestors({ sector_focus: "__definitely_not_a_real_sector__" });
+    expect(Array.isArray(res.data)).toBe(true);
+    expect(res.data.length).toBe(0);
+  });
 });

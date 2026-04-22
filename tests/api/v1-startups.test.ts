@@ -150,4 +150,37 @@ describe("/api/v1/startups", () => {
     const names2 = res2.data.map((d) => d.name);
     expect(names1).toEqual(names2);
   });
+
+  // ── sector_focus filter (was a no-op before fix) ────────────────────
+
+  it("sector_focus filter returns only startups tagged with that sector", async () => {
+    const pool = await fetchStartups({ limit: "50" });
+    const sample = pool.data.flatMap((s) => s.sector).find((s) => typeof s === "string" && s.length > 0);
+    if (!sample) return;
+    const res = await fetchStartups({ sector_focus: sample, limit: "50" });
+    expect(res.data.length).toBeGreaterThan(0);
+    for (const s of res.data) {
+      const lowered = s.sector.map((x) => x.toLowerCase());
+      expect(lowered).toContain(sample.toLowerCase());
+    }
+  });
+
+  it("sector_focus with nonexistent value returns empty data + pagination envelope", async () => {
+    const res = await fetchStartups({ sector_focus: "__definitely_not_a_real_sector__" });
+    expect(Array.isArray(res.data)).toBe(true);
+    expect(res.data.length).toBe(0);
+    expect(res.pagination).toHaveProperty("hasMore");
+    expect(res.pagination.hasMore).toBe(false);
+  });
+
+  it("sector_focus is case-insensitive", async () => {
+    const pool = await fetchStartups({ limit: "50" });
+    const sample = pool.data.flatMap((s) => s.sector).find((s) => typeof s === "string" && /[a-zA-Z]/.test(s));
+    if (!sample) return;
+    const upper = sample.toUpperCase();
+    const lower = sample.toLowerCase();
+    const resUpper = await fetchStartups({ sector_focus: upper, limit: "50" });
+    const resLower = await fetchStartups({ sector_focus: lower, limit: "50" });
+    expect(resUpper.data.length).toBe(resLower.data.length);
+  });
 });

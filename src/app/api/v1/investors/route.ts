@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   const idSearch = searchParams.get("id");
   const nameSearch = searchParams.get("name");
   const country = searchParams.get("country");
-  const sector = searchParams.get("sector");
+  const sector = searchParams.get("sector_focus") || searchParams.get("sector");
   const geo = searchParams.get("geo");
   const role = searchParams.get("role");
   const sortBy = searchParams.get("sort") || "activity";

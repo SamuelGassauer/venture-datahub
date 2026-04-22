@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
   const idSearch = searchParams.get("id");
   const nameSearch = searchParams.get("name");
   const country = searchParams.get("country");
-  const sector = searchParams.get("sector");
+  // sector_focus is the documented public name; sector kept as alias for internal callers
+  const sector = searchParams.get("sector_focus") || searchParams.get("sector");
   const stage = searchParams.get("stage");
   const sortBy = searchParams.get("sort") || "name";
   const sortDir = searchParams.get("dir") === "desc" ? "DESC" : "ASC";
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     if (updatedSince) { matchConditions.push(`c.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
     if (idSearch) { matchConditions.push(`c.uuid = $idSearch`); params.idSearch = idSearch; }
     if (nameSearch) { matchConditions.push(`toLower(c.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
-    if (sector) { matchConditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) CONTAINS toLower($sector))`); params.sector = sector; }
+    if (sector) { matchConditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
     const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
 
     // Country filter: defaults to Europe-only, pass country=all to disable
