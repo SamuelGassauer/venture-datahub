@@ -73,6 +73,21 @@ export async function GET(request: NextRequest) {
     }
   };
 
+  // Effective date matches /v1/funding-rounds: COALESCE(announcedDate,
+  // min SOURCED_FROM article publishedAt). announcedDate has ~15% coverage,
+  // the article fallback brings us to ~99%.
+  const recentRoundsSubquery = `
+    CALL {
+      WITH c
+      OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
+      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+      WITH fr, COALESCE(fr.announcedDate, min(a.publishedAt)) AS effDate
+      WITH fr, effDate
+      WHERE fr IS NOT NULL AND effDate IS NOT NULL AND effDate >= $sinceYmd
+      RETURN count(fr) AS rrc, sum(COALESCE(fr.amountUsd, 0.0)) AS rra
+    }
+  `;
+
   try {
     const [primaryRes, subRes, totalsRes] = await Promise.all([
       runRead(`
@@ -82,13 +97,11 @@ export async function GET(request: NextRequest) {
         WITH c, sectorArr
         WHERE size(sectorArr) > 0
         WITH c, sectorArr[0] AS primary
-        OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
-          WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
-        WITH primary, c, collect(DISTINCT fr) AS recentRounds
+        ${recentRoundsSubquery}
         RETURN primary,
                count(DISTINCT c) AS startupCount,
-               sum(size(recentRounds)) AS recentRoundCount,
-               sum(reduce(acc = 0.0, r IN recentRounds | acc + COALESCE(r.amountUsd, 0.0))) AS recentAmountUsd
+               sum(rrc) AS recentRoundCount,
+               sum(rra) AS recentAmountUsd
         ORDER BY recentRoundCount DESC, startupCount DESC
       `),
       runRead(`
@@ -100,12 +113,10 @@ export async function GET(request: NextRequest) {
         WITH c, sectorArr[0] AS primary, sectorArr[1..] AS subs
         UNWIND subs AS sub
         WITH primary, sub, c
-        OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
-          WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
-        WITH primary, sub, c, collect(DISTINCT fr) AS recentRounds
+        ${recentRoundsSubquery}
         RETURN primary, sub AS label,
                count(DISTINCT c) AS startupCount,
-               sum(size(recentRounds)) AS recentRoundCount
+               sum(rrc) AS recentRoundCount
       `),
       runRead(`
         MATCH (c:Company) ${countryClause ? `WHERE 1=1 ${countryClause}` : ""}

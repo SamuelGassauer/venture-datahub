@@ -48,6 +48,15 @@ function toStrArr(v: unknown): string[] {
   return [];
 }
 
+// Align per-investor role with /v1/funding-rounds: raw "lead" → "LEAD",
+// anything else → "FOLLOW". Per-round roles never emit "BOTH" (that only
+// appears in investor-level aggregation elsewhere), but downstream checks
+// accept it to stay forward-compatible.
+function normalizeRole(role: unknown): "LEAD" | "FOLLOW" {
+  if (typeof role !== "string") return "FOLLOW";
+  return role.toLowerCase() === "lead" ? "LEAD" : "FOLLOW";
+}
+
 function ymdUtc(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -237,6 +246,21 @@ export async function GET(
     }
   };
 
+  // Effective date matches /v1/funding-rounds: COALESCE(announcedDate,
+  // min SOURCED_FROM article publishedAt). announcedDate alone is ~15%
+  // coverage; the article fallback brings us to ~99%.
+  const recentRoundsSubquery = `
+    CALL {
+      WITH c
+      OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
+      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+      WITH fr, COALESCE(fr.announcedDate, min(a.publishedAt)) AS effDate
+      WITH fr, effDate
+      WHERE fr IS NOT NULL AND effDate IS NOT NULL AND effDate >= $sinceYmd
+      RETURN count(fr) AS rrc, sum(COALESCE(fr.amountUsd, 0.0)) AS rra
+    }
+  `;
+
   try {
     const [poolRes, roundsRes, subsectorsRes] = await Promise.all([
       runRead(`
@@ -250,28 +274,31 @@ export async function GET(
       runRead(`
         MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
         WHERE c.sector IS NOT NULL
-          AND fr.announcedDate IS NOT NULL
-          AND fr.announcedDate >= $sinceYmd
           ${countryClause}
         ${normalizeSectorArrWithFr}
         WITH c, fr, sectorArr
         WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
           ${subsectorRoundsFilter}
+        OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+        WITH c, fr, sectorArr,
+             COALESCE(fr.announcedDate, min(a.publishedAt)) AS effectiveDate
+        WITH c, fr, sectorArr, effectiveDate
+        WHERE effectiveDate IS NOT NULL AND effectiveDate >= $sinceYmd
         OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
-        WITH fr, c, sectorArr, collect(DISTINCT loc.name)[0] AS companyHq
+        WITH fr, c, sectorArr, effectiveDate, collect(DISTINCT loc.name)[0] AS companyHq
         OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-        WITH fr, c, sectorArr, companyHq,
+        WITH fr, c, sectorArr, effectiveDate, companyHq,
              collect(CASE WHEN inv.name IS NOT NULL THEN {
                uuid: inv.uuid, name: inv.name, role: rel.role,
                logoUrl: inv.logoUrl, hqCity: inv.hqCity, hqCountry: inv.hqCountry
              } ELSE NULL END) AS rawInvestors
         RETURN fr.uuid AS roundId, fr.amountUsd AS amountUsd, fr.stage AS stage,
-               fr.announcedDate AS announcedDate,
+               effectiveDate AS announcedDate,
                c.uuid AS startupId, c.name AS startupName,
                sectorArr AS sector,
                COALESCE(companyHq, c.country) AS hq,
                [i IN rawInvestors WHERE i IS NOT NULL] AS investors
-        ORDER BY fr.announcedDate DESC
+        ORDER BY effectiveDate DESC
         LIMIT 1000
       `),
       // Subsector breakdown must NOT be narrowed by ?subsector= (only by the primary).
@@ -284,14 +311,11 @@ export async function GET(
         UNWIND sectorArr AS sub
         WITH c, sub
         WHERE toLower(sub) <> toLower($sectorName)
-        WITH sub, c
-        OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
-          WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
-        WITH sub, c, collect(DISTINCT fr) AS recentRounds
+        ${recentRoundsSubquery}
         RETURN sub AS label,
                count(DISTINCT c) AS startupCount,
-               sum(size(recentRounds)) AS roundCount,
-               sum(reduce(acc = 0.0, r IN recentRounds | acc + COALESCE(r.amountUsd, 0.0))) AS amountUsd
+               sum(rrc) AS roundCount,
+               sum(rra) AS amountUsd
         ORDER BY roundCount DESC, startupCount DESC
       `),
     ]);
@@ -309,7 +333,7 @@ export async function GET(
       const rawInvestors = (rec.get("investors") as InvestorRaw[]).map((i) => ({
         uuid: toStr(i.uuid),
         name: toStr(i.name),
-        role: i.role ? toStr(i.role) : null,
+        role: normalizeRole(i.role),
         logoUrl: toStr(i.logoUrl),
         hqCity: toStr(i.hqCity),
         hqCountry: toStr(i.hqCountry),
@@ -412,7 +436,7 @@ export async function GET(
           leadCount: 0,
         };
         entry.dealCount += 1;
-        if (inv.role && inv.role.toLowerCase() === "lead") entry.leadCount += 1;
+        if (inv.role === "LEAD" || inv.role === "BOTH") entry.leadCount += 1;
         if (r.stage) entry.stages.add(r.stage);
         if (!entry.logoUrl && inv.logoUrl) entry.logoUrl = inv.logoUrl;
         if (!entry.hq && hq) entry.hq = hq;
@@ -438,8 +462,8 @@ export async function GET(
 
     // ── rounds (cap 50, sorted by date desc) ──────────────────────────
     const rounds = rawRounds.slice(0, 50).map((r) => {
-      const leadInv = r.investors.find((i) => i.role && i.role.toLowerCase() === "lead");
-      const participants = r.investors.filter((i) => !i.role || i.role.toLowerCase() !== "lead");
+      const leadInv = r.investors.find((i) => i.role === "LEAD" || i.role === "BOTH");
+      const participants = r.investors.filter((i) => i.role !== "LEAD" && i.role !== "BOTH");
       return {
         roundId: r.roundId,
         startupId: r.startupId,
