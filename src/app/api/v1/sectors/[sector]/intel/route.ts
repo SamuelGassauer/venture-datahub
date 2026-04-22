@@ -222,83 +222,78 @@ export async function GET(
               THEN [c.subsector] ELSE [] END AS sectorArr
   `;
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  const subsectorRoundsFilter = subsector
+    ? "AND ANY(s IN sectorArr WHERE toLower(s) = toLower($subsectorName))"
+    : "";
+
+  // One session per concurrent query — a single Neo4j session serializes
+  // transactions, so Promise.all on one session throws 50N42.
+  const runRead = async (cypher: string) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher, queryParams);
+    } finally {
+      await s.close();
+    }
+  };
+
   try {
-    const poolQuery = session.run(
-      `
-      MATCH (c:Company)
-      WHERE c.sector IS NOT NULL ${countryClause}
-      ${normalizeSectorArr}
-      WITH c, sectorArr
-      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
-      RETURN count(c) AS poolStartups
-      `,
-      queryParams,
-    );
-
-    const subsectorRoundsFilter = subsector
-      ? "AND ANY(s IN sectorArr WHERE toLower(s) = toLower($subsectorName))"
-      : "";
-
-    const roundsQuery = session.run(
-      `
-      MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
-      WHERE c.sector IS NOT NULL
-        AND fr.announcedDate IS NOT NULL
-        AND fr.announcedDate >= $sinceYmd
-        ${countryClause}
-      ${normalizeSectorArrWithFr}
-      WITH c, fr, sectorArr
-      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
-        ${subsectorRoundsFilter}
-      OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
-      WITH fr, c, sectorArr, collect(DISTINCT loc.name)[0] AS companyHq
-      OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-      WITH fr, c, sectorArr, companyHq,
-           collect(CASE WHEN inv.name IS NOT NULL THEN {
-             uuid: inv.uuid, name: inv.name, role: rel.role,
-             logoUrl: inv.logoUrl, hqCity: inv.hqCity, hqCountry: inv.hqCountry
-           } ELSE NULL END) AS rawInvestors
-      RETURN fr.uuid AS roundId, fr.amountUsd AS amountUsd, fr.stage AS stage,
-             fr.announcedDate AS announcedDate,
-             c.uuid AS startupId, c.name AS startupName,
-             sectorArr AS sector,
-             COALESCE(companyHq, c.country) AS hq,
-             [i IN rawInvestors WHERE i IS NOT NULL] AS investors
-      ORDER BY fr.announcedDate DESC
-      LIMIT 1000
-      `,
-      queryParams,
-    );
-
-    // Subsector breakdown must NOT be narrowed by ?subsector= (only by the primary).
-    const subsectorsQuery = session.run(
-      `
-      MATCH (c:Company)
-      WHERE c.sector IS NOT NULL ${countryClause}
-      ${normalizeSectorArr}
-      WITH c, sectorArr
-      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
-      UNWIND sectorArr AS sub
-      WITH c, sub
-      WHERE toLower(sub) <> toLower($sectorName)
-      WITH sub, c
-      OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
-        WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
-      WITH sub, c, collect(DISTINCT fr) AS recentRounds
-      RETURN sub AS label,
-             count(DISTINCT c) AS startupCount,
-             sum(size(recentRounds)) AS roundCount,
-             sum(reduce(acc = 0.0, r IN recentRounds | acc + COALESCE(r.amountUsd, 0.0))) AS amountUsd
-      ORDER BY roundCount DESC, startupCount DESC
-      `,
-      queryParams,
-    );
-
     const [poolRes, roundsRes, subsectorsRes] = await Promise.all([
-      poolQuery,
-      roundsQuery,
-      subsectorsQuery,
+      runRead(`
+        MATCH (c:Company)
+        WHERE c.sector IS NOT NULL ${countryClause}
+        ${normalizeSectorArr}
+        WITH c, sectorArr
+        WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
+        RETURN count(c) AS poolStartups
+      `),
+      runRead(`
+        MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
+        WHERE c.sector IS NOT NULL
+          AND fr.announcedDate IS NOT NULL
+          AND fr.announcedDate >= $sinceYmd
+          ${countryClause}
+        ${normalizeSectorArrWithFr}
+        WITH c, fr, sectorArr
+        WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
+          ${subsectorRoundsFilter}
+        OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
+        WITH fr, c, sectorArr, collect(DISTINCT loc.name)[0] AS companyHq
+        OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
+        WITH fr, c, sectorArr, companyHq,
+             collect(CASE WHEN inv.name IS NOT NULL THEN {
+               uuid: inv.uuid, name: inv.name, role: rel.role,
+               logoUrl: inv.logoUrl, hqCity: inv.hqCity, hqCountry: inv.hqCountry
+             } ELSE NULL END) AS rawInvestors
+        RETURN fr.uuid AS roundId, fr.amountUsd AS amountUsd, fr.stage AS stage,
+               fr.announcedDate AS announcedDate,
+               c.uuid AS startupId, c.name AS startupName,
+               sectorArr AS sector,
+               COALESCE(companyHq, c.country) AS hq,
+               [i IN rawInvestors WHERE i IS NOT NULL] AS investors
+        ORDER BY fr.announcedDate DESC
+        LIMIT 1000
+      `),
+      // Subsector breakdown must NOT be narrowed by ?subsector= (only by the primary).
+      runRead(`
+        MATCH (c:Company)
+        WHERE c.sector IS NOT NULL ${countryClause}
+        ${normalizeSectorArr}
+        WITH c, sectorArr
+        WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
+        UNWIND sectorArr AS sub
+        WITH c, sub
+        WHERE toLower(sub) <> toLower($sectorName)
+        WITH sub, c
+        OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
+          WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
+        WITH sub, c, collect(DISTINCT fr) AS recentRounds
+        RETURN sub AS label,
+               count(DISTINCT c) AS startupCount,
+               sum(size(recentRounds)) AS roundCount,
+               sum(reduce(acc = 0.0, r IN recentRounds | acc + COALESCE(r.amountUsd, 0.0))) AS amountUsd
+        ORDER BY roundCount DESC, startupCount DESC
+      `),
     ]);
 
     const poolStartups = toNum(poolRes.records[0]?.get("poolStartups"));
@@ -509,7 +504,5 @@ export async function GET(
   } catch (error) {
     console.error("v1/sectors/[sector]/intel error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    await session.close();
   }
 }
