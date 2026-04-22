@@ -54,12 +54,25 @@ export async function GET(request: NextRequest) {
 
   const session = driver().session({ defaultAccessMode: "READ" });
   try {
-    // Primary-sector stats + total startups, in a single round-trip.
+    // c.sector is stored as a scalar string and c.subsector as a separate scalar.
+    // Normalize into an array (same shape /v1/startups exposes) before aggregating.
+    const normalizeSectorArr = `
+      WITH c,
+           CASE WHEN c.sector IS NULL THEN [] ELSE [] + c.sector END AS _baseSector
+      WITH c, _baseSector +
+           CASE WHEN c.subsector IS NOT NULL AND NOT c.subsector IN _baseSector
+                THEN [c.subsector] ELSE [] END AS sectorArr
+    `;
+
+    // Primary-sector stats.
     const primaryQuery = session.run(
       `
       MATCH (c:Company)
-      WHERE c.sector IS NOT NULL AND size(c.sector) > 0 ${countryClause}
-      WITH c, c.sector[0] AS primary
+      WHERE c.sector IS NOT NULL ${countryClause}
+      ${normalizeSectorArr}
+      WITH c, sectorArr
+      WHERE size(sectorArr) > 0
+      WITH c, sectorArr[0] AS primary
       OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
         WHERE fr.announcedDate IS NOT NULL AND fr.announcedDate >= $sinceYmd
       WITH primary, c, collect(DISTINCT fr) AS recentRounds
@@ -72,13 +85,16 @@ export async function GET(request: NextRequest) {
       params,
     );
 
-    // Subsector breakdown: each non-primary sector tag credited once per tagged startup,
-    // rounds credited to each non-primary tag on the startup's sector[].
+    // Subsector breakdown: each non-primary sector tag credited once per tagged
+    // startup; rounds credited to each non-primary tag on the startup's sector[].
     const subsectorQuery = session.run(
       `
       MATCH (c:Company)
-      WHERE c.sector IS NOT NULL AND size(c.sector) >= 2 ${countryClause}
-      WITH c, c.sector[0] AS primary, c.sector[1..] AS subs
+      WHERE c.sector IS NOT NULL ${countryClause}
+      ${normalizeSectorArr}
+      WITH c, sectorArr
+      WHERE size(sectorArr) >= 2
+      WITH c, sectorArr[0] AS primary, sectorArr[1..] AS subs
       UNWIND subs AS sub
       WITH primary, sub, c
       OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)

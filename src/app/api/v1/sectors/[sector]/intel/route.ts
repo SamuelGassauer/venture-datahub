@@ -200,38 +200,61 @@ export async function GET(
     countryClause = `AND c.country IN ${EUROPE_CYPHER_LIST}`;
   }
 
-  let subsectorClause = "";
   if (subsector) {
-    subsectorClause = "AND ANY(s IN c.sector WHERE toLower(s) = toLower($subsectorName))";
     queryParams.subsectorName = subsector;
   }
+
+  // c.sector is stored as a scalar string and c.subsector as a separate scalar.
+  // Normalize into an array (same shape /v1/startups exposes) before matching.
+  const normalizeSectorArr = `
+    WITH c,
+         CASE WHEN c.sector IS NULL THEN [] ELSE [] + c.sector END AS _baseSector
+    WITH c, _baseSector +
+         CASE WHEN c.subsector IS NOT NULL AND NOT c.subsector IN _baseSector
+              THEN [c.subsector] ELSE [] END AS sectorArr
+  `;
+  // Variant that preserves `fr` through the WITH chain (for the rounds query).
+  const normalizeSectorArrWithFr = `
+    WITH c, fr,
+         CASE WHEN c.sector IS NULL THEN [] ELSE [] + c.sector END AS _baseSector
+    WITH c, fr, _baseSector +
+         CASE WHEN c.subsector IS NOT NULL AND NOT c.subsector IN _baseSector
+              THEN [c.subsector] ELSE [] END AS sectorArr
+  `;
 
   const session = driver().session({ defaultAccessMode: "READ" });
   try {
     const poolQuery = session.run(
       `
       MATCH (c:Company)
-      WHERE c.sector IS NOT NULL
-        AND ANY(s IN c.sector WHERE toLower(s) = toLower($sectorName))
-        ${countryClause}
+      WHERE c.sector IS NOT NULL ${countryClause}
+      ${normalizeSectorArr}
+      WITH c, sectorArr
+      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
       RETURN count(c) AS poolStartups
       `,
       queryParams,
     );
 
+    const subsectorRoundsFilter = subsector
+      ? "AND ANY(s IN sectorArr WHERE toLower(s) = toLower($subsectorName))"
+      : "";
+
     const roundsQuery = session.run(
       `
       MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
       WHERE c.sector IS NOT NULL
-        AND ANY(s IN c.sector WHERE toLower(s) = toLower($sectorName))
         AND fr.announcedDate IS NOT NULL
         AND fr.announcedDate >= $sinceYmd
-        ${subsectorClause}
         ${countryClause}
+      ${normalizeSectorArrWithFr}
+      WITH c, fr, sectorArr
+      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
+        ${subsectorRoundsFilter}
       OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
-      WITH fr, c, collect(DISTINCT loc.name)[0] AS companyHq
+      WITH fr, c, sectorArr, collect(DISTINCT loc.name)[0] AS companyHq
       OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-      WITH fr, c, companyHq,
+      WITH fr, c, sectorArr, companyHq,
            collect(CASE WHEN inv.name IS NOT NULL THEN {
              uuid: inv.uuid, name: inv.name, role: rel.role,
              logoUrl: inv.logoUrl, hqCity: inv.hqCity, hqCountry: inv.hqCountry
@@ -239,7 +262,7 @@ export async function GET(
       RETURN fr.uuid AS roundId, fr.amountUsd AS amountUsd, fr.stage AS stage,
              fr.announcedDate AS announcedDate,
              c.uuid AS startupId, c.name AS startupName,
-             COALESCE(c.sector, []) AS sector,
+             sectorArr AS sector,
              COALESCE(companyHq, c.country) AS hq,
              [i IN rawInvestors WHERE i IS NOT NULL] AS investors
       ORDER BY fr.announcedDate DESC
@@ -248,16 +271,15 @@ export async function GET(
       queryParams,
     );
 
-    // Subsector breakdown must NOT be narrowed by ?subsector=... (the subsectorClause
-    // is intentionally omitted here).
+    // Subsector breakdown must NOT be narrowed by ?subsector= (only by the primary).
     const subsectorsQuery = session.run(
       `
       MATCH (c:Company)
-      WHERE c.sector IS NOT NULL
-        AND ANY(s IN c.sector WHERE toLower(s) = toLower($sectorName))
-        ${countryClause}
-      WITH c
-      UNWIND c.sector AS sub
+      WHERE c.sector IS NOT NULL ${countryClause}
+      ${normalizeSectorArr}
+      WITH c, sectorArr
+      WHERE ANY(s IN sectorArr WHERE toLower(s) = toLower($sectorName))
+      UNWIND sectorArr AS sub
       WITH c, sub
       WHERE toLower(sub) <> toLower($sectorName)
       WITH sub, c
