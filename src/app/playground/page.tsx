@@ -26,6 +26,8 @@ import {
   Keyboard,
   ArrowUpRight,
   CircleDollarSign,
+  BarChart3,
+  Info,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +42,7 @@ type Endpoint = {
   color: string;
   description: string;
   fields: string[];
+  kind?: "list" | "stats";
 };
 
 const ENDPOINTS: Endpoint[] = [
@@ -97,6 +100,36 @@ const ENDPOINTS: Endpoint[] = [
     color: "amber",
     description: "Round-based with all investors",
     fields: ["roundExternalId", "startupName", "stage", "totalRoundSizeUsd", "investors", "investmentDate"],
+  },
+  {
+    id: "stats-funding-rounds",
+    label: "Stats · Funding Rounds",
+    path: "/api/v1/stats/funding-rounds",
+    icon: BarChart3,
+    color: "indigo",
+    description: "Aggregates: counts, percentiles, stage/geo mix",
+    fields: ["roundCount", "totalCapitalUsd", "medianRoundUsd", "p25RoundUsd", "p75RoundUsd", "stageMix", "geoMix", "earliestDate", "latestDate", "computedAt"],
+    kind: "stats",
+  },
+  {
+    id: "stats-investors",
+    label: "Stats · Investors",
+    path: "/api/v1/stats/investors",
+    icon: BarChart3,
+    color: "indigo",
+    description: "Aggregates: counts, type mix, top by activity",
+    fields: ["investorCount", "activeInvestorCount", "typeMix", "topByActivity", "computedAt"],
+    kind: "stats",
+  },
+  {
+    id: "stats-sectors",
+    label: "Stats · Sectors",
+    path: "/api/v1/stats/sectors",
+    icon: BarChart3,
+    color: "indigo",
+    description: "Full sector catalog with recent activity",
+    fields: ["sectors", "totalStartups", "windowDays", "computedAt"],
+    kind: "stats",
   },
 ];
 
@@ -158,6 +191,20 @@ const ENDPOINT_FILTERS: Record<string, FilterDef[]> = {
     { key: "sort", label: "Sort By", type: "select", placeholder: "Date", options: ["date", "amount"] },
     { key: "dir", label: "Direction", type: "select", placeholder: "Descending", options: ["asc", "desc"] },
   ],
+  "stats-funding-rounds": [
+    { key: "sector_focus", label: "Sector Focus", type: "select", placeholder: "All", dynamicOptions: "sectors" },
+    { key: "stage", label: "Funding Stage", type: "select", placeholder: "All", dynamicOptions: "stages" },
+    { key: "hq_country", label: "HQ Country", type: "select", placeholder: "All", dynamicOptions: "countries" },
+    { key: "date_from", label: "Date From", type: "text", placeholder: "2025-01-01" },
+    { key: "date_to", label: "Date To", type: "text", placeholder: "2026-04-23" },
+  ],
+  "stats-investors": [
+    { key: "sector_focus", label: "Sector Focus", type: "select", placeholder: "All", dynamicOptions: "sectors" },
+    { key: "hq_country", label: "HQ Country", type: "select", placeholder: "All", dynamicOptions: "countries" },
+    { key: "investor_type", label: "Investor Type", type: "select", placeholder: "All", options: ["vc", "pe", "cvc", "angel_group", "family_office", "accelerator", "incubator", "sovereign_wealth", "government", "bank", "hedge_fund"] },
+    { key: "active_since", label: "Active Since", type: "text", placeholder: "2025-01-01" },
+  ],
+  "stats-sectors": [],
 };
 
 type HistoryEntry = {
@@ -247,7 +294,183 @@ function getEndpointColor(color: string) {
   if (color === "blue") return { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20", dot: "bg-blue-400" };
   if (color === "emerald") return { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20", dot: "bg-emerald-400" };
   if (color === "amber") return { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20", dot: "bg-amber-400" };
+  if (color === "indigo") return { bg: "bg-indigo-500/10", text: "text-indigo-400", border: "border-indigo-500/20", dot: "bg-indigo-400" };
   return { bg: "bg-violet-500/10", text: "text-violet-400", border: "border-violet-500/20", dot: "bg-violet-400" };
+}
+
+// ---------------------------------------------------------------------------
+// Stats Summary view — renders the headline numbers of /stats/* endpoints as
+// big stat cards. Falls through to "see JSON" for nested structures.
+// ---------------------------------------------------------------------------
+
+function StatCard({ label, value, sub, accent = "indigo" }: { label: string; value: string; sub?: string; accent?: "indigo" | "emerald" | "amber" | "blue" | "violet" }) {
+  const accents: Record<string, string> = {
+    indigo: "text-indigo-400",
+    emerald: "text-emerald-400",
+    amber: "text-amber-400",
+    blue: "text-blue-400",
+    violet: "text-violet-400",
+  };
+  return (
+    <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-4 py-3 flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-white/30">{label}</span>
+      <span className={`text-2xl font-bold tracking-tight ${accents[accent]}`}>{value}</span>
+      {sub && <span className="text-[10px] font-mono text-white/30">{sub}</span>}
+    </div>
+  );
+}
+
+function StatsSummary({ endpointId, data }: { endpointId: string; data: Record<string, unknown> }) {
+  const n = (v: unknown) => typeof v === "number" ? v : 0;
+  const s = (v: unknown) => v == null ? "—" : String(v);
+
+  if (endpointId === "stats-funding-rounds") {
+    const stageMix = (data.stageMix as { stage: string | null; roundCount: number; medianUsd: number | null }[]) ?? [];
+    const geoMix = (data.geoMix as { country: string | null; roundCount: number }[]) ?? [];
+    return (
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatCard label="Round Count" value={n(data.roundCount).toLocaleString("de-DE")} />
+          <StatCard label="Total Capital" value={formatUsd(data.totalCapitalUsd)} accent="emerald" />
+          <StatCard label="Median Round" value={formatUsd(data.medianRoundUsd)} accent="blue" sub={`${n(data.amountSampleSize).toLocaleString("de-DE")} sample`} />
+          <StatCard label="P25 Round" value={formatUsd(data.p25RoundUsd)} accent="violet" />
+          <StatCard label="P75 Round" value={formatUsd(data.p75RoundUsd)} accent="amber" />
+        </div>
+
+        <div className="rounded-[10px] border border-white/[0.06] bg-[#0d0d0f] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-medium text-white/40">Stage mix</span>
+            <span className="text-[10px] font-mono text-white/25">{stageMix.length} stages</span>
+          </div>
+          <div className="space-y-1.5">
+            {stageMix.slice(0, 10).map((row) => (
+              <div key={row.stage ?? "?"} className="flex items-center gap-3 text-[12px] font-mono">
+                <span className="w-[100px] text-white/60 truncate">{row.stage ?? "—"}</span>
+                <span className="text-indigo-400 font-semibold w-[60px]">{n(row.roundCount).toLocaleString("de-DE")}</span>
+                <span className="text-emerald-400/70">median {formatUsd(row.medianUsd)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[10px] border border-white/[0.06] bg-[#0d0d0f] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-medium text-white/40">Geo mix</span>
+            <span className="text-[10px] font-mono text-white/25">{geoMix.length} countries</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5">
+            {geoMix.slice(0, 16).map((row) => (
+              <div key={row.country ?? "?"} className="flex items-center gap-2 text-[12px] font-mono">
+                <span className="text-white/50 truncate flex-1">{row.country ?? "—"}</span>
+                <span className="text-indigo-400 font-semibold">{n(row.roundCount).toLocaleString("de-DE")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-[10px] font-mono text-white/25 flex items-center gap-4">
+          <span>Window: {s(data.earliestDate)} → {s(data.latestDate)}</span>
+          <span>computedAt: {s(data.computedAt)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (endpointId === "stats-investors") {
+    const typeMix = (data.typeMix as { type: string | null; count: number }[]) ?? [];
+    const top = (data.topByActivity as { externalId: string | null; name: string | null; hq: string | null; dealCount: number; leadCount: number }[]) ?? [];
+    return (
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-2 gap-3 md:max-w-md">
+          <StatCard label="Investor Count" value={n(data.investorCount).toLocaleString("de-DE")} />
+          <StatCard label="Active" value={n(data.activeInvestorCount).toLocaleString("de-DE")} accent="emerald" sub={`${Math.round((n(data.activeInvestorCount) / Math.max(n(data.investorCount), 1)) * 100)}% of pool`} />
+        </div>
+
+        <div className="rounded-[10px] border border-white/[0.06] bg-[#0d0d0f] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-medium text-white/40">Type mix</span>
+            <span className="text-[10px] font-mono text-white/25">{typeMix.length} types</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1.5">
+            {typeMix.map((row) => (
+              <div key={row.type ?? "?"} className="flex items-center gap-2 text-[12px] font-mono">
+                <span className="text-white/50 truncate flex-1">{row.type ?? "—"}</span>
+                <span className="text-indigo-400 font-semibold">{n(row.count).toLocaleString("de-DE")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[10px] border border-white/[0.06] bg-[#0d0d0f] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-medium text-white/40">Top by activity</span>
+            <span className="text-[10px] font-mono text-white/25">top {top.length}</span>
+          </div>
+          <div className="space-y-1">
+            {top.map((inv, i) => (
+              <div key={inv.externalId ?? i} className="flex items-center gap-3 text-[12px] font-mono">
+                <span className="w-6 text-white/25">{i + 1}</span>
+                <span className="flex-1 text-white/70 font-semibold truncate">{inv.name ?? "—"}</span>
+                <span className="text-white/40 truncate w-[140px]">{inv.hq ?? "—"}</span>
+                <span className="text-indigo-400 w-[50px] text-right">{n(inv.dealCount)}</span>
+                <span className="text-amber-400 w-[50px] text-right">{n(inv.leadCount)} lead</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-[10px] font-mono text-white/25">computedAt: {s(data.computedAt)}</div>
+      </div>
+    );
+  }
+
+  if (endpointId === "stats-sectors") {
+    const sectors = (data.sectors as { primary: string; startupCount: number; recentRoundCount: number; recentAmountUsd: number; subsectors: { label: string; startupCount: number; recentRoundCount: number }[] }[]) ?? [];
+    return (
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-3 gap-3 md:max-w-xl">
+          <StatCard label="Sectors" value={sectors.length.toLocaleString("de-DE")} />
+          <StatCard label="Total Startups" value={n(data.totalStartups).toLocaleString("de-DE")} accent="emerald" />
+          <StatCard label="Window" value={`${n(data.windowDays)}d`} accent="amber" />
+        </div>
+
+        <div className="rounded-[10px] border border-white/[0.06] bg-[#0d0d0f] overflow-hidden">
+          <div className="px-4 py-2 border-b border-white/[0.06]">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-medium text-white/40">Sectors · recent window ({n(data.windowDays)}d)</span>
+          </div>
+          <div className="divide-y divide-white/[0.04]">
+            {sectors.slice(0, 25).map((sec) => (
+              <div key={sec.primary} className="px-4 py-2 text-[12px] font-mono">
+                <div className="flex items-center gap-3">
+                  <span className="flex-1 text-white/70 font-semibold truncate">{sec.primary}</span>
+                  <span className="text-white/40 w-[80px] text-right">{n(sec.startupCount).toLocaleString("de-DE")} cos</span>
+                  <span className="text-indigo-400 w-[80px] text-right">{n(sec.recentRoundCount).toLocaleString("de-DE")} rounds</span>
+                  <span className="text-emerald-400/70 w-[80px] text-right">{formatUsd(sec.recentAmountUsd)}</span>
+                </div>
+                {sec.subsectors.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5 ml-1">
+                    {sec.subsectors.slice(0, 6).map((sub) => (
+                      <span key={sub.label} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] bg-white/[0.04] text-white/40">
+                        {sub.label}
+                        <span className="text-indigo-400/70">{n(sub.recentRoundCount)}</span>
+                      </span>
+                    ))}
+                    {sec.subsectors.length > 6 && (
+                      <span className="text-[10px] text-white/25">+{sec.subsectors.length - 6}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-[10px] font-mono text-white/25">computedAt: {s(data.computedAt)}</div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +484,7 @@ export default function PlaygroundPage() {
   const [updatedSince, setUpdatedSince] = useState("");
   const [cursor, setCursor] = useState("");
   const [response, setResponse] = useState<string | null>(null);
-  const [responseData, setResponseData] = useState<{ data?: Record<string, unknown>[]; pagination?: { cursor: string | null; hasMore: boolean } } | null>(null);
+  const [responseData, setResponseData] = useState<{ data?: Record<string, unknown>[]; pagination?: { cursor: string | null; hasMore: boolean; totalCount?: number; totalCountApproximate?: boolean } } | null>(null);
   const [status, setStatus] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -295,13 +518,15 @@ export default function PlaygroundPage() {
 
   const buildUrl = useCallback(() => {
     const params = new URLSearchParams();
-    if (limit) params.set("limit", limit);
-    if (updatedSince) params.set("updated_since", updatedSince);
-    // Add active filters
+    const isStats = selectedEndpoint.kind === "stats";
+    if (!isStats) {
+      if (limit) params.set("limit", limit);
+      if (updatedSince) params.set("updated_since", updatedSince);
+    }
     for (const [key, val] of Object.entries(filters)) {
       if (val) params.set(key, val);
     }
-    if (cursor) params.set("cursor", cursor);
+    if (!isStats && cursor) params.set("cursor", cursor);
     const qs = params.toString();
     return `${selectedEndpoint.path}${qs ? `?${qs}` : ""}`;
   }, [selectedEndpoint, limit, updatedSince, cursor, filters]);
@@ -419,6 +644,10 @@ export default function PlaygroundPage() {
     setDuration(null);
     setExpandedRow(null);
     setFilters({});
+    // Stats endpoints return a flat object, not { data: [] } — JSON is the
+    // useful default view.
+    if (ep.kind === "stats") setView("json");
+    else setView("table");
   }, []);
 
   const fullUrl = `https://orbit.inventure.capital${buildUrl()}`;
@@ -433,6 +662,8 @@ export default function PlaygroundPage() {
   const records = responseData?.data ?? [];
   const hasMore = responseData?.pagination?.hasMore ?? false;
   const hasCursor = !!cursor;
+  const isStatsEndpoint = selectedEndpoint.kind === "stats";
+  const totalCount = responseData?.pagination?.totalCount ?? null;
 
   // Determine which columns to show in table
   const visibleFields = selectedEndpoint.fields;
@@ -497,32 +728,40 @@ export default function PlaygroundPage() {
         {/* ── Left Sidebar ── */}
         <div className="w-[300px] border-r border-white/[0.06] bg-[#0c0c0e]/60 flex flex-col shrink-0 overflow-hidden">
           {/* Endpoint Tabs */}
-          <div className="p-3 space-y-1 border-b border-white/[0.06]">
-            <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-white/20 px-2">
-              Endpoints
-            </span>
-            {ENDPOINTS.map((ep) => {
-              const c = getEndpointColor(ep.color);
-              const active = ep.id === selectedEndpoint.id;
+          <div className="p-3 space-y-3 border-b border-white/[0.06]">
+            {(["list", "stats"] as const).map((group) => {
+              const items = ENDPOINTS.filter((e) => (group === "stats" ? e.kind === "stats" : e.kind !== "stats"));
+              if (!items.length) return null;
               return (
-                <button
-                  key={ep.id}
-                  onClick={() => switchEndpoint(ep)}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[8px] text-left transition-all ${
-                    active
-                      ? `bg-white/[0.06] ${c.text}`
-                      : "text-white/40 hover:bg-white/[0.03] hover:text-white/60"
-                  }`}
-                >
-                  <div className={`flex h-6 w-6 items-center justify-center rounded-[5px] ${c.bg}`}>
-                    <ep.icon className="h-3 w-3" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium truncate">{ep.label}</p>
-                    <p className="text-[10px] text-white/20 truncate">{ep.description}</p>
-                  </div>
-                  {active && <div className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />}
-                </button>
+                <div key={group} className="space-y-1">
+                  <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-white/20 px-2">
+                    {group === "stats" ? "Stats · Aggregates" : "List Endpoints"}
+                  </span>
+                  {items.map((ep) => {
+                    const c = getEndpointColor(ep.color);
+                    const active = ep.id === selectedEndpoint.id;
+                    return (
+                      <button
+                        key={ep.id}
+                        onClick={() => switchEndpoint(ep)}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[8px] text-left transition-all ${
+                          active
+                            ? `bg-white/[0.06] ${c.text}`
+                            : "text-white/40 hover:bg-white/[0.03] hover:text-white/60"
+                        }`}
+                      >
+                        <div className={`flex h-6 w-6 items-center justify-center rounded-[5px] ${c.bg}`}>
+                          <ep.icon className="h-3 w-3" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium truncate">{ep.label}</p>
+                          <p className="text-[10px] text-white/20 truncate">{ep.description}</p>
+                        </div>
+                        {active && <div className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />}
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
@@ -543,14 +782,17 @@ export default function PlaygroundPage() {
               <ChevronDown className={`h-3.5 w-3.5 text-white/20 transition-transform ${showParams ? "" : "-rotate-90"}`} />
             </button>
 
-            {showParams && (
+            {showParams && !isStatsEndpoint && (
               <div className="space-y-3 px-1">
                 <div className="space-y-1">
                   <label className="text-[10px] font-medium text-white/25 flex items-center gap-1.5 px-1">
                     <Hash className="h-3 w-3" /> limit
+                    <span className="text-white/15 ml-auto">
+                      max {selectedEndpoint.id === "investors" ? "250" : "500"}
+                    </span>
                   </label>
                   <div className="flex items-center gap-1.5">
-                    {["5", "10", "25", "50", "100"].map((v) => (
+                    {["10", "50", "100", "250", "500"].map((v) => (
                       <button
                         key={v}
                         onClick={() => setLimit(v)}
@@ -602,6 +844,14 @@ export default function PlaygroundPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {showParams && isStatsEndpoint && (
+              <div className="px-1 py-2 rounded-[6px] border border-indigo-500/15 bg-indigo-500/[0.04] text-[11px] text-white/40 leading-relaxed">
+                <span className="font-medium text-indigo-400">Aggregate endpoint.</span>{" "}
+                Single JSON payload, no pagination. Use the filter bar on the right
+                to narrow the scope.
               </div>
             )}
 
@@ -702,6 +952,18 @@ export default function PlaygroundPage() {
 
         {/* ── Main Content ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Info Banner */}
+          <div className="border-b border-white/[0.06] bg-indigo-500/[0.03] shrink-0">
+            <div className="flex items-start gap-2 px-4 py-2 text-[11px] text-white/50">
+              <Info className="h-3.5 w-3.5 text-indigo-400 mt-0.5 shrink-0" />
+              <span>
+                <span className="text-white/70 font-medium">Prefer <code className="text-indigo-400">/stats/*</code> for aggregates.</span>{" "}
+                Only walk <code className="text-white/60">/funding-rounds</code>, <code className="text-white/60">/investors</code>, <code className="text-white/60">/startups</code>, or <code className="text-white/60">/investments</code> when you need the raw rows —{" "}
+                <code className="text-white/60">pagination.totalCount</code> is returned on every page so you never have to walk the set just to show a count.
+              </span>
+            </div>
+          </div>
+
           {/* Filter Bar */}
           <div className="border-b border-white/[0.06] bg-[#0c0c0e]/60 shrink-0">
             <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto">
@@ -787,7 +1049,7 @@ export default function PlaygroundPage() {
               {/* View Tabs */}
               <div className="flex items-center rounded-[8px] border border-white/[0.06] bg-white/[0.02] p-0.5">
                 {([
-                  { id: "table" as const, icon: Table2, label: "Table" },
+                  { id: "table" as const, icon: Table2, label: isStatsEndpoint ? "Summary" : "Table" },
                   { id: "json" as const, icon: Braces, label: "JSON" },
                   { id: "curl" as const, icon: Terminal, label: "cURL" },
                 ] as const).map((tab) => (
@@ -828,15 +1090,24 @@ export default function PlaygroundPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Record count */}
-              {records.length > 0 && (
-                <span className="text-[10px] font-mono text-white/20">
-                  {records.length} {records.length === 1 ? "Record" : "Records"}
+              {/* Record count + totalCount */}
+              {!isStatsEndpoint && records.length > 0 && (
+                <span className="text-[10px] font-mono text-white/25 flex items-baseline gap-1">
+                  <span className="text-white/60">{records.length.toLocaleString("de-DE")}</span>
+                  {totalCount !== null && totalCount > 0 && (
+                    <>
+                      <span className="text-white/15">/</span>
+                      <span className="text-indigo-400 font-semibold" title="pagination.totalCount">
+                        {totalCount.toLocaleString("de-DE")}
+                      </span>
+                    </>
+                  )}
+                  <span>{records.length === 1 ? "Record" : "Records"}</span>
                 </span>
               )}
 
-              {/* Pagination */}
-              {responseData && (
+              {/* Pagination (hide for stats) */}
+              {!isStatsEndpoint && responseData && (
                 <div className="flex items-center gap-1">
                   <button
                     onClick={handlePrevPage}
@@ -896,8 +1167,13 @@ export default function PlaygroundPage() {
               </div>
             )}
 
+            {/* STATS SUMMARY VIEW */}
+            {!loading && response && view === "table" && isStatsEndpoint && responseData && status !== null && status >= 200 && status < 300 && (
+              <StatsSummary endpointId={selectedEndpoint.id} data={responseData as unknown as Record<string, unknown>} />
+            )}
+
             {/* TABLE VIEW */}
-            {!loading && response && view === "table" && records.length > 0 && (
+            {!loading && response && view === "table" && !isStatsEndpoint && records.length > 0 && (
               <div className="p-3">
                 <div className="rounded-[10px] border border-white/[0.06] overflow-hidden">
                   <table className="w-full">
@@ -1202,7 +1478,7 @@ export default function PlaygroundPage() {
             )}
 
             {/* TABLE VIEW — no records */}
-            {!loading && response && view === "table" && records.length === 0 && status !== null && status >= 200 && status < 300 && (
+            {!loading && response && view === "table" && !isStatsEndpoint && records.length === 0 && status !== null && status >= 200 && status < 300 && (
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <div className={`h-12 w-12 rounded-[10px] ${ec.bg} flex items-center justify-center`}>

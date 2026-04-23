@@ -6,6 +6,9 @@ import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
+const MAX_LIMIT = 250;
+const DEFAULT_LIMIT = 50;
+
 function toNum(v: unknown): number | null {
   if (v == null) return null;
   if (typeof v === "number") return v;
@@ -44,7 +47,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const updatedSince = searchParams.get("updated_since");
   const cursorParam = searchParams.get("cursor");
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT)) || DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   // Filters
   const idSearch = searchParams.get("id");
@@ -59,91 +62,112 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get("sort") || "activity";
   const sortDir = searchParams.get("dir") === "asc" ? "ASC" : "DESC";
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  let skip = 0;
+  if (cursorParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
+      skip = decoded.skip || 0;
+    } catch { /* invalid cursor, start from 0 */ }
+  }
+
+  const matchConditions: string[] = [];
+  const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
+
+  if (updatedSince) { matchConditions.push(`inv.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
+  if (idSearch) { matchConditions.push(`inv.uuid = $idSearch`); params.idSearch = idSearch; }
+  if (nameSearch) { matchConditions.push(`toLower(inv.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
+  if (geo) { matchConditions.push(`ANY(g IN inv.geoFocus WHERE toLower(g) CONTAINS toLower($geo))`); params.geo = geo; }
+  if (type) { matchConditions.push(`toLower(inv.type) = toLower($type)`); params.type = type; }
+  if (minCheck) { matchConditions.push(`inv.checkSizeMaxUsd >= $minCheck`); params.minCheck = Number(minCheck); }
+  if (maxCheck) { matchConditions.push(`inv.checkSizeMinUsd <= $maxCheck`); params.maxCheck = Number(maxCheck); }
+  const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
+
+  // Country filter on investor HQ (explicit country param only)
+  let countryFilter = "";
+  if (country && country.toLowerCase() !== "all") {
+    countryFilter = `WHERE (inv.country = $country OR hq = $country)`;
+    params.country = country;
+  }
+
+  // Europe default: filter on the COMPANY's country (not investor HQ)
+  // This ensures non-European investors who invest in Europe still appear
+  let dealCountryFilter = "";
+  if (!country) {
+    dealCountryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
+  }
+
+  // Sector and role filters applied after aggregation (derived from investments)
+  const havingConditions: string[] = [];
+  havingConditions.push(`dealCount > 0`);
+  if (sector) { havingConditions.push(`ANY(s IN investedSectors WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
+  if (role) { havingConditions.push(`toLower(roundRole) = toLower($role)`); params.role = role; }
+  const havingClause = havingConditions.length ? `WHERE ${havingConditions.join(" AND ")}` : "";
+
+  const sortField =
+    sortBy === "aum" ? "inv.aum"
+    : sortBy === "name" ? "inv.name"
+    : sortBy === "updated" ? "inv.updatedAt"
+    : sortBy === "deployed" ? "totalDeployedUsd"
+    : sortBy === "leads" ? "leadCount"
+    : "dealCount";
+
+  // Shared filter pipeline. Data query adds projections + ordering + paging;
+  // count query ends with count(inv).
+  const aggregationPipeline = `
+    MATCH (inv:InvestorOrg)
+    ${matchWhereClause}
+    OPTIONAL MATCH (inv)-[:HQ_IN]->(loc:Location)
+    WITH inv, collect(DISTINCT loc.name)[0] AS hq
+    ${countryFilter}
+    OPTIONAL MATCH (inv)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
+    ${dealCountryFilter}
+    WITH inv, hq,
+         count(DISTINCT fr) AS dealCount,
+         sum(CASE WHEN toLower(rel.role) = 'lead' THEN 1 ELSE 0 END) AS leadCount,
+         sum(fr.amountUsd) AS totalDeployedUsd,
+         min(fr.amountUsd) AS minRoundUsd,
+         max(fr.amountUsd) AS maxRoundUsd,
+         max(COALESCE(fr.announcedDate, fr.date)) AS latestInvestmentDate,
+         CASE
+           WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') AND ANY(r IN collect(rel.role) WHERE r IS NULL OR toLower(r) <> 'lead') THEN 'both'
+           WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') THEN 'lead'
+           ELSE 'follow'
+         END AS roundRole,
+         [st IN collect(DISTINCT fr.stage) WHERE st IS NOT NULL] AS stages,
+         REDUCE(acc = [], s IN collect(DISTINCT c.sector) | CASE WHEN s IS NOT NULL THEN acc + s ELSE acc END) AS rawSectors
+    WITH inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
+         latestInvestmentDate, roundRole, stages,
+         [s IN rawSectors WHERE s IS NOT NULL | s] AS investedSectors
+    ${havingClause}
+  `;
+
+  const runRead = async (cypher: string, queryParams: Record<string, unknown>) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher, queryParams);
+    } finally {
+      await s.close();
+    }
+  };
+
   try {
-    let skip = 0;
-    if (cursorParam) {
-      try {
-        const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
-        skip = decoded.skip || 0;
-      } catch { /* invalid cursor, start from 0 */ }
-    }
-
-    const matchConditions: string[] = [];
-    const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
-
-    if (updatedSince) { matchConditions.push(`inv.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
-    if (idSearch) { matchConditions.push(`inv.uuid = $idSearch`); params.idSearch = idSearch; }
-    if (nameSearch) { matchConditions.push(`toLower(inv.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
-    if (geo) { matchConditions.push(`ANY(g IN inv.geoFocus WHERE toLower(g) CONTAINS toLower($geo))`); params.geo = geo; }
-    if (type) { matchConditions.push(`toLower(inv.type) = toLower($type)`); params.type = type; }
-    if (minCheck) { matchConditions.push(`inv.checkSizeMaxUsd >= $minCheck`); params.minCheck = Number(minCheck); }
-    if (maxCheck) { matchConditions.push(`inv.checkSizeMinUsd <= $maxCheck`); params.maxCheck = Number(maxCheck); }
-    const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
-
-    // Country filter on investor HQ (explicit country param only)
-    let countryFilter = "";
-    if (country && country.toLowerCase() !== "all") {
-      countryFilter = `WHERE (inv.country = $country OR hq = $country)`;
-      params.country = country;
-    }
-
-    // Europe default: filter on the COMPANY's country (not investor HQ)
-    // This ensures non-European investors who invest in Europe still appear
-    let dealCountryFilter = "";
-    if (!country) {
-      dealCountryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
-    }
-
-    // Sector and role filters applied after aggregation (derived from investments)
-    const havingConditions: string[] = [];
-    havingConditions.push(`dealCount > 0`);
-    if (sector) { havingConditions.push(`ANY(s IN investedSectors WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
-    if (role) { havingConditions.push(`toLower(roundRole) = toLower($role)`); params.role = role; }
-    const havingClause = havingConditions.length ? `WHERE ${havingConditions.join(" AND ")}` : "";
-
-    const sortField =
-      sortBy === "aum" ? "inv.aum"
-      : sortBy === "name" ? "inv.name"
-      : sortBy === "updated" ? "inv.updatedAt"
-      : sortBy === "deployed" ? "totalDeployedUsd"
-      : sortBy === "leads" ? "leadCount"
-      : "dealCount";
-
-    const result = await session.run(`
-      MATCH (inv:InvestorOrg)
-      ${matchWhereClause}
-      OPTIONAL MATCH (inv)-[:HQ_IN]->(loc:Location)
-      WITH inv, collect(DISTINCT loc.name)[0] AS hq
-      ${countryFilter}
-      OPTIONAL MATCH (inv)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
-      ${dealCountryFilter}
-      WITH inv, hq,
-           count(DISTINCT fr) AS dealCount,
-           sum(CASE WHEN toLower(rel.role) = 'lead' THEN 1 ELSE 0 END) AS leadCount,
-           sum(fr.amountUsd) AS totalDeployedUsd,
-           min(fr.amountUsd) AS minRoundUsd,
-           max(fr.amountUsd) AS maxRoundUsd,
-           max(COALESCE(fr.announcedDate, fr.date)) AS latestInvestmentDate,
-           CASE
-             WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') AND ANY(r IN collect(rel.role) WHERE r IS NULL OR toLower(r) <> 'lead') THEN 'both'
-             WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') THEN 'lead'
-             ELSE 'follow'
-           END AS roundRole,
-           [st IN collect(DISTINCT fr.stage) WHERE st IS NOT NULL] AS stages,
-           REDUCE(acc = [], s IN collect(DISTINCT c.sector) | CASE WHEN s IS NOT NULL THEN acc + s ELSE acc END) AS rawSectors
-      WITH inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
-           latestInvestmentDate, roundRole, stages,
-           [s IN rawSectors WHERE s IS NOT NULL | s] AS investedSectors
-      ${havingClause}
-      RETURN inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
-             latestInvestmentDate, roundRole, stages, investedSectors
-      ORDER BY ${sortField} ${sortDir}, inv.uuid ASC
-      SKIP $skip LIMIT $limit
-    `, params);
+    const [result, countResult] = await Promise.all([
+      runRead(`
+        ${aggregationPipeline}
+        RETURN inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
+               latestInvestmentDate, roundRole, stages, investedSectors
+        ORDER BY ${sortField} ${sortDir}, inv.uuid ASC
+        SKIP $skip LIMIT $limit
+      `, params),
+      runRead(`
+        ${aggregationPipeline}
+        RETURN count(inv) AS total
+      `, params),
+    ]);
 
     const hasMore = result.records.length > limit;
     const records = result.records.slice(0, limit);
+    const totalCount = toNum(countResult.records[0]?.get("total")) ?? 0;
 
     // Fetch portfolio companies for the returned investors
     const investorUuids = records
@@ -161,7 +185,7 @@ export async function GET(request: NextRequest) {
           : "";
       if (country && country.toLowerCase() !== "all") portfolioParams.portfolioCountry = country;
 
-      const portfolioResult = await session.run(`
+      const portfolioResult = await runRead(`
         MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
         WHERE inv.uuid IN $investorUuids
         ${portfolioCountryFilter}
@@ -257,13 +281,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data,
-      pagination: { cursor: nextCursor, hasMore },
+      pagination: { cursor: nextCursor, hasMore, totalCount, totalCountApproximate: false },
     });
   } catch (error) {
     console.error("v1/investors error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    await session.close();
   }
 }
 

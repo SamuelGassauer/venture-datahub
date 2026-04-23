@@ -6,6 +6,17 @@ import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 50;
+
+function toNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v === "object" && v !== null && "toNumber" in v) return (v as { toNumber(): number }).toNumber();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function toStr(v: unknown): string | null {
   if (v == null) return null;
   return String(v);
@@ -24,78 +35,96 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const updatedSince = searchParams.get("updated_since");
   const cursorParam = searchParams.get("cursor");
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT)) || DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   // Filters
   const idSearch = searchParams.get("id");
   const nameSearch = searchParams.get("name");
   const country = searchParams.get("country");
-  // sector_focus is the documented public name; sector kept as alias for internal callers
   const sector = searchParams.get("sector_focus") || searchParams.get("sector");
   const stage = searchParams.get("stage");
   const sortBy = searchParams.get("sort") || "name";
   const sortDir = searchParams.get("dir") === "desc" ? "DESC" : "ASC";
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  let skip = 0;
+  if (cursorParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
+      skip = decoded.skip || 0;
+    } catch { /* invalid cursor */ }
+  }
+
+  const matchConditions: string[] = [];
+  const params: Record<string, unknown> = { skip: neo4j.int(skip), limit: neo4j.int(limit + 1) };
+
+  if (updatedSince) { matchConditions.push(`c.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
+  if (idSearch) { matchConditions.push(`c.uuid = $idSearch`); params.idSearch = idSearch; }
+  if (nameSearch) { matchConditions.push(`toLower(c.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
+  if (sector) { matchConditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
+  const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
+
+  let countryFilter = "";
+  if (country && country.toLowerCase() !== "all") {
+    countryFilter = `WHERE (c.country = $country OR hq = $country)`;
+    params.country = country;
+  } else if (!country) {
+    countryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
+  }
+
+  const havingClause = stage ? `WHERE toLower(latestStage) = toLower($stage)` : "";
+  if (stage) params.stage = stage;
+
+  const sortField = sortBy === "founded" ? "c.foundedYear" : sortBy === "updated" ? "c.updatedAt" : "c.name";
+
+  const runRead = async (cypher: string, queryParams: Record<string, unknown>) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher, queryParams);
+    } finally {
+      await s.close();
+    }
+  };
+
   try {
-    let skip = 0;
-    if (cursorParam) {
-      try {
-        const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
-        skip = decoded.skip || 0;
-      } catch { /* invalid cursor */ }
-    }
-
-    const matchConditions: string[] = [];
-    const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
-
-    if (updatedSince) { matchConditions.push(`c.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
-    if (idSearch) { matchConditions.push(`c.uuid = $idSearch`); params.idSearch = idSearch; }
-    if (nameSearch) { matchConditions.push(`toLower(c.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
-    if (sector) { matchConditions.push(`ANY(s IN COALESCE(c.sector, []) WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
-    const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
-
-    // Country filter: defaults to Europe-only, pass country=all to disable
-    let countryFilter = "";
-    if (country && country.toLowerCase() !== "all") {
-      countryFilter = `WHERE (c.country = $country OR hq = $country)`;
-      params.country = country;
-    } else if (!country) {
-      countryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
-    }
-
-    // Stage filter is applied after aggregation
-    const havingClause = stage ? `WHERE toLower(latestStage) = toLower($stage)` : "";
-    if (stage) params.stage = stage;
-
-    const sortField = sortBy === "founded" ? "c.foundedYear" : sortBy === "updated" ? "c.updatedAt" : "c.name";
-
-    // First query: get companies (paginated)
-    const companyResult = await session.run(`
-      MATCH (c:Company)
-      ${matchWhereClause}
-      OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
-      WITH c, collect(DISTINCT loc.name)[0] AS hq
-      ${countryFilter}
-      OPTIONAL MATCH (c)-[:RAISED]->(fr0:FundingRound)
-      WITH c, hq, max(fr0.stage) AS latestStage
-      ${havingClause}
-      RETURN c, hq, latestStage
-      ORDER BY ${sortField} ${sortDir}
-      SKIP $skip LIMIT $limit
-    `, params);
+    // Data + total count run in parallel. The nested funding-rounds query
+    // depends on the paginated slice of companies, so it runs after.
+    const [companyResult, countResult] = await Promise.all([
+      runRead(`
+        MATCH (c:Company)
+        ${matchWhereClause}
+        OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
+        WITH c, collect(DISTINCT loc.name)[0] AS hq
+        ${countryFilter}
+        OPTIONAL MATCH (c)-[:RAISED]->(fr0:FundingRound)
+        WITH c, hq, max(fr0.stage) AS latestStage
+        ${havingClause}
+        RETURN c, hq, latestStage
+        ORDER BY ${sortField} ${sortDir}
+        SKIP $skip LIMIT $limit
+      `, params),
+      runRead(`
+        MATCH (c:Company)
+        ${matchWhereClause}
+        OPTIONAL MATCH (c)-[:HQ_IN]->(loc:Location)
+        WITH c, collect(DISTINCT loc.name)[0] AS hq
+        ${countryFilter}
+        OPTIONAL MATCH (c)-[:RAISED]->(fr0:FundingRound)
+        WITH c, max(fr0.stage) AS latestStage
+        ${havingClause}
+        RETURN count(c) AS total
+      `, params),
+    ]);
 
     const hasMore = companyResult.records.length > limit;
     const companyRecords = companyResult.records.slice(0, limit);
+    const totalCount = toNum(countResult.records[0]?.get("total"));
 
-    // Collect company names for funding round query
     const companyNames = companyRecords.map((r) => toStr(r.get("c").properties.name)).filter(Boolean) as string[];
 
-    // Second query: get funding rounds with investors for these companies
     const roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[] }[]> = {};
 
     if (companyNames.length > 0) {
-      const roundsResult = await session.run(`
+      const roundsResult = await runRead(`
         MATCH (c:Company)-[:RAISED]->(fr:FundingRound)
         WHERE c.name IN $companyNames
         OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
@@ -154,16 +183,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data,
-      pagination: { cursor: nextCursor, hasMore },
+      pagination: { cursor: nextCursor, hasMore, totalCount, totalCountApproximate: false },
     });
   } catch (error) {
     console.error("v1/startups error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    await session.close();
   }
-}
-
-function neo4jInt(n: number) {
-  return neo4j.int(n);
 }

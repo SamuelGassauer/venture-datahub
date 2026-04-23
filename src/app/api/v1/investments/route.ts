@@ -6,6 +6,9 @@ import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 50;
+
 function toNum(v: unknown): number | null {
   if (v == null) return null;
   if (typeof v === "number") return v;
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const updatedSince = searchParams.get("updated_since");
   const cursorParam = searchParams.get("cursor");
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT)) || DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   // Filters
   const fund = searchParams.get("fund");
@@ -37,62 +40,76 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get("sort") || "date";
   const sortDir = searchParams.get("dir") === "asc" ? "ASC" : "DESC";
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  let skip = 0;
+  if (cursorParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
+      skip = decoded.skip || 0;
+    } catch { /* invalid cursor */ }
+  }
+
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = { skip: neo4j.int(skip), limit: neo4j.int(limit + 1) };
+
+  if (updatedSince) { conditions.push(`(fr.updatedAt >= datetime($updatedSince) OR fr.createdAt >= datetime($updatedSince))`); params.updatedSince = updatedSince; }
+  if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }
+  if (minAmount) { conditions.push(`fr.amountUsd >= $minAmount`); params.minAmount = parseFloat(minAmount); }
+  if (maxAmount) { conditions.push(`fr.amountUsd <= $maxAmount`); params.maxAmount = parseFloat(maxAmount); }
+  if (fund) { conditions.push(`(inv.uuid = $fund OR toLower(inv.name) CONTAINS toLower($fund))`); params.fund = fund; }
+  if (startup) { conditions.push(`(c.uuid = $startup OR toLower(c.name) CONTAINS toLower($startup))`); params.startup = startup; }
+
+  if (country && country.toLowerCase() !== "all") {
+    conditions.push(`c.country = $country`);
+    params.country = country;
+  } else if (!country) {
+    conditions.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sortField = sortBy === "amount" ? "fr.amountUsd" : "effectiveDate";
+
+  const runRead = async (cypher: string, queryParams: Record<string, unknown>) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher, queryParams);
+    } finally {
+      await s.close();
+    }
+  };
+
   try {
-    let skip = 0;
-    if (cursorParam) {
-      try {
-        const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
-        skip = decoded.skip || 0;
-      } catch { /* invalid cursor */ }
-    }
+    const [dataRes, countRes] = await Promise.all([
+      runRead(`
+        MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
+        ${whereClause}
+        OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+        WITH inv, rel, fr, c, min(a.publishedAt) AS articleDate
+        OPTIONAL MATCH (coInv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
+        WHERE coInv.name <> inv.name
+        WITH inv.uuid AS fundUuid, inv.name AS fundName,
+             rel.role AS role,
+             fr.uuid AS roundUuid, fr.amountUsd AS amountUsd, fr.currency AS currency,
+             fr.stage AS stage, fr.confidence AS confidence,
+             fr.announcedDate AS announcedDate,
+             c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+             COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
+             articleDate,
+             collect(DISTINCT coInv.name) AS coInvestorNames
+        RETURN fundUuid, fundName, role, roundUuid, startupUuid, startupName, startupNormalizedName,
+               amountUsd, currency, stage, confidence, announcedDate, articleDate, effectiveDate, coInvestorNames
+        ORDER BY ${sortField} ${sortDir}
+        SKIP $skip LIMIT $limit
+      `, params),
+      runRead(`
+        MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
+        ${whereClause}
+        RETURN count(*) AS total
+      `, params),
+    ]);
 
-    const conditions: string[] = [];
-    const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
-
-    if (updatedSince) { conditions.push(`(fr.updatedAt >= datetime($updatedSince) OR fr.createdAt >= datetime($updatedSince))`); params.updatedSince = updatedSince; }
-    if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }
-    if (minAmount) { conditions.push(`fr.amountUsd >= $minAmount`); params.minAmount = parseFloat(minAmount); }
-    if (maxAmount) { conditions.push(`fr.amountUsd <= $maxAmount`); params.maxAmount = parseFloat(maxAmount); }
-    if (fund) { conditions.push(`(inv.uuid = $fund OR toLower(inv.name) CONTAINS toLower($fund))`); params.fund = fund; }
-    if (startup) { conditions.push(`(c.uuid = $startup OR toLower(c.name) CONTAINS toLower($startup))`); params.startup = startup; }
-
-    // Country filter: defaults to Europe-only, pass country=all to disable
-    if (country && country.toLowerCase() !== "all") {
-      conditions.push(`c.country = $country`);
-      params.country = country;
-    } else if (!country) {
-      conditions.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
-    }
-
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-
-    const sortField = sortBy === "amount" ? "fr.amountUsd" : "effectiveDate";
-
-    const result = await session.run(`
-      MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
-      ${whereClause}
-      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
-      WITH inv, rel, fr, c, min(a.publishedAt) AS articleDate
-      OPTIONAL MATCH (coInv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
-      WHERE coInv.name <> inv.name
-      WITH inv.uuid AS fundUuid, inv.name AS fundName,
-           rel.role AS role,
-           fr.uuid AS roundUuid, fr.amountUsd AS amountUsd, fr.currency AS currency,
-           fr.stage AS stage, fr.confidence AS confidence,
-           fr.announcedDate AS announcedDate,
-           c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
-           COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
-           articleDate,
-           collect(DISTINCT coInv.name) AS coInvestorNames
-      RETURN fundUuid, fundName, role, roundUuid, startupUuid, startupName, startupNormalizedName,
-             amountUsd, currency, stage, confidence, announcedDate, articleDate, effectiveDate, coInvestorNames
-      ORDER BY ${sortField} ${sortDir}
-      SKIP $skip LIMIT $limit
-    `, params);
-
-    const hasMore = result.records.length > limit;
-    const records = result.records.slice(0, limit);
+    const hasMore = dataRes.records.length > limit;
+    const records = dataRes.records.slice(0, limit);
+    const totalCount = toNum(countRes.records[0]?.get("total")) ?? 0;
 
     const data = records.map((r) => {
       const fundUuid = toStr(r.get("fundUuid"));
@@ -127,13 +144,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data,
-      pagination: { cursor: nextCursor, hasMore },
+      pagination: { cursor: nextCursor, hasMore, totalCount, totalCountApproximate: false },
     });
   } catch (error) {
     console.error("v1/investments error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    await session.close();
   }
 }
 
@@ -141,8 +156,4 @@ function mapRole(role: string | null): string {
   if (!role) return "FOLLOW";
   if (role.toLowerCase() === "lead") return "LEAD";
   return "FOLLOW";
-}
-
-function neo4jInt(n: number) {
-  return neo4j.int(n);
 }

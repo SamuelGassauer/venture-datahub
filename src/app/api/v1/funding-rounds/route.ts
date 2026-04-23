@@ -6,6 +6,9 @@ import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
 
 export const dynamic = "force-dynamic";
 
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 50;
+
 function toNum(v: unknown): number | null {
   if (v == null) return null;
   if (typeof v === "number") return v;
@@ -25,7 +28,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const updatedSince = searchParams.get("updated_since");
   const cursorParam = searchParams.get("cursor");
-  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50") || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT)) || DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   // Filters
   const investor = searchParams.get("investor");
@@ -37,66 +40,89 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get("sort") || "date";
   const sortDir = searchParams.get("dir") === "asc" ? "ASC" : "DESC";
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  let skip = 0;
+  if (cursorParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
+      skip = decoded.skip || 0;
+    } catch { /* invalid cursor */ }
+  }
+
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = { skip: neo4j.int(skip), limit: neo4j.int(limit + 1) };
+
+  if (updatedSince) { conditions.push(`(fr.updatedAt >= datetime($updatedSince) OR fr.createdAt >= datetime($updatedSince))`); params.updatedSince = updatedSince; }
+  if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }
+  if (minAmount) { conditions.push(`fr.amountUsd >= $minAmount`); params.minAmount = parseFloat(minAmount); }
+  if (maxAmount) { conditions.push(`fr.amountUsd <= $maxAmount`); params.maxAmount = parseFloat(maxAmount); }
+
+  if (country && country.toLowerCase() !== "all") {
+    conditions.push(`c.country = $country`);
+    params.country = country;
+  } else if (!country) {
+    conditions.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
+  }
+
+  const investorCondition = investor ? `WHERE ANY(i IN investors WHERE i.uuid = $investor OR toLower(i.name) CONTAINS toLower($investor))` : "";
+  if (investor) { params.investor = investor; }
+  if (startup) { params.startup = startup; }
+
+  const whereClause = conditions.length || startup
+    ? `WHERE ${[...conditions, ...(startup ? [`(c.uuid = $startup OR toLower(c.name) CONTAINS toLower($startup))`] : [])].join(" AND ")}`
+    : "";
+
+  const sortField = sortBy === "amount" ? "amountUsd" : "effectiveDate";
+
+  // One session per concurrent query — serialized session + Promise.all throws 50N42.
+  const runRead = async (cypher: string, queryParams: Record<string, unknown>) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher, queryParams);
+    } finally {
+      await s.close();
+    }
+  };
+
   try {
-    let skip = 0;
-    if (cursorParam) {
-      try {
-        const decoded = JSON.parse(Buffer.from(cursorParam, "base64").toString());
-        skip = decoded.skip || 0;
-      } catch { /* invalid cursor */ }
-    }
+    const [dataRes, countRes] = await Promise.all([
+      runRead(`
+        MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
+        ${whereClause}
+        OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
+        WITH fr, c, min(a.publishedAt) AS articleDate
+        OPTIONAL MATCH (allInv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
+        WITH fr.uuid AS roundUuid, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
+             fr.currency AS currency, fr.fxRate AS fxRate,
+             fr.stage AS stage, fr.confidence AS confidence,
+             fr.announcedDate AS announcedDate,
+             c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+             COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
+             articleDate,
+             collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
+        ${investorCondition}
+        RETURN roundUuid, startupUuid, startupName, startupNormalizedName,
+               originalAmount, amountUsd, currency, fxRate, stage, confidence,
+               announcedDate, articleDate, effectiveDate, investors
+        ORDER BY ${sortField} ${sortDir}
+        SKIP $skip LIMIT $limit
+      `, params),
+      // totalCount: full filter pipeline, but no per-round projection — just count.
+      // When `investor` filter is set, we must still resolve the investors list
+      // to apply the post-collect predicate, so we replay the same pipeline.
+      runRead(`
+        MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
+        ${whereClause}
+        OPTIONAL MATCH (allInv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
+        WITH fr,
+             collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
+        ${investorCondition}
+        RETURN count(fr) AS total
+      `, params),
+    ]);
 
-    const conditions: string[] = [];
-    const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
-
-    if (updatedSince) { conditions.push(`(fr.updatedAt >= datetime($updatedSince) OR fr.createdAt >= datetime($updatedSince))`); params.updatedSince = updatedSince; }
-    if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }
-    if (minAmount) { conditions.push(`fr.amountUsd >= $minAmount`); params.minAmount = parseFloat(minAmount); }
-    if (maxAmount) { conditions.push(`fr.amountUsd <= $maxAmount`); params.maxAmount = parseFloat(maxAmount); }
-
-    // Country filter: defaults to Europe-only, pass country=all to disable
-    if (country && country.toLowerCase() !== "all") {
-      conditions.push(`c.country = $country`);
-      params.country = country;
-    } else if (!country) {
-      conditions.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
-    }
-
-    const investorCondition = investor ? `WHERE ANY(i IN investors WHERE i.uuid = $investor OR toLower(i.name) CONTAINS toLower($investor))` : "";
-    if (investor) { params.investor = investor; }
-    if (startup) { params.startup = startup; }
-
-    const whereClause = conditions.length || startup
-      ? `WHERE ${[...conditions, ...(startup ? [`(c.uuid = $startup OR toLower(c.name) CONTAINS toLower($startup))`] : [])].join(" AND ")}`
-      : "";
-
-    const sortField = sortBy === "amount" ? "amountUsd" : "effectiveDate";
-
-    const result = await session.run(`
-      MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
-      ${whereClause}
-      OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
-      WITH fr, c, min(a.publishedAt) AS articleDate
-      OPTIONAL MATCH (allInv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-      WITH fr.uuid AS roundUuid, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
-           fr.currency AS currency, fr.fxRate AS fxRate,
-           fr.stage AS stage, fr.confidence AS confidence,
-           fr.announcedDate AS announcedDate,
-           c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
-           COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
-           articleDate,
-           collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
-      ${investorCondition}
-      RETURN roundUuid, startupUuid, startupName, startupNormalizedName,
-             originalAmount, amountUsd, currency, fxRate, stage, confidence,
-             announcedDate, articleDate, effectiveDate, investors
-      ORDER BY ${sortField} ${sortDir}
-      SKIP $skip LIMIT $limit
-    `, params);
-
-    const hasMore = result.records.length > limit;
-    const records = result.records.slice(0, limit);
+    const hasMore = dataRes.records.length > limit;
+    const records = dataRes.records.slice(0, limit);
+    const totalCount = toNum(countRes.records[0]?.get("total")) ?? 0;
 
     const data = records.map((r) => {
       const roundUuid = toStr(r.get("roundUuid"));
@@ -135,13 +161,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data,
-      pagination: { cursor: nextCursor, hasMore },
+      pagination: { cursor: nextCursor, hasMore, totalCount, totalCountApproximate: false },
     });
   } catch (error) {
     console.error("v1/funding-rounds error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  } finally {
-    await session.close();
   }
 }
 
@@ -149,8 +173,4 @@ function mapRole(role: string | null): string {
   if (!role) return "FOLLOW";
   if (role.toLowerCase() === "lead") return "LEAD";
   return "FOLLOW";
-}
-
-function neo4jInt(n: number) {
-  return neo4j.int(n);
 }

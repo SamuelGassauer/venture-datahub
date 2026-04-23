@@ -23,7 +23,7 @@ type FundingRoundRecord = {
 
 type ApiResponse = {
   data: FundingRoundRecord[];
-  pagination: { cursor: string | null; hasMore: boolean };
+  pagination: { cursor: string | null; hasMore: boolean; totalCount: number; totalCountApproximate: boolean };
 };
 
 async function fetchRounds(params: Record<string, string> = {}): Promise<ApiResponse> {
@@ -43,10 +43,18 @@ describe("/api/v1/funding-rounds", () => {
 
   // ── Response shape ──────────────────────────────────────────────────
 
-  it("returns { data, pagination } envelope", () => {
+  it("returns { data, pagination } envelope with totalCount", () => {
     expect(firstResponse).toHaveProperty("data");
     expect(firstResponse).toHaveProperty("pagination");
     expect(Array.isArray(firstResponse.data)).toBe(true);
+    expect(typeof firstResponse.pagination.totalCount).toBe("number");
+    expect(typeof firstResponse.pagination.totalCountApproximate).toBe("boolean");
+    expect(firstResponse.pagination.totalCount).toBeGreaterThanOrEqual(firstResponse.data.length);
+  });
+
+  it("accepts limit up to 500", async () => {
+    const res = await fetchRounds({ limit: "500" });
+    expect(res.data.length).toBeLessThanOrEqual(500);
   });
 
   it("every record has required round fields", () => {

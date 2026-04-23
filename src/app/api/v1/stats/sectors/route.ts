@@ -9,29 +9,22 @@ export async function GET(request: NextRequest) {
   const authError = await requireApiKey(request, "data-provider", { allowPublic: true });
   if (authError) return authError;
 
-  const { searchParams } = new URL(request.url);
-  const windowDaysRaw = parseInt(searchParams.get("window_days") || "90", 10);
-  const country = searchParams.get("country");
-
   try {
-    const { entries, totalStartups, windowDays } = await computeSectorCatalog({
-      windowDays: Number.isFinite(windowDaysRaw) ? windowDaysRaw : undefined,
-      country,
-    });
+    const { entries, totalStartups, windowDays } = await computeSectorCatalog();
 
     return NextResponse.json(
       {
-        entries,
+        sectors: entries,
         totalStartups,
         windowDays,
-        generatedAt: new Date().toISOString(),
+        computedAt: new Date().toISOString(),
       },
       {
         headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=300" },
       },
     );
   } catch (error) {
-    console.error("v1/sectors/catalog error:", error);
+    console.error("v1/stats/sectors error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

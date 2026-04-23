@@ -47,7 +47,7 @@ type InvestorRecord = {
 
 type ApiResponse = {
   data: InvestorRecord[];
-  pagination: { cursor: string | null; hasMore: boolean };
+  pagination: { cursor: string | null; hasMore: boolean; totalCount: number; totalCountApproximate: boolean };
 };
 
 async function fetchInvestors(params: Record<string, string> = {}): Promise<ApiResponse> {
@@ -67,12 +67,20 @@ describe("/api/v1/investors", () => {
 
   // ── Response shape ──────────────────────────────────────────────────
 
-  it("returns { data, pagination } envelope", () => {
+  it("returns { data, pagination } envelope with totalCount", () => {
     expect(firstResponse).toHaveProperty("data");
     expect(firstResponse).toHaveProperty("pagination");
     expect(Array.isArray(firstResponse.data)).toBe(true);
     expect(firstResponse.pagination).toHaveProperty("hasMore");
     expect(firstResponse.pagination).toHaveProperty("cursor");
+    expect(typeof firstResponse.pagination.totalCount).toBe("number");
+    expect(typeof firstResponse.pagination.totalCountApproximate).toBe("boolean");
+    expect(firstResponse.pagination.totalCount).toBeGreaterThanOrEqual(firstResponse.data.length);
+  });
+
+  it("accepts limit up to 250", async () => {
+    const res = await fetchInvestors({ limit: "250" });
+    expect(res.data.length).toBeLessThanOrEqual(250);
   });
 
   it("every record has required fields", () => {
