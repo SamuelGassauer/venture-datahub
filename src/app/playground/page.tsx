@@ -50,7 +50,26 @@ const ENDPOINTS: Endpoint[] = [
     icon: Landmark,
     color: "blue",
     description: "VC funds, angels & investment firms",
-    fields: ["externalId", "name", "logoUrl", "dealCount", "hq", "sectorFocus", "geoFocus", "roundRole", "stages", "website"],
+    fields: [
+      "externalId",
+      "name",
+      "logoUrl",
+      "type",
+      "dealCount",
+      "leadCount",
+      "totalDeployedUsd",
+      "hq",
+      "sectorFocus",
+      "stageFocus",
+      "geoFocus",
+      "checkSizeMinUsd",
+      "checkSizeMaxUsd",
+      "roundRole",
+      "stages",
+      "portfolioCompanies",
+      "latestInvestmentDate",
+      "website",
+    ],
   },
   {
     id: "startups",
@@ -102,11 +121,14 @@ const ENDPOINT_FILTERS: Record<string, FilterDef[]> = {
   investors: [
     { key: "id", label: "External ID", type: "text", placeholder: "UUID" },
     { key: "name", label: "Name", type: "text", placeholder: "e.g. Earlybird" },
+    { key: "type", label: "Type", type: "select", placeholder: "All", options: ["vc", "pe", "cvc", "angel_group", "family_office", "accelerator", "incubator", "sovereign_wealth", "government", "bank", "hedge_fund"] },
     { key: "country", label: "HQ Country", type: "select", placeholder: "All", dynamicOptions: "countries" },
     { key: "sector", label: "Sector Focus", type: "select", placeholder: "All", dynamicOptions: "sectors" },
     { key: "geo", label: "Geo Focus", type: "select", placeholder: "All", dynamicOptions: "geoFocus" },
     { key: "role", label: "Round Role", type: "select", placeholder: "All", options: ["LEAD", "FOLLOW", "BOTH"] },
-    { key: "sort", label: "Sort By", type: "select", placeholder: "Activity", options: ["activity", "name", "aum", "updated"] },
+    { key: "min_check", label: "Min Check Size (USD)", type: "number", placeholder: "e.g. 500000" },
+    { key: "max_check", label: "Max Check Size (USD)", type: "number", placeholder: "e.g. 25000000" },
+    { key: "sort", label: "Sort By", type: "select", placeholder: "Activity", options: ["activity", "leads", "deployed", "name", "aum", "updated"] },
     { key: "dir", label: "Direction", type: "select", placeholder: "Descending", options: ["asc", "desc"] },
   ],
   startups: [
@@ -414,7 +436,7 @@ export default function PlaygroundPage() {
 
   // Determine which columns to show in table
   const visibleFields = selectedEndpoint.fields;
-  const usdFields = ["aumUsdMillions", "totalRoundSizeUsd", "investmentAmountUsd", "minTicketUsd", "maxTicketUsd", "minRoundUsd", "maxRoundUsd"];
+  const usdFields = ["aumUsdMillions", "totalRoundSizeUsd", "investmentAmountUsd", "minTicketUsd", "maxTicketUsd", "minRoundUsd", "maxRoundUsd", "checkSizeMinUsd", "checkSizeMaxUsd", "totalDeployedUsd"];
 
   return (
     <div className="h-screen flex flex-col bg-[#09090b] text-white selection:bg-blue-500/30 overflow-hidden">
@@ -913,7 +935,8 @@ export default function PlaygroundPage() {
                               const isInvestors = field === "investors" && Array.isArray(val);
                               const isCoInvestors = field === "coInvestors" && Array.isArray(val);
                               const isFundingRounds = field === "fundingRounds" && Array.isArray(val);
-                              const isChips = isInvestors || isFundingRounds || isCoInvestors;
+                              const isPortfolio = field === "portfolioCompanies" && Array.isArray(val);
+                              const isChips = isInvestors || isFundingRounds || isCoInvestors || isPortfolio;
                               return (
                                 <td
                                   key={field}
@@ -970,6 +993,23 @@ export default function PlaygroundPage() {
                                         </span>
                                       ))}
                                     </div>
+                                  ) : isPortfolio ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {(val as { name: string | null; latestStage: string | null; latestAmountUsd: number | null; leadCount: number }[]).slice(0, 8).map((pc, j) => (
+                                        <span
+                                          key={j}
+                                          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                            pc.leadCount > 0 ? "bg-amber-500/12 text-amber-400" : "bg-blue-500/12 text-blue-400"
+                                          }`}
+                                        >
+                                          {pc.name}
+                                          {pc.latestStage && <span className="text-white/25">· {pc.latestStage}</span>}
+                                        </span>
+                                      ))}
+                                      {(val as unknown[]).length > 8 && (
+                                        <span className="text-[10px] text-white/25">+{(val as unknown[]).length - 8}</span>
+                                      )}
+                                    </div>
                                   ) : isUsd ? formatUsd(val) : formatValue(val)}
                                 </td>
                               );
@@ -981,7 +1021,7 @@ export default function PlaygroundPage() {
                                 <div className="px-6 py-3">
                                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
                                     {Object.entries(record).map(([key, val]) => (
-                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" || key === "fundingRounds" || key === "coInvestors" ? "col-span-2 lg:col-span-3" : ""}`}>
+                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" || key === "fundingRounds" || key === "coInvestors" || key === "portfolioCompanies" ? "col-span-2 lg:col-span-3" : ""}`}>
                                         <span className="text-[9px] uppercase tracking-[0.06em] font-medium text-white/15">{key}</span>
                                         {key === "logoUrl" && val ? (
                                           <img src={String(val)} alt="" className="h-8 w-8 rounded-[6px] object-contain bg-white/10" />
@@ -1057,6 +1097,39 @@ export default function PlaygroundPage() {
                                             ))}
                                             {(val as string[]).length === 0 && (
                                               <span className="text-[11px] text-white/15 italic">No co-investors</span>
+                                            )}
+                                          </div>
+                                        ) : key === "portfolioCompanies" && Array.isArray(val) ? (
+                                          <div className="flex flex-col gap-1.5 mt-0.5">
+                                            {(val as { externalId: string | null; name: string | null; country: string | null; sector: string[]; dealCount: number; leadCount: number; latestStage: string | null; latestAmountUsd: number | null; latestDate: string | null }[]).map((pc, j) => (
+                                              <div key={j} className="rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-3 py-1.5 flex items-center gap-3 flex-wrap">
+                                                <span className="text-[11px] font-semibold text-white/70">{pc.name}</span>
+                                                {pc.country && (
+                                                  <span className="text-[10px] text-white/30">{pc.country}</span>
+                                                )}
+                                                {pc.latestStage && (
+                                                  <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-emerald-500/12 text-emerald-400">
+                                                    {pc.latestStage}
+                                                  </span>
+                                                )}
+                                                {pc.latestAmountUsd != null && (
+                                                  <span className="text-[10px] font-mono text-emerald-400/60">
+                                                    ${(pc.latestAmountUsd / 1e6).toFixed(1)}M
+                                                  </span>
+                                                )}
+                                                {pc.leadCount > 0 && (
+                                                  <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/15 text-amber-400 uppercase tracking-wider">
+                                                    Lead ×{pc.leadCount}
+                                                  </span>
+                                                )}
+                                                <span className="text-[10px] text-white/25 ml-auto">
+                                                  {pc.dealCount} {pc.dealCount === 1 ? "deal" : "deals"}
+                                                  {pc.latestDate ? ` · ${pc.latestDate}` : ""}
+                                                </span>
+                                              </div>
+                                            ))}
+                                            {(val as unknown[]).length === 0 && (
+                                              <span className="text-[11px] text-white/15 italic">No portfolio companies</span>
                                             )}
                                           </div>
                                         ) : (
@@ -1199,8 +1272,13 @@ export default function PlaygroundPage() {
                         <span className="text-[11px] font-mono text-blue-400 w-[180px]">{f}</span>
                         <span className="text-[10px] text-white/15 font-mono">
                           {usdFields.includes(f) ? "number | null" :
-                           f.endsWith("Focus") || f === "sector" ? "string[]" :
-                           f.endsWith("At") ? "string (ISO date) | null" :
+                           f === "dealCount" || f === "leadCount" ? "number" :
+                           f === "portfolioCompanies" ? "Array<{ externalId, name, country, sector[], dealCount, leadCount, latestStage, latestAmountUsd, latestDate }>" :
+                           f === "fundingRounds" ? "Array<{ roundExternalId, stage, amountUsd, date, investors[] }>" :
+                           f === "investors" ? "Array<{ externalId, name, role }>" :
+                           f === "coInvestors" ? "string[]" :
+                           f === "stages" || f === "stageFocus" || f === "sectorFocus" || f === "geoFocus" || f === "sector" ? "string[]" :
+                           f.endsWith("Date") || f.endsWith("At") ? "string (ISO date) | null" :
                            "string | null"}
                         </span>
                       </div>

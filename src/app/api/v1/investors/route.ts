@@ -10,7 +10,8 @@ function toNum(v: unknown): number | null {
   if (v == null) return null;
   if (typeof v === "number") return v;
   if (typeof v === "object" && v !== null && "toNumber" in v) return (v as { toNumber(): number }).toNumber();
-  return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
 }
 
 function toStr(v: unknown): string | null {
@@ -19,10 +20,22 @@ function toStr(v: unknown): string | null {
 }
 
 function toStrArr(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map(String);
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
   if (typeof v === "string" && v) return [v];
   return [];
 }
+
+type PortfolioCompany = {
+  externalId: string | null;
+  name: string | null;
+  country: string | null;
+  sector: string[];
+  dealCount: number;
+  leadCount: number;
+  latestStage: string | null;
+  latestAmountUsd: number | null;
+  latestDate: string | null;
+};
 
 export async function GET(request: NextRequest) {
   const authError = await requireApiKey(request, "data-provider", { allowPublic: true });
@@ -40,6 +53,9 @@ export async function GET(request: NextRequest) {
   const sector = searchParams.get("sector_focus") || searchParams.get("sector");
   const geo = searchParams.get("geo");
   const role = searchParams.get("role");
+  const type = searchParams.get("type");
+  const minCheck = searchParams.get("min_check");
+  const maxCheck = searchParams.get("max_check");
   const sortBy = searchParams.get("sort") || "activity";
   const sortDir = searchParams.get("dir") === "asc" ? "ASC" : "DESC";
 
@@ -60,6 +76,9 @@ export async function GET(request: NextRequest) {
     if (idSearch) { matchConditions.push(`inv.uuid = $idSearch`); params.idSearch = idSearch; }
     if (nameSearch) { matchConditions.push(`toLower(inv.name) CONTAINS toLower($nameSearch)`); params.nameSearch = nameSearch; }
     if (geo) { matchConditions.push(`ANY(g IN inv.geoFocus WHERE toLower(g) CONTAINS toLower($geo))`); params.geo = geo; }
+    if (type) { matchConditions.push(`toLower(inv.type) = toLower($type)`); params.type = type; }
+    if (minCheck) { matchConditions.push(`inv.checkSizeMaxUsd >= $minCheck`); params.minCheck = Number(minCheck); }
+    if (maxCheck) { matchConditions.push(`inv.checkSizeMinUsd <= $maxCheck`); params.maxCheck = Number(maxCheck); }
     const matchWhereClause = matchConditions.length ? `WHERE ${matchConditions.join(" AND ")}` : "";
 
     // Country filter on investor HQ (explicit country param only)
@@ -79,11 +98,17 @@ export async function GET(request: NextRequest) {
     // Sector and role filters applied after aggregation (derived from investments)
     const havingConditions: string[] = [];
     havingConditions.push(`dealCount > 0`);
-    if (sector) { havingConditions.push(`ANY(s IN sectors WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
+    if (sector) { havingConditions.push(`ANY(s IN investedSectors WHERE toLower(s) = toLower($sector))`); params.sector = sector; }
     if (role) { havingConditions.push(`toLower(roundRole) = toLower($role)`); params.role = role; }
     const havingClause = havingConditions.length ? `WHERE ${havingConditions.join(" AND ")}` : "";
 
-    const sortField = sortBy === "aum" ? "inv.aum" : sortBy === "name" ? "inv.name" : sortBy === "updated" ? "inv.updatedAt" : "dealCount";
+    const sortField =
+      sortBy === "aum" ? "inv.aum"
+      : sortBy === "name" ? "inv.name"
+      : sortBy === "updated" ? "inv.updatedAt"
+      : sortBy === "deployed" ? "totalDeployedUsd"
+      : sortBy === "leads" ? "leadCount"
+      : "dealCount";
 
     const result = await session.run(`
       MATCH (inv:InvestorOrg)
@@ -95,8 +120,11 @@ export async function GET(request: NextRequest) {
       ${dealCountryFilter}
       WITH inv, hq,
            count(DISTINCT fr) AS dealCount,
+           sum(CASE WHEN toLower(rel.role) = 'lead' THEN 1 ELSE 0 END) AS leadCount,
+           sum(fr.amountUsd) AS totalDeployedUsd,
            min(fr.amountUsd) AS minRoundUsd,
            max(fr.amountUsd) AS maxRoundUsd,
+           max(COALESCE(fr.announcedDate, fr.date)) AS latestInvestmentDate,
            CASE
              WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') AND ANY(r IN collect(rel.role) WHERE r IS NULL OR toLower(r) <> 'lead') THEN 'both'
              WHEN ANY(r IN collect(rel.role) WHERE toLower(r) = 'lead') THEN 'lead'
@@ -104,10 +132,12 @@ export async function GET(request: NextRequest) {
            END AS roundRole,
            [st IN collect(DISTINCT fr.stage) WHERE st IS NOT NULL] AS stages,
            REDUCE(acc = [], s IN collect(DISTINCT c.sector) | CASE WHEN s IS NOT NULL THEN acc + s ELSE acc END) AS rawSectors
-      WITH inv, hq, dealCount, minRoundUsd, maxRoundUsd, roundRole, stages,
-           [s IN rawSectors WHERE s IS NOT NULL | s] AS sectors
+      WITH inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
+           latestInvestmentDate, roundRole, stages,
+           [s IN rawSectors WHERE s IS NOT NULL | s] AS investedSectors
       ${havingClause}
-      RETURN inv, hq, dealCount, minRoundUsd, maxRoundUsd, roundRole, stages, sectors
+      RETURN inv, hq, dealCount, leadCount, totalDeployedUsd, minRoundUsd, maxRoundUsd,
+             latestInvestmentDate, roundRole, stages, investedSectors
       ORDER BY ${sortField} ${sortDir}, inv.uuid ASC
       SKIP $skip LIMIT $limit
     `, params);
@@ -115,29 +145,108 @@ export async function GET(request: NextRequest) {
     const hasMore = result.records.length > limit;
     const records = result.records.slice(0, limit);
 
+    // Fetch portfolio companies for the returned investors
+    const investorUuids = records
+      .map((r) => toStr(r.get("inv").properties.uuid))
+      .filter(Boolean) as string[];
+
+    const portfolioByInvestor: Record<string, PortfolioCompany[]> = {};
+
+    if (investorUuids.length > 0) {
+      const portfolioParams: Record<string, unknown> = { investorUuids };
+      const portfolioCountryFilter = !country
+        ? `AND c.country IN ${EUROPE_CYPHER_LIST}`
+        : country.toLowerCase() !== "all"
+          ? `AND c.country = $portfolioCountry`
+          : "";
+      if (country && country.toLowerCase() !== "all") portfolioParams.portfolioCountry = country;
+
+      const portfolioResult = await session.run(`
+        MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)
+        WHERE inv.uuid IN $investorUuids
+        ${portfolioCountryFilter}
+        WITH inv.uuid AS investorUuid, c, rel, fr,
+             COALESCE(fr.announcedDate, fr.date) AS roundDate
+        WITH investorUuid, c,
+             count(DISTINCT fr) AS dealCount,
+             sum(CASE WHEN toLower(rel.role) = 'lead' THEN 1 ELSE 0 END) AS leadCount,
+             collect({stage: fr.stage, amountUsd: fr.amountUsd, date: roundDate}) AS rounds
+        WITH investorUuid, c, dealCount, leadCount,
+             reduce(latest = {stage: null, amountUsd: null, date: null},
+                    r IN rounds |
+                    CASE WHEN r.date IS NOT NULL AND (latest.date IS NULL OR r.date > latest.date)
+                         THEN r ELSE latest END) AS latest
+        RETURN investorUuid,
+               c.uuid AS companyUuid,
+               c.normalizedName AS companyNormalizedName,
+               c.name AS companyName,
+               c.country AS companyCountry,
+               COALESCE(c.sector, []) AS companySector,
+               c.subsector AS companySubsector,
+               dealCount, leadCount,
+               latest.stage AS latestStage,
+               latest.amountUsd AS latestAmountUsd,
+               latest.date AS latestDate
+        ORDER BY latestDate DESC
+      `, portfolioParams);
+
+      for (const r of portfolioResult.records) {
+        const invUuid = toStr(r.get("investorUuid"));
+        if (!invUuid) continue;
+        const sector = toStrArr(r.get("companySector"));
+        const subsector = toStr(r.get("companySubsector"));
+        if (subsector && !sector.includes(subsector)) sector.push(subsector);
+        if (!portfolioByInvestor[invUuid]) portfolioByInvestor[invUuid] = [];
+        portfolioByInvestor[invUuid].push({
+          externalId: toStr(r.get("companyUuid")) || toStr(r.get("companyNormalizedName")),
+          name: toStr(r.get("companyName")),
+          country: toStr(r.get("companyCountry")),
+          sector,
+          dealCount: toNum(r.get("dealCount")) ?? 0,
+          leadCount: toNum(r.get("leadCount")) ?? 0,
+          latestStage: toStr(r.get("latestStage")),
+          latestAmountUsd: toNum(r.get("latestAmountUsd")),
+          latestDate: toStr(r.get("latestDate")),
+        });
+      }
+    }
+
     const data = records.map((r) => {
       const inv = r.get("inv").properties;
-      const city = toStr(inv.hqCity);
-      const country = toStr(inv.hqCountry) || toStr(r.get("hq")) || toStr(inv.country);
-      const hq = city && country ? `${city}, ${country}` : city || country;
+      const investedSectors = toStrArr(r.get("investedSectors"));
+      const hqCity = toStr(inv.hqCity);
+      const hqCountry = toStr(inv.hqCountry) || toStr(r.get("hq")) || toStr(inv.country);
+      const hq = hqCity && hqCountry ? `${hqCity}, ${hqCountry}` : hqCity || hqCountry;
+      const uuid = toStr(inv.uuid);
 
       return {
-        externalId: toStr(inv.uuid) || toStr(inv.normalizedName),
+        externalId: uuid || toStr(inv.normalizedName),
         name: toStr(inv.name),
         logoUrl: toStr(inv.logoUrl),
+        type: toStr(inv.type),
         website: toStr(inv.website),
         linkedinUrl: toStr(inv.linkedinUrl),
-        hq,
-        foundedAt: inv.foundedYear ? `${inv.foundedYear}-01-01` : null,
         description: toStr(inv.description),
+        hq,
+        hqCity,
+        hqCountry,
+        foundedAt: inv.foundedYear ? `${inv.foundedYear}-01-01` : null,
         aumUsdMillions: toNum(inv.aum),
+        checkSizeMinUsd: toNum(inv.checkSizeMinUsd),
+        checkSizeMaxUsd: toNum(inv.checkSizeMaxUsd),
+        stageFocus: toStrArr(inv.stageFocus),
+        geoFocus: toStrArr(inv.geoFocus),
+        dealCount: toNum(r.get("dealCount")) ?? 0,
+        leadCount: toNum(r.get("leadCount")) ?? 0,
+        totalDeployedUsd: toNum(r.get("totalDeployedUsd")),
         minRoundUsd: toNum(r.get("minRoundUsd")),
         maxRoundUsd: toNum(r.get("maxRoundUsd")),
-        dealCount: toNum(r.get("dealCount")) ?? 0,
         roundRole: mapRoundRole(r.get("roundRole") as string | null),
         stages: toStrArr(r.get("stages")),
-        sectorFocus: [...new Set(toStrArr(r.get("sectors")))],
-        geoFocus: toStrArr(inv.geoFocus),
+        sectorFocus: [...new Set(investedSectors)],
+        latestInvestmentDate: toStr(r.get("latestInvestmentDate")),
+        portfolioCompanies: uuid ? (portfolioByInvestor[uuid] ?? []) : [],
+        enrichedAt: toStr(inv.enrichedAt),
         updatedAt: toStr(inv.updatedAt) || toStr(inv.enrichedAt) || new Date().toISOString(),
       };
     });

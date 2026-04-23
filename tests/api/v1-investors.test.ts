@@ -2,23 +2,46 @@ import { describe, it, expect, beforeAll } from "vitest";
 
 const BASE = process.env.TEST_API_URL || "http://localhost:3000";
 
+type PortfolioCompany = {
+  externalId: string | null;
+  name: string | null;
+  country: string | null;
+  sector: string[];
+  dealCount: number;
+  leadCount: number;
+  latestStage: string | null;
+  latestAmountUsd: number | null;
+  latestDate: string | null;
+};
+
 type InvestorRecord = {
   externalId: string | null;
   name: string | null;
   logoUrl: string | null;
+  type: string | null;
   website: string | null;
   linkedinUrl: string | null;
-  hq: string | null;
-  foundedAt: string | null;
   description: string | null;
+  hq: string | null;
+  hqCity: string | null;
+  hqCountry: string | null;
+  foundedAt: string | null;
   aumUsdMillions: number | null;
+  checkSizeMinUsd: number | null;
+  checkSizeMaxUsd: number | null;
+  stageFocus: string[];
+  geoFocus: string[];
+  dealCount: number;
+  leadCount: number;
+  totalDeployedUsd: number | null;
   minRoundUsd: number | null;
   maxRoundUsd: number | null;
-  dealCount: number;
   roundRole: string;
   stages: string[];
   sectorFocus: string[];
-  geoFocus: string[];
+  latestInvestmentDate: string | null;
+  portfolioCompanies: PortfolioCompany[];
+  enrichedAt: string | null;
   updatedAt: string;
 };
 
@@ -81,14 +104,14 @@ describe("/api/v1/investors", () => {
     }
   });
 
-  it("hq is a combined string (not separate city/country)", () => {
+  it("hq is exposed as combined string plus separate city/country fields", () => {
     for (const inv of firstResponse.data) {
-      if (inv.hq) {
-        expect(typeof inv.hq).toBe("string");
-        // Should NOT have hqCity/hqCountry as separate fields
-        expect(inv).not.toHaveProperty("hqCity");
-        expect(inv).not.toHaveProperty("hqCountry");
-      }
+      if (inv.hq) expect(typeof inv.hq).toBe("string");
+      // hqCity / hqCountry MUST be present (may be null)
+      expect(inv).toHaveProperty("hqCity");
+      expect(inv).toHaveProperty("hqCountry");
+      if (inv.hqCity !== null) expect(typeof inv.hqCity).toBe("string");
+      if (inv.hqCountry !== null) expect(typeof inv.hqCountry).toBe("string");
     }
   });
 
@@ -97,6 +120,37 @@ describe("/api/v1/investors", () => {
       if (inv.aumUsdMillions !== null) expect(typeof inv.aumUsdMillions).toBe("number");
       if (inv.minRoundUsd !== null) expect(typeof inv.minRoundUsd).toBe("number");
       if (inv.maxRoundUsd !== null) expect(typeof inv.maxRoundUsd).toBe("number");
+      if (inv.checkSizeMinUsd !== null) expect(typeof inv.checkSizeMinUsd).toBe("number");
+      if (inv.checkSizeMaxUsd !== null) expect(typeof inv.checkSizeMaxUsd).toBe("number");
+      if (inv.totalDeployedUsd !== null) expect(typeof inv.totalDeployedUsd).toBe("number");
+    }
+  });
+
+  it("leadCount never exceeds dealCount", () => {
+    for (const inv of firstResponse.data) {
+      expect(typeof inv.leadCount).toBe("number");
+      expect(inv.leadCount).toBeLessThanOrEqual(inv.dealCount);
+    }
+  });
+
+  it("stageFocus / geoFocus are arrays of strings", () => {
+    for (const inv of firstResponse.data) {
+      expect(Array.isArray(inv.stageFocus)).toBe(true);
+      expect(Array.isArray(inv.geoFocus)).toBe(true);
+      for (const s of inv.stageFocus) expect(typeof s).toBe("string");
+      for (const g of inv.geoFocus) expect(typeof g).toBe("string");
+    }
+  });
+
+  it("portfolioCompanies is an array with valid shape", () => {
+    for (const inv of firstResponse.data) {
+      expect(Array.isArray(inv.portfolioCompanies)).toBe(true);
+      for (const pc of inv.portfolioCompanies) {
+        expect(typeof pc.dealCount).toBe("number");
+        expect(typeof pc.leadCount).toBe("number");
+        expect(pc.leadCount).toBeLessThanOrEqual(pc.dealCount);
+        expect(Array.isArray(pc.sector)).toBe(true);
+      }
     }
   });
 
@@ -180,5 +234,40 @@ describe("/api/v1/investors", () => {
     const res = await fetchInvestors({ sector_focus: "__definitely_not_a_real_sector__" });
     expect(Array.isArray(res.data)).toBe(true);
     expect(res.data.length).toBe(0);
+  });
+
+  // ── New sorts: deployed / leads ─────────────────────────────────────
+
+  it("sort=deployed&dir=desc orders by totalDeployedUsd descending", async () => {
+    const res = await fetchInvestors({ sort: "deployed", dir: "desc", limit: "10" });
+    const values = res.data
+      .map((d) => d.totalDeployedUsd)
+      .filter((v): v is number => typeof v === "number");
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i] <= values[i - 1]).toBe(true);
+    }
+  });
+
+  it("sort=leads&dir=desc orders by leadCount descending", async () => {
+    const res = await fetchInvestors({ sort: "leads", dir: "desc", limit: "10" });
+    const values = res.data.map((d) => d.leadCount);
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i] <= values[i - 1]).toBe(true);
+    }
+  });
+
+  // ── type filter ─────────────────────────────────────────────────────
+
+  it("type filter restricts results to that investor type", async () => {
+    const pool = await fetchInvestors({ limit: "50" });
+    const sample = pool.data.map((d) => d.type).find((t): t is string => typeof t === "string" && t.length > 0);
+    if (!sample) return;
+    const res = await fetchInvestors({ type: sample });
+    expect(res.data.length).toBeGreaterThan(0);
+    for (const inv of res.data) {
+      if (inv.type !== null) {
+        expect(inv.type.toLowerCase()).toBe(sample.toLowerCase());
+      }
+    }
   });
 });
