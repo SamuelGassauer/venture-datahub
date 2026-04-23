@@ -3,6 +3,7 @@ import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
+import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +49,21 @@ export async function GET(request: NextRequest) {
     } catch { /* invalid cursor */ }
   }
 
+  const postedMode = parsePostedMode(searchParams);
   const conditions: string[] = [];
   const params: Record<string, unknown> = { skip: neo4j.int(skip), limit: neo4j.int(limit + 1) };
+
+  if (postedMode === "posted") {
+    const postedIds = await getPostedRoundIds();
+    if (postedIds.length === 0) {
+      return NextResponse.json({
+        data: [],
+        pagination: { cursor: null, hasMore: false, totalCount: 0, totalCountApproximate: false },
+      });
+    }
+    conditions.push(`id(fr) IN $postedIds`);
+    params.postedIds = postedIds;
+  }
 
   if (updatedSince) { conditions.push(`(fr.updatedAt >= datetime($updatedSince) OR fr.createdAt >= datetime($updatedSince))`); params.updatedSince = updatedSince; }
   if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }

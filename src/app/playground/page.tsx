@@ -496,6 +496,7 @@ export default function PlaygroundPage() {
   const [autoSent, setAutoSent] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [meta, setMeta] = useState<MetaData | null>(null);
+  const [postedOnly, setPostedOnly] = useState(true);
   const responseRef = useRef<HTMLPreElement>(null);
 
   const activeFilterDefs = ENDPOINT_FILTERS[selectedEndpoint.id] ?? [];
@@ -527,9 +528,10 @@ export default function PlaygroundPage() {
       if (val) params.set(key, val);
     }
     if (!isStats && cursor) params.set("cursor", cursor);
+    if (!postedOnly) params.set("posted", "all");
     const qs = params.toString();
     return `${selectedEndpoint.path}${qs ? `?${qs}` : ""}`;
-  }, [selectedEndpoint, limit, updatedSince, cursor, filters]);
+  }, [selectedEndpoint, limit, updatedSince, cursor, filters, postedOnly]);
 
   const buildCurl = useCallback(() => {
     const url = `https://orbit.inventure.capital${buildUrl()}`;
@@ -954,13 +956,36 @@ export default function PlaygroundPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Info Banner */}
           <div className="border-b border-white/[0.06] bg-indigo-500/[0.03] shrink-0">
-            <div className="flex items-start gap-2 px-4 py-2 text-[11px] text-white/50">
-              <Info className="h-3.5 w-3.5 text-indigo-400 mt-0.5 shrink-0" />
-              <span>
-                <span className="text-white/70 font-medium">Prefer <code className="text-indigo-400">/stats/*</code> for aggregates.</span>{" "}
-                Only walk <code className="text-white/60">/funding-rounds</code>, <code className="text-white/60">/investors</code>, <code className="text-white/60">/startups</code>, or <code className="text-white/60">/investments</code> when you need the raw rows —{" "}
-                <code className="text-white/60">pagination.totalCount</code> is returned on every page so you never have to walk the set just to show a count.
-              </span>
+            <div className="flex items-center justify-between gap-4 px-4 py-2">
+              <div className="flex items-start gap-2 text-[11px] text-white/50 min-w-0">
+                <Info className="h-3.5 w-3.5 text-indigo-400 mt-0.5 shrink-0" />
+                <span className="truncate">
+                  <span className="text-white/70 font-medium">Default scope: manually reviewed rounds only.</span>{" "}
+                  Prefer <code className="text-indigo-400">/stats/*</code> for aggregates.{" "}
+                  <code className="text-white/60">pagination.totalCount</code> is returned on every page.
+                </span>
+              </div>
+
+              <div className="shrink-0 flex items-center rounded-[8px] border border-white/[0.08] bg-white/[0.02] p-0.5">
+                <button
+                  onClick={() => { setPostedOnly(true); setCursor(""); setTimeout(() => handleSend(), 50); }}
+                  className={`rounded-[6px] px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    postedOnly ? "bg-emerald-500/15 text-emerald-400" : "text-white/35 hover:text-white/55"
+                  }`}
+                  title="Default: posted (manually reviewed) rounds only"
+                >
+                  Posted
+                </button>
+                <button
+                  onClick={() => { setPostedOnly(false); setCursor(""); setTimeout(() => handleSend(), 50); }}
+                  className={`rounded-[6px] px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    !postedOnly ? "bg-amber-500/15 text-amber-400" : "text-white/35 hover:text-white/55"
+                  }`}
+                  title="Escape hatch: ?posted=all — includes unreviewed rounds"
+                >
+                  All (incl. unreviewed)
+                </button>
+              </div>
             </div>
           </div>
 

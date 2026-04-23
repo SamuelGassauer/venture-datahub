@@ -21,6 +21,7 @@ type Response = {
 
 async function fetchStats(params: Record<string, string> = {}): Promise<Response> {
   const url = new URL("/api/v1/stats/funding-rounds", BASE);
+  if (!("posted" in params)) url.searchParams.set("posted", "all");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString());
   expect(res.status).toBe(200);

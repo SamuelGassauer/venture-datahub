@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
+import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 1800;
@@ -46,6 +47,16 @@ export async function GET(request: NextRequest) {
     params.investorType = investorType;
   }
 
+  const postedMode = parsePostedMode(searchParams);
+  const postedIds = postedMode === "posted" ? await getPostedRoundIds() : null;
+  if (postedIds && postedIds.length === 0) {
+    return NextResponse.json({
+      investorCount: 0, activeInvestorCount: 0,
+      typeMix: [], topByActivity: [],
+      computedAt: new Date().toISOString(),
+    }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=300" } });
+  }
+
   // Deal-side filters (applied on portfolio company + round). Defaults Europe-only
   // unless caller restricts investor HQ country explicitly.
   const dealConditions: string[] = [];
@@ -58,6 +69,10 @@ export async function GET(request: NextRequest) {
   }
   if (!hqCountry) {
     dealConditions.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
+  }
+  if (postedIds) {
+    dealConditions.push(`id(fr) IN $postedIds`);
+    params.postedIds = postedIds;
   }
   if (activeSince) params.activeSince = activeSince;
 

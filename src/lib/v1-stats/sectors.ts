@@ -24,6 +24,13 @@ export type SectorCatalog = {
 export type SectorCatalogOptions = {
   windowDays?: number;
   country?: string | null;
+  /**
+   * When set, restricts the recent-activity subquery to these FundingRound
+   * Neo4j internal IDs (i.e. only "posted" rounds). `null` means no restriction;
+   * `[]` means posted mode but no posts exist yet — caller should handle early
+   * return, but we still behave correctly (returns zeros).
+   */
+  postedRoundIds?: number[] | null;
 };
 
 function toNum(v: unknown): number {
@@ -52,6 +59,12 @@ export async function computeSectorCatalog(
     ? Math.min(windowDaysRaw, 365 * 5)
     : 90;
   const country = opts.country ?? null;
+  const postedRoundIds = opts.postedRoundIds ?? null;
+
+  // Early out when posted-mode is active but there's nothing posted yet.
+  if (postedRoundIds && postedRoundIds.length === 0) {
+    return { entries: [], totalStartups: 0, windowDays };
+  }
 
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
   const sinceYmd = since.toISOString().slice(0, 10);
@@ -64,6 +77,9 @@ export async function computeSectorCatalog(
   } else if (!country) {
     countryClause = `AND c.country IN ${EUROPE_CYPHER_LIST}`;
   }
+
+  const postedFrFilter = postedRoundIds ? `AND id(fr) IN $postedRoundIds` : "";
+  if (postedRoundIds) params.postedRoundIds = postedRoundIds;
 
   const normalizeSectorArr = `
     WITH c,
@@ -91,7 +107,7 @@ export async function computeSectorCatalog(
       OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
       WITH fr, COALESCE(fr.announcedDate, min(a.publishedAt)) AS effDate
       WITH fr, effDate
-      WHERE fr IS NOT NULL AND effDate IS NOT NULL AND effDate >= $sinceYmd
+      WHERE fr IS NOT NULL AND effDate IS NOT NULL AND effDate >= $sinceYmd ${postedFrFilter}
       RETURN count(fr) AS rrc, sum(COALESCE(fr.amountUsd, 0.0)) AS rra
     }
   `;

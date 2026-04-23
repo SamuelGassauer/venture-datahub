@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
+import { clearPostedRoundsCache } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export async function POST(
       where: { id },
       data: { publishedAt: new Date(), publishError: null },
     });
+
+    // Invalidate v1-API posted-rounds cache so new posts appear on next hit.
+    clearPostedRoundsCache();
 
     return NextResponse.json({
       success: true,

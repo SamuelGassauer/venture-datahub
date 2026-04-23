@@ -52,6 +52,9 @@ type ApiResponse = {
 
 async function fetchInvestors(params: Record<string, string> = {}): Promise<ApiResponse> {
   const url = new URL("/api/v1/investors", BASE);
+  // These shape tests need the full dataset; the posted-only default is
+  // covered in v1-posted-filter.test.ts.
+  if (!("posted" in params)) url.searchParams.set("posted", "all");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString());
   expect(res.status).toBe(200);

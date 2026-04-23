@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
+import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 1800;
@@ -34,11 +35,28 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("date_from");
   const dateTo = searchParams.get("date_to");
 
+  const postedMode = parsePostedMode(searchParams);
+  const postedIds = postedMode === "posted" ? await getPostedRoundIds() : null;
+
   // Effective date matches /v1/funding-rounds: COALESCE(fr.announcedDate, min(article.publishedAt))
   // Filters that only touch FundingRound / Company props go into the base WHERE.
   // Filters that depend on `effDate` go into a follow-up WITH ... WHERE block.
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
+
+  if (postedIds) {
+    if (postedIds.length === 0) {
+      return NextResponse.json({
+        roundCount: 0, totalCapitalUsd: 0,
+        medianRoundUsd: null, p25RoundUsd: null, p75RoundUsd: null,
+        amountSampleSize: 0, stageMix: [], geoMix: [],
+        earliestDate: null, latestDate: null,
+        computedAt: new Date().toISOString(),
+      }, { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=300" } });
+    }
+    conditions.push(`id(fr) IN $postedIds`);
+    params.postedIds = postedIds;
+  }
 
   if (stage) { conditions.push(`toLower(fr.stage) = toLower($stage)`); params.stage = stage; }
   if (sectorFocus) {

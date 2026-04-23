@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import driver from "@/lib/neo4j";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/api-auth";
+import { clearPostedRoundsCache } from "@/lib/posted-rounds";
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin();
@@ -37,6 +38,9 @@ export async function POST(request: NextRequest) {
     const deletedPosts = await prisma.post.deleteMany({
       where: { fundingRoundKey: { in: roundKeys } },
     });
+
+    // A rejected round may have been published previously — drop the v1 cache.
+    clearPostedRoundsCache();
 
     return NextResponse.json({
       success: true,

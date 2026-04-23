@@ -3,6 +3,7 @@ import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
+import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,15 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get("sort") || "activity";
   const sortDir = searchParams.get("dir") === "asc" ? "ASC" : "DESC";
 
+  const postedMode = parsePostedMode(searchParams);
+  const postedIds = postedMode === "posted" ? await getPostedRoundIds() : null;
+  if (postedIds && postedIds.length === 0) {
+    return NextResponse.json({
+      data: [],
+      pagination: { cursor: null, hasMore: false, totalCount: 0, totalCountApproximate: false },
+    });
+  }
+
   let skip = 0;
   if (cursorParam) {
     try {
@@ -72,6 +82,7 @@ export async function GET(request: NextRequest) {
 
   const matchConditions: string[] = [];
   const params: Record<string, unknown> = { skip: neo4jInt(skip), limit: neo4jInt(limit + 1) };
+  if (postedIds) params.postedIds = postedIds;
 
   if (updatedSince) { matchConditions.push(`inv.updatedAt >= datetime($updatedSince)`); params.updatedSince = updatedSince; }
   if (idSearch) { matchConditions.push(`inv.uuid = $idSearch`); params.idSearch = idSearch; }
@@ -91,10 +102,10 @@ export async function GET(request: NextRequest) {
 
   // Europe default: filter on the COMPANY's country (not investor HQ)
   // This ensures non-European investors who invest in Europe still appear
-  let dealCountryFilter = "";
-  if (!country) {
-    dealCountryFilter = `WHERE c.country IN ${EUROPE_CYPHER_LIST}`;
-  }
+  const dealFilters: string[] = [];
+  if (!country) dealFilters.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
+  if (postedIds) dealFilters.push(`id(fr) IN $postedIds`);
+  const dealCountryFilter = dealFilters.length ? `WHERE ${dealFilters.join(" AND ")}` : "";
 
   // Sector and role filters applied after aggregation (derived from investments)
   const havingConditions: string[] = [];
@@ -178,12 +189,19 @@ export async function GET(request: NextRequest) {
 
     if (investorUuids.length > 0) {
       const portfolioParams: Record<string, unknown> = { investorUuids };
-      const portfolioCountryFilter = !country
-        ? `AND c.country IN ${EUROPE_CYPHER_LIST}`
-        : country.toLowerCase() !== "all"
-          ? `AND c.country = $portfolioCountry`
-          : "";
-      if (country && country.toLowerCase() !== "all") portfolioParams.portfolioCountry = country;
+      const portfolioExtraFilters: string[] = [];
+      if (!country) portfolioExtraFilters.push(`c.country IN ${EUROPE_CYPHER_LIST}`);
+      else if (country.toLowerCase() !== "all") {
+        portfolioExtraFilters.push(`c.country = $portfolioCountry`);
+        portfolioParams.portfolioCountry = country;
+      }
+      if (postedIds) {
+        portfolioExtraFilters.push(`id(fr) IN $postedIds`);
+        portfolioParams.postedIds = postedIds;
+      }
+      const portfolioCountryFilter = portfolioExtraFilters.length
+        ? `AND ${portfolioExtraFilters.join(" AND ")}`
+        : "";
 
       const portfolioResult = await runRead(`
         MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr:FundingRound)<-[:RAISED]-(c:Company)

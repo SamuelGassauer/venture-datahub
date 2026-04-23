@@ -20,6 +20,7 @@ type Response = {
 
 async function fetchStats(): Promise<Response> {
   const url = new URL("/api/v1/stats/sectors", BASE);
+  url.searchParams.set("posted", "all");
   const res = await fetch(url.toString());
   expect(res.status).toBe(200);
   return res.json();
@@ -64,7 +65,9 @@ describe("/api/v1/stats/sectors", () => {
   });
 
   it("matches /api/v1/sectors/catalog on totals (shared compute)", async () => {
-    const catalogRes = await fetch(new URL("/api/v1/sectors/catalog", BASE).toString());
+    const url = new URL("/api/v1/sectors/catalog", BASE);
+    url.searchParams.set("posted", "all");
+    const catalogRes = await fetch(url.toString());
     expect(catalogRes.status).toBe(200);
     const catalog = await catalogRes.json();
     expect(catalog.totalStartups).toBe(root.totalStartups);

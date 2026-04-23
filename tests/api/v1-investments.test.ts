@@ -25,6 +25,7 @@ type ApiResponse = {
 
 async function fetchInvestments(params: Record<string, string> = {}): Promise<ApiResponse> {
   const url = new URL("/api/v1/investments", BASE);
+  if (!("posted" in params)) url.searchParams.set("posted", "all");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString());
   expect(res.status).toBe(200);
