@@ -30,6 +30,13 @@ export const EU_SOURCES: SitemapSource[] = [
   { name: "UKTN", sitemapUrl: "https://www.uktech.news/sitemap.xml", sitemapType: "yoast-index" },
   { name: "Tech.eu", sitemapUrl: "https://tech.eu/sitemap/index.xml", sitemapType: "custom-index" },
   { name: "Berlin Valley", sitemapUrl: "https://berlinvalley.com/sitemap.xml", sitemapType: "yoast-index" },
+  { name: "Brutkasten", sitemapUrl: "https://brutkasten.com/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "Sprout", sitemapUrl: "https://www.sprout.nl/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "Emerce", sitemapUrl: "https://www.emerce.nl/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "EconomyUp", sitemapUrl: "https://www.economyup.it/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "CzechCrunch", sitemapUrl: "https://cc.cz/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "Moneycab", sitemapUrl: "https://www.moneycab.com/sitemap_index.xml", sitemapType: "yoast-index" },
+  { name: "Link to Leaders", sitemapUrl: "https://linktoleaders.com/sitemap_index.xml", sitemapType: "yoast-index" },
 ];
 
 export type CrawlSourceResult = {

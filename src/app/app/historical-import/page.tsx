@@ -54,6 +54,13 @@ const EU_SOURCES = [
   "EU-Startups", "Silicon Canals", "Tech Funding News", "FINSIDER",
   "Deutsche Startups", "Trending Topics", "The Recursive", "Novobrief",
   "ArcticStartup", "UKTN", "Tech.eu", "Berlin Valley",
+  "Brutkasten", "Sprout", "Emerce", "EconomyUp",
+  "CzechCrunch", "Moneycab", "Link to Leaders",
+];
+
+const WAYBACK_SOURCES = [
+  "Sifted", "FinSMEs", "Berlin Valley", "Startupticker.ch",
+  "TechCrunch", "EU-Startups", "Tech.eu",
 ];
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -69,7 +76,13 @@ export default function HistoricalImportPage() {
   const [crawling, setCrawling] = useState(false);
   const [crawlResult, setCrawlResult] = useState<CrawlResponse | null>(null);
   const [minDate, setMinDate] = useState("2024-01-01");
+  const [crawlMode, setCrawlMode] = useState<"sitemap" | "wayback">("sitemap");
   const [selectedSources, setSelectedSources] = useState<string[]>(EU_SOURCES);
+  const [selectedWaybackSources, setSelectedWaybackSources] = useState<string[]>(WAYBACK_SOURCES);
+
+  const activeSourceList = crawlMode === "sitemap" ? EU_SOURCES : WAYBACK_SOURCES;
+  const activeSelected = crawlMode === "sitemap" ? selectedSources : selectedWaybackSources;
+  const setActiveSelected = crawlMode === "sitemap" ? setSelectedSources : setSelectedWaybackSources;
 
   // DB state
   const [urlsData, setUrlsData] = useState<UrlsResponse | null>(null);
@@ -113,10 +126,12 @@ export default function HistoricalImportPage() {
     setCrawling(true);
     setCrawlResult(null);
     try {
-      const res = await fetch("/api/historical-import/crawl", {
+      const endpoint =
+        crawlMode === "sitemap" ? "/api/historical-import/crawl" : "/api/historical-import/wayback";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ minDate, sources: selectedSources }),
+        body: JSON.stringify({ minDate, sources: activeSelected }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -134,14 +149,14 @@ export default function HistoricalImportPage() {
   }
 
   function toggleSource(name: string) {
-    setSelectedSources((prev) =>
+    setActiveSelected((prev) =>
       prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]
     );
   }
 
   function toggleAll() {
-    setSelectedSources((prev) =>
-      prev.length === EU_SOURCES.length ? [] : [...EU_SOURCES]
+    setActiveSelected((prev) =>
+      prev.length === activeSourceList.length ? [] : [...activeSourceList]
     );
   }
 
@@ -340,11 +355,15 @@ export default function HistoricalImportPage() {
           )}
           <button
             onClick={handleCrawl}
-            disabled={crawling || selectedSources.length === 0}
+            disabled={crawling || activeSelected.length === 0}
             className="apple-btn-blue px-4 py-1.5 text-[13px] font-semibold flex items-center gap-1.5"
           >
             {crawling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-            {crawling ? "Crawlt..." : "Sitemaps crawlen"}
+            {crawling
+              ? "Crawlt..."
+              : crawlMode === "sitemap"
+              ? "Sitemaps crawlen"
+              : "Wayback crawlen"}
           </button>
         </div>
       </div>
@@ -364,22 +383,49 @@ export default function HistoricalImportPage() {
                 className="glass-search-input px-3 py-1.5 text-[13px]"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
+                Modus
+              </label>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCrawlMode("sitemap")}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-colors ${
+                    crawlMode === "sitemap"
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      : "bg-foreground/[0.04] text-foreground/45"
+                  }`}
+                >
+                  Sitemap
+                </button>
+                <button
+                  onClick={() => setCrawlMode("wayback")}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-colors ${
+                    crawlMode === "wayback"
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      : "bg-foreground/[0.04] text-foreground/45"
+                  }`}
+                >
+                  Wayback
+                </button>
+              </div>
+            </div>
             <div className="space-y-1 flex-1">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">
-                  Quellen ({selectedSources.length}/{EU_SOURCES.length})
+                  Quellen ({activeSelected.length}/{activeSourceList.length})
                 </label>
                 <button onClick={toggleAll} className="text-[11px] text-foreground/45 hover:text-foreground/70">
-                  {selectedSources.length === EU_SOURCES.length ? "Keine" : "Alle"}
+                  {activeSelected.length === activeSourceList.length ? "Keine" : "Alle"}
                 </button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {EU_SOURCES.map((name) => (
+                {activeSourceList.map((name) => (
                   <button
                     key={name}
                     onClick={() => toggleSource(name)}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
-                      selectedSources.includes(name)
+                      activeSelected.includes(name)
                         ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
                         : "bg-foreground/[0.04] text-foreground/40"
                     }`}
