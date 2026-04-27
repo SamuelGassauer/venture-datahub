@@ -48,6 +48,9 @@
       <outline type="rss" text="Berlin Valley" title="Berlin Valley" xmlUrl="https://berlinvalley.com/feed/" htmlUrl="https://berlinvalley.com"/>
       <outline type="rss" text="FINSIDER" title="FINSIDER" xmlUrl="https://finsider.de/feed/" htmlUrl="https://finsider.de"/>
       <outline type="rss" text="Startup Valley" title="Startup Valley" xmlUrl="https://www.startupvalley.news/de/feed/" htmlUrl="https://www.startupvalley.news"/>
+      <outline type="rss" text="Brutkasten" title="Brutkasten" xmlUrl="https://brutkasten.com/feed" htmlUrl="https://brutkasten.com"/>
+      <outline type="rss" text="Moneycab" title="Moneycab" xmlUrl="https://www.moneycab.com/feed/" htmlUrl="https://www.moneycab.com"/>
+      <outline type="rss" text="Startbase" title="Startbase" xmlUrl="https://www.startbase.com/feed" htmlUrl="https://www.startbase.com"/>
     </outline>
 
     <!-- ================================================================== -->
@@ -59,6 +62,9 @@
       <outline type="rss" text="BusinessCloud" title="BusinessCloud" xmlUrl="https://www.businesscloud.co.uk/feed/" htmlUrl="https://www.businesscloud.co.uk"/>
       <outline type="rss" text="Silicon Republic" title="Silicon Republic" xmlUrl="https://www.siliconrepublic.com/feed" htmlUrl="https://www.siliconrepublic.com"/>
       <outline type="rss" text="TechSPARK" title="TechSPARK" xmlUrl="https://techspark.co/feed/" htmlUrl="https://techspark.co"/>
+      <outline type="rss" text="Maddyness UK" title="Maddyness UK" xmlUrl="https://www.maddyness.com/uk/feed/" htmlUrl="https://www.maddyness.com/uk"/>
+      <outline type="rss" text="InvestmentMonitor" title="InvestmentMonitor" xmlUrl="https://www.investmentmonitor.ai/feed/" htmlUrl="https://www.investmentmonitor.ai"/>
+      <outline type="rss" text="Balderton Blog" title="Balderton Blog" xmlUrl="https://www.balderton.com/feed" htmlUrl="https://www.balderton.com"/>
     </outline>
 
     <!-- ================================================================== -->
@@ -71,6 +77,16 @@
     </outline>
 
     <!-- ================================================================== -->
+    <!-- EUROPE — Benelux                                                   -->
+    <!-- ================================================================== -->
+    <outline text="Benelux" title="Benelux">
+      <outline type="rss" text="Sprout" title="Sprout" xmlUrl="https://www.sprout.nl/feed" htmlUrl="https://www.sprout.nl"/>
+      <outline type="rss" text="Emerce" title="Emerce" xmlUrl="https://www.emerce.nl/rss" htmlUrl="https://www.emerce.nl"/>
+      <outline type="rss" text="Bright" title="Bright" xmlUrl="https://www.bright.nl/rss" htmlUrl="https://www.bright.nl"/>
+      <outline type="rss" text="The Next Web - Funding" title="The Next Web - Funding" xmlUrl="https://thenextweb.com/feed/funding" htmlUrl="https://thenextweb.com"/>
+    </outline>
+
+    <!-- ================================================================== -->
     <!-- EUROPE — Nordics                                                   -->
     <!-- ================================================================== -->
     <outline text="Nordics" title="Nordics">
@@ -78,6 +94,9 @@
       <outline type="rss" text="The Nordic Web" title="The Nordic Web" xmlUrl="https://thenordicweb.com/feed/" htmlUrl="https://thenordicweb.com"/>
       <outline type="rss" text="Nordic Startup News" title="Nordic Startup News" xmlUrl="https://nordicstartupnews.com/feed/" htmlUrl="https://nordicstartupnews.com"/>
       <outline type="rss" text="HealthTech Nordic" title="HealthTech Nordic" xmlUrl="https://healthtechnordic.com/feed/" htmlUrl="https://healthtechnordic.com"/>
+      <outline type="rss" text="Di Digital" title="Di Digital" xmlUrl="https://digital.di.se/rss" htmlUrl="https://digital.di.se"/>
+      <outline type="rss" text="E24" title="E24" xmlUrl="https://e24.no/rss" htmlUrl="https://e24.no"/>
+      <outline type="rss" text="TechSavvy" title="TechSavvy" xmlUrl="https://techsavvy.media/feed/" htmlUrl="https://techsavvy.media"/>
     </outline>
 
     <!-- ================================================================== -->
@@ -86,6 +105,9 @@
     <outline text="Southern Europe" title="Southern Europe">
       <outline type="rss" text="Novobrief" title="Novobrief" xmlUrl="https://novobrief.com/feed/" htmlUrl="https://novobrief.com"/>
       <outline type="rss" text="StartupItalia" title="StartupItalia" xmlUrl="https://startupitalia.eu/feed/" htmlUrl="https://startupitalia.eu"/>
+      <outline type="rss" text="EconomyUp" title="EconomyUp" xmlUrl="https://www.economyup.it/feed/" htmlUrl="https://www.economyup.it"/>
+      <outline type="rss" text="El Referente" title="El Referente" xmlUrl="https://www.elreferente.es/feed/" htmlUrl="https://www.elreferente.es"/>
+      <outline type="rss" text="Link to Leaders" title="Link to Leaders" xmlUrl="https://linktoleaders.com/feed/" htmlUrl="https://linktoleaders.com"/>
     </outline>
 
     <!-- ================================================================== -->
@@ -94,6 +116,15 @@
     <outline text="CEE &amp; Baltics" title="CEE &amp; Baltics">
       <outline type="rss" text="The Recursive" title="The Recursive" xmlUrl="https://therecursive.com/feed/" htmlUrl="https://therecursive.com"/>
       <outline type="rss" text="Emerging Europe" title="Emerging Europe" xmlUrl="https://emerging-europe.com/feed/" htmlUrl="https://emerging-europe.com"/>
+      <outline type="rss" text="MamStartup" title="MamStartup" xmlUrl="https://mamstartup.pl/feed/" htmlUrl="https://mamstartup.pl"/>
+      <outline type="rss" text="CzechCrunch" title="CzechCrunch" xmlUrl="https://cc.cz/feed/" htmlUrl="https://cc.cz"/>
+    </outline>
+
+    <!-- ================================================================== -->
+    <!-- EUROPE — Türkiye                                                   -->
+    <!-- ================================================================== -->
+    <outline text="T&#252;rkiye" title="T&#252;rkiye">
+      <outline type="rss" text="Webrazzi" title="Webrazzi" xmlUrl="https://webrazzi.com/feed/" htmlUrl="https://webrazzi.com"/>
     </outline>
 
     <!-- ================================================================== -->

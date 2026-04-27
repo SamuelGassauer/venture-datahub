@@ -25,19 +25,44 @@
       <outline type="rss" text="Trending Topics" title="Trending Topics" xmlUrl="https://www.trendingtopics.eu/feed/" htmlUrl="https://www.trendingtopics.eu"/>
       <outline type="rss" text="Startupticker.ch" title="Startupticker.ch" xmlUrl="https://www.startupticker.ch/index/rss.xml" htmlUrl="https://www.startupticker.ch"/>
       <outline type="rss" text="Berlin Valley" title="Berlin Valley" xmlUrl="https://berlinvalley.com/feed/" htmlUrl="https://berlinvalley.com"/>
+      <outline type="rss" text="Brutkasten" title="Brutkasten" xmlUrl="https://brutkasten.com/feed" htmlUrl="https://brutkasten.com"/>
+      <outline type="rss" text="Moneycab" title="Moneycab" xmlUrl="https://www.moneycab.com/feed/" htmlUrl="https://www.moneycab.com"/>
+      <outline type="rss" text="Startbase" title="Startbase" xmlUrl="https://www.startbase.com/feed" htmlUrl="https://www.startbase.com"/>
 
       <!-- France -->
       <outline type="rss" text="Maddyness" title="Maddyness" xmlUrl="https://www.maddyness.com/feed/" htmlUrl="https://www.maddyness.com"/>
       <outline type="rss" text="La French Tech Journal" title="La French Tech Journal" xmlUrl="https://lafrenchtech.com/en/feed/" htmlUrl="https://lafrenchtech.com"/>
 
+      <!-- Benelux -->
+      <outline type="rss" text="Sprout" title="Sprout" xmlUrl="https://www.sprout.nl/feed" htmlUrl="https://www.sprout.nl"/>
+      <outline type="rss" text="Emerce" title="Emerce" xmlUrl="https://www.emerce.nl/rss" htmlUrl="https://www.emerce.nl"/>
+      <outline type="rss" text="Bright" title="Bright" xmlUrl="https://www.bright.nl/rss" htmlUrl="https://www.bright.nl"/>
+      <outline type="rss" text="The Next Web - Funding" title="The Next Web - Funding" xmlUrl="https://thenextweb.com/feed/funding" htmlUrl="https://thenextweb.com"/>
+
       <!-- Nordics -->
       <outline type="rss" text="The Nordic Web" title="The Nordic Web" xmlUrl="https://thenordicweb.com/feed/" htmlUrl="https://thenordicweb.com"/>
+      <outline type="rss" text="Di Digital" title="Di Digital" xmlUrl="https://digital.di.se/rss" htmlUrl="https://digital.di.se"/>
+      <outline type="rss" text="E24" title="E24" xmlUrl="https://e24.no/rss" htmlUrl="https://e24.no"/>
+      <outline type="rss" text="TechSavvy" title="TechSavvy" xmlUrl="https://techsavvy.media/feed/" htmlUrl="https://techsavvy.media"/>
 
-      <!-- Spain / Southern Europe -->
+      <!-- Southern Europe -->
       <outline type="rss" text="Novobrief" title="Novobrief" xmlUrl="https://novobrief.com/feed/" htmlUrl="https://novobrief.com"/>
+      <outline type="rss" text="EconomyUp" title="EconomyUp" xmlUrl="https://www.economyup.it/feed/" htmlUrl="https://www.economyup.it"/>
+      <outline type="rss" text="El Referente" title="El Referente" xmlUrl="https://www.elreferente.es/feed/" htmlUrl="https://www.elreferente.es"/>
+      <outline type="rss" text="Link to Leaders" title="Link to Leaders" xmlUrl="https://linktoleaders.com/feed/" htmlUrl="https://linktoleaders.com"/>
 
       <!-- CEE -->
       <outline type="rss" text="The Recursive" title="The Recursive" xmlUrl="https://therecursive.com/feed/" htmlUrl="https://therecursive.com"/>
+      <outline type="rss" text="MamStartup" title="MamStartup" xmlUrl="https://mamstartup.pl/feed/" htmlUrl="https://mamstartup.pl"/>
+      <outline type="rss" text="CzechCrunch" title="CzechCrunch" xmlUrl="https://cc.cz/feed/" htmlUrl="https://cc.cz"/>
+
+      <!-- T&#252;rkiye -->
+      <outline type="rss" text="Webrazzi" title="Webrazzi" xmlUrl="https://webrazzi.com/feed/" htmlUrl="https://webrazzi.com"/>
+
+      <!-- UK extras -->
+      <outline type="rss" text="Maddyness UK" title="Maddyness UK" xmlUrl="https://www.maddyness.com/uk/feed/" htmlUrl="https://www.maddyness.com/uk"/>
+      <outline type="rss" text="InvestmentMonitor" title="InvestmentMonitor" xmlUrl="https://www.investmentmonitor.ai/feed/" htmlUrl="https://www.investmentmonitor.ai"/>
+      <outline type="rss" text="Balderton Blog" title="Balderton Blog" xmlUrl="https://www.balderton.com/feed" htmlUrl="https://www.balderton.com"/>
 
       <!-- Global VC / Deals -->
       <outline type="rss" text="Crunchbase News" title="Crunchbase News" xmlUrl="https://news.crunchbase.com/feed/" htmlUrl="https://news.crunchbase.com"/>
