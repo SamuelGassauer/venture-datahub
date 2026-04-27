@@ -87,7 +87,17 @@ export async function detectCompanyDuplicates(): Promise<{ pairs: DedupPair[]; s
     }
   }
 
-  // Tier 1: domain match
+  // Tier 1 sanity threshold: require some minimal name similarity to guard
+  // against aggregator URLs that slipped past the blocklist.
+  const TIER1_NAME_FLOOR = 0.3;
+
+  function nameSimilarity(a: CompanyNode, b: CompanyNode): number {
+    const lev = levenshteinSimilarity(a.normalizedName, b.normalizedName);
+    const jacc = tokenJaccard(tokenize(a.name), tokenize(b.name));
+    return Math.max(lev, jacc);
+  }
+
+  // Tier 1: domain match (with name-similarity sanity check)
   const byDomain = new Map<string, CompanyNode[]>();
   for (const c of companies) {
     const dom = normalizeDomain(c.website);
@@ -98,14 +108,21 @@ export async function detectCompanyDuplicates(): Promise<{ pairs: DedupPair[]; s
   }
   for (const [domain, list] of byDomain) {
     if (list.length < 2) continue;
+    if (list.length > 20) continue; // suspicious — likely an aggregator we missed
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
-        emit(list[i], list[j], 1, 1.0, { match: "domain", domain });
+        const sim = nameSimilarity(list[i], list[j]);
+        if (sim < TIER1_NAME_FLOOR) continue;
+        emit(list[i], list[j], 1, 1.0, {
+          match: "domain",
+          domain,
+          nameSimilarity: Number(sim.toFixed(3)),
+        });
       }
     }
   }
 
-  // Tier 1: linkedin match
+  // Tier 1: linkedin match (with name-similarity sanity check)
   const byLinkedin = new Map<string, CompanyNode[]>();
   for (const c of companies) {
     const li = normalizeLinkedin(c.linkedinUrl);
@@ -116,9 +133,16 @@ export async function detectCompanyDuplicates(): Promise<{ pairs: DedupPair[]; s
   }
   for (const [slug, list] of byLinkedin) {
     if (list.length < 2) continue;
+    if (list.length > 20) continue;
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
-        emit(list[i], list[j], 1, 1.0, { match: "linkedin", slug });
+        const sim = nameSimilarity(list[i], list[j]);
+        if (sim < TIER1_NAME_FLOOR) continue;
+        emit(list[i], list[j], 1, 1.0, {
+          match: "linkedin",
+          slug,
+          nameSimilarity: Number(sim.toFixed(3)),
+        });
       }
     }
   }

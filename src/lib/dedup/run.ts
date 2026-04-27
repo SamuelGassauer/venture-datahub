@@ -68,8 +68,6 @@ export async function runDedup(triggeredBy = "cron"): Promise<DedupRunSummary> {
 
     const allPairs = [...companies.pairs, ...investors.pairs, ...rounds.pairs];
 
-    // Filter out candidates that are already decided (rejected/confirmed/skipped)
-    // by skipping upsert.update for non-pending rows.
     const decided = await prisma.dedupCandidate.findMany({
       where: { status: { not: "pending" } },
       select: { entityType: true, leftKey: true, rightKey: true },
@@ -78,6 +76,27 @@ export async function runDedup(triggeredBy = "cron"): Promise<DedupRunSummary> {
     const filtered = allPairs.filter(
       (p) => !decidedSet.has(`${p.entityType}::${p.leftKey}::${p.rightKey}`),
     );
+
+    // Delete pending candidates that this scan no longer detects (e.g. after
+    // threshold or blocklist changes). Decided rows stay as historical record.
+    const detectedSet = new Set(
+      filtered.map((p) => `${p.entityType}::${p.leftKey}::${p.rightKey}`),
+    );
+    const scannedTypes = new Set(allPairs.map((p) => p.entityType));
+    if (scannedTypes.size > 0) {
+      const existingPending = await prisma.dedupCandidate.findMany({
+        where: { status: "pending", entityType: { in: Array.from(scannedTypes) as ("company" | "investor" | "round")[] } },
+        select: { id: true, entityType: true, leftKey: true, rightKey: true },
+      });
+      const stale = existingPending.filter(
+        (e) => !detectedSet.has(`${e.entityType}::${e.leftKey}::${e.rightKey}`),
+      );
+      if (stale.length > 0) {
+        await prisma.dedupCandidate.deleteMany({
+          where: { id: { in: stale.map((s) => s.id) } },
+        });
+      }
+    }
 
     const { created, updated } = await upsertCandidates(filtered);
 

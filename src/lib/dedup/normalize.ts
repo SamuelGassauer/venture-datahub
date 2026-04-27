@@ -2,6 +2,45 @@ import { normalizeCompany, normalizeInvestor } from "../graph-sync";
 
 export { normalizeCompany, normalizeInvestor };
 
+// Aggregator/research platforms that store many companies under the same root
+// domain — matching on these creates false positives.
+const AGGREGATOR_DOMAINS = new Set([
+  "cbinsights.com",
+  "crunchbase.com",
+  "pitchbook.com",
+  "dealroom.co",
+  "tracxn.com",
+  "owler.com",
+  "linkedin.com",
+  "twitter.com",
+  "x.com",
+  "facebook.com",
+  "instagram.com",
+  "youtube.com",
+  "wikipedia.org",
+  "bloomberg.com",
+  "techcrunch.com",
+  "sifted.eu",
+  "eu-startups.com",
+  "github.com",
+  "medium.com",
+  "notion.site",
+  "gitlab.com",
+]);
+
+// LinkedIn slugs that are aggregators or unrelated entities, not the company
+// being described.
+const AGGREGATOR_LINKEDIN_SLUGS = new Set([
+  "cb-insights",
+  "crunchbase",
+  "pitchbook-data",
+  "dealroom-co",
+  "tracxn",
+  "techcrunch",
+  "sifted-eu",
+  "eu-startups",
+]);
+
 export function normalizeDomain(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim().toLowerCase();
@@ -13,15 +52,19 @@ export function normalizeDomain(url: string | null | undefined): string | null {
     .split("?")[0]
     .split("#")[0]
     .trim();
-  return stripped || null;
+  if (!stripped) return null;
+  if (AGGREGATOR_DOMAINS.has(stripped)) return null;
+  return stripped;
 }
 
 export function normalizeLinkedin(url: string | null | undefined): string | null {
   if (!url) return null;
   const u = url.trim().toLowerCase();
   const m = u.match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/);
-  if (m) return m[1];
-  return null;
+  if (!m) return null;
+  const slug = m[1];
+  if (AGGREGATOR_LINKEDIN_SLUGS.has(slug)) return null;
+  return slug;
 }
 
 export function tokenize(name: string): string[] {
