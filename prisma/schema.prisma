@@ -26,6 +26,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   apiKeys       ApiKey[]
+  dedupDecisions DedupCandidate[] @relation("DedupDecidedBy")
 
   @@map("users")
 }
@@ -305,4 +306,59 @@ model Post {
   @@index([companyName])
   @@index([createdAt(sort: Desc)])
   @@map("posts")
+}
+
+enum DedupEntityType {
+  company
+  investor
+  round
+}
+
+enum DedupStatus {
+  pending
+  confirmed
+  rejected
+  skipped
+}
+
+model DedupCandidate {
+  id          String          @id @default(cuid())
+  entityType  DedupEntityType @map("entity_type")
+  leftKey     String          @map("left_key")
+  rightKey    String          @map("right_key")
+  tier        Int
+  score       Float
+  reasons     Json
+  leftSnapshot  Json?         @map("left_snapshot")
+  rightSnapshot Json?         @map("right_snapshot")
+  status      DedupStatus     @default(pending)
+  decidedById String?         @map("decided_by_id")
+  decidedBy   User?           @relation("DedupDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?       @map("decided_at")
+  note        String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@unique([entityType, leftKey, rightKey])
+  @@index([entityType, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("dedup_candidates")
+}
+
+model DedupRun {
+  id              String   @id @default(cuid())
+  startedAt       DateTime @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  status          String   @default("running")
+  companiesScanned Int     @default(0) @map("companies_scanned")
+  investorsScanned Int     @default(0) @map("investors_scanned")
+  roundsScanned    Int     @default(0) @map("rounds_scanned")
+  candidatesNew    Int     @default(0) @map("candidates_new")
+  candidatesUpdated Int    @default(0) @map("candidates_updated")
+  durationMs       Int     @default(0) @map("duration_ms")
+  errorMessage     String? @map("error_message")
+  triggeredBy      String  @default("cron") @map("triggered_by")
+
+  @@index([startedAt(sort: Desc)])
+  @@map("dedup_runs")
 }

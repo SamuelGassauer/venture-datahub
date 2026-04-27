@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "worker": "tsx src/worker/index.ts"
+    "worker": "tsx src/worker/index.ts",
+    "dedup:run": "tsx scripts/run-dedup.ts"
   },
   "engines": {
     "node": ">=20.x <=22.x"

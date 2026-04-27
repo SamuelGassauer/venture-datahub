@@ -33,6 +33,7 @@ import {
   FlaskConical,
   Database,
   Linkedin,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ const navGroups: NavGroup[] = [
       { href: "/app/admin/users", label: "Users", icon: UserCog },
       { href: "/app/admin/api-keys", label: "API Keys", icon: KeyRound },
       { href: "/app/admin/api-tests", label: "API Tests", icon: FlaskConical },
+      { href: "/app/admin/dedup", label: "Dedup Review", icon: Copy },
     ],
   },
 ];
