@@ -14,6 +14,9 @@ import {
   Sparkles,
   History,
   RotateCcw,
+  Crown,
+  Undo2,
+  Info,
 } from "lucide-react";
 
 type EntityType = "company" | "investor" | "round";
@@ -30,6 +33,8 @@ type Candidate = {
   leftSnapshot: Record<string, unknown> | null;
   rightSnapshot: Record<string, unknown> | null;
   status: Status;
+  winnerKey: string | null;
+  mergeSnapshot: Record<string, unknown> | null;
   decidedAt: string | null;
   decidedBy: { name: string | null; email: string } | null;
   note: string | null;
@@ -100,24 +105,57 @@ export default function DedupReviewPage() {
     fetchCandidates();
   }, [activeTab, statusFilter]);
 
-  async function handleDecide(id: string, action: "confirm" | "reject" | "skip" | "reopen") {
+  async function handleDecide(
+    id: string,
+    action: "confirm" | "reject" | "skip" | "reopen",
+    winnerKey?: string,
+  ) {
+    const labelMap = {
+      confirm: "Merge läuft...",
+      reject: "Verwerfen...",
+      skip: "Überspringen...",
+      reopen: "Wieder öffnen...",
+    };
+    const t = action === "confirm" ? toast.loading(labelMap.confirm) : null;
+
     const res = await fetch(`/api/admin/dedup/candidates/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, winnerKey }),
     });
     if (res.ok) {
-      const labelMap = {
-        confirm: "Bestätigt",
+      const data = await res.json();
+      const successMap = {
+        confirm: data.merged ? "Gemerged" : "Bestätigt",
         reject: "Verworfen",
         skip: "Übersprungen",
         reopen: "Wieder geöffnet",
       };
-      toast.success(labelMap[action]);
+      if (t) toast.success(successMap[action], { id: t });
+      else toast.success(successMap[action]);
       fetchCandidates();
     } else {
       const err = await res.json();
-      toast.error(err.error || "Fehler");
+      const msg = err.error || "Fehler";
+      if (t) toast.error(msg, { id: t });
+      else toast.error(msg);
+    }
+  }
+
+  async function handleUnmerge(id: string) {
+    if (!confirm("Merge wirklich rückgängig machen? Loser-Datensatz wird wiederhergestellt, alle Postgres- und Neo4j-Änderungen aus diesem Merge werden zurückgespielt.")) {
+      return;
+    }
+    const t = toast.loading("Unmerge läuft...");
+    const res = await fetch(`/api/admin/dedup/candidates/${id}/unmerge`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      toast.success("Merge rückgängig gemacht", { id: t });
+      fetchCandidates();
+    } else {
+      const err = await res.json();
+      toast.error(err.error || "Unmerge fehlgeschlagen", { id: t });
     }
   }
 
@@ -302,7 +340,8 @@ export default function DedupReviewPage() {
             <CandidateCard
               key={c.id}
               candidate={c}
-              onDecide={(action) => handleDecide(c.id, action)}
+              onDecide={(action, winnerKey) => handleDecide(c.id, action, winnerKey)}
+              onUnmerge={() => handleUnmerge(c.id)}
             />
           ))
         )}
@@ -328,9 +367,14 @@ function StatusBadge({ status }: { status: string }) {
 function CandidateCard({
   candidate,
   onDecide,
+  onUnmerge,
 }: {
   candidate: Candidate;
-  onDecide: (action: "confirm" | "reject" | "skip" | "reopen") => void;
+  onDecide: (
+    action: "confirm" | "reject" | "skip" | "reopen",
+    winnerKey?: string,
+  ) => void;
+  onUnmerge: () => void;
 }) {
   const tierLabel = candidate.tier === 1 ? "Hard-Match" : candidate.tier === 2 ? "Fuzzy-Match" : "Embedding";
   const tierColor =
@@ -341,6 +385,10 @@ function CandidateCard({
         : "bg-violet-500/8 text-violet-600 dark:text-violet-400";
 
   const isDecided = candidate.status !== "pending";
+  const isRound = candidate.entityType === "round";
+  const winnerIsLeft = !!candidate.winnerKey && candidate.winnerKey === candidate.leftKey;
+  const winnerIsRight = !!candidate.winnerKey && candidate.winnerKey === candidate.rightKey;
+  const canUnmerge = candidate.status === "confirmed" && !!candidate.mergeSnapshot;
 
   return (
     <div className="lg-inset rounded-[16px] p-4 space-y-3">
@@ -354,7 +402,7 @@ function CandidateCard({
           </span>
           {isDecided && (
             <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/55">
-              {candidate.status === "confirmed" ? "Bestätigt" : candidate.status === "rejected" ? "Verworfen" : "Übersprungen"}
+              {candidate.status === "confirmed" ? (canUnmerge ? "Gemerged" : "Bestätigt") : candidate.status === "rejected" ? "Verworfen" : "Übersprungen"}
               {candidate.decidedBy ? ` · ${candidate.decidedBy.name || candidate.decidedBy.email}` : ""}
               {candidate.decidedAt ? ` · ${new Date(candidate.decidedAt).toLocaleDateString("de-DE")}` : ""}
             </span>
@@ -363,13 +411,15 @@ function CandidateCard({
         <div className="flex items-center gap-1">
           {!isDecided ? (
             <>
-              <button
-                onClick={() => onDecide("confirm")}
-                className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-emerald-600 hover:bg-emerald-500/10"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Dublette
-              </button>
+              {isRound && (
+                <button
+                  onClick={() => onDecide("confirm")}
+                  className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-emerald-600 hover:bg-emerald-500/10"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Dublette
+                </button>
+              )}
               <button
                 onClick={() => onDecide("reject")}
                 className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-red-500 hover:bg-red-500/10"
@@ -386,20 +436,54 @@ function CandidateCard({
               </button>
             </>
           ) : (
-            <button
-              onClick={() => onDecide("reopen")}
-              className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-foreground/45"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Wieder öffnen
-            </button>
+            <>
+              {canUnmerge && (
+                <button
+                  onClick={onUnmerge}
+                  className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-amber-600 hover:bg-amber-500/10"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  Merge rückgängig
+                </button>
+              )}
+              <button
+                onClick={() => onDecide("reopen")}
+                className="glass-capsule-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-foreground/45"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Wieder öffnen
+              </button>
+            </>
           )}
         </div>
       </div>
 
+      {isRound && !isDecided && (
+        <div className="flex items-start gap-2 rounded-[10px] bg-blue-500/[0.06] p-2.5">
+          <Info className="h-3.5 w-3.5 text-blue-600 mt-0.5 shrink-0" />
+          <p className="text-[11px] leading-relaxed text-foreground/70">
+            Round-Dubletten können nicht direkt gemerged werden. Sie lösen sich automatisch auf, sobald die zugehörigen <strong>Companies</strong> gemerged sind (gleicher Company-Name → gleicher Round-Key).
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
-        <SnapshotPanel snapshot={candidate.leftSnapshot} entityType={candidate.entityType} />
-        <SnapshotPanel snapshot={candidate.rightSnapshot} entityType={candidate.entityType} />
+        <SnapshotPanel
+          snapshot={candidate.leftSnapshot}
+          entityType={candidate.entityType}
+          isWinner={winnerIsLeft}
+          isLoser={isDecided && winnerIsRight}
+          showKeepButton={!isDecided && !isRound}
+          onKeep={() => onDecide("confirm", candidate.leftKey)}
+        />
+        <SnapshotPanel
+          snapshot={candidate.rightSnapshot}
+          entityType={candidate.entityType}
+          isWinner={winnerIsRight}
+          isLoser={isDecided && winnerIsLeft}
+          showKeepButton={!isDecided && !isRound}
+          onKeep={() => onDecide("confirm", candidate.rightKey)}
+        />
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -419,9 +503,17 @@ function CandidateCard({
 function SnapshotPanel({
   snapshot,
   entityType,
+  isWinner,
+  isLoser,
+  showKeepButton,
+  onKeep,
 }: {
   snapshot: Record<string, unknown> | null;
   entityType: EntityType;
+  isWinner?: boolean;
+  isLoser?: boolean;
+  showKeepButton?: boolean;
+  onKeep?: () => void;
 }) {
   if (!snapshot) {
     return (
@@ -460,11 +552,40 @@ function SnapshotPanel({
     return String(v);
   }
 
+  const containerClass = isWinner
+    ? "ring-1 ring-emerald-500/40 bg-emerald-500/[0.05]"
+    : isLoser
+      ? "bg-foreground/[0.02] opacity-60"
+      : "bg-foreground/[0.02]";
+
   return (
-    <div className="rounded-[10px] bg-foreground/[0.02] p-3 space-y-1.5">
-      <p className="font-mono text-[10px] text-foreground/30 truncate">
-        {String(snapshot.uuid ?? "")}
-      </p>
+    <div className={`rounded-[10px] p-3 space-y-1.5 ${containerClass}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-mono text-[10px] text-foreground/30 truncate flex-1">
+          {String(snapshot.uuid ?? "")}
+        </p>
+        {isWinner && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400 shrink-0">
+            <Crown className="h-3 w-3" />
+            Master
+          </span>
+        )}
+        {isLoser && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/55 shrink-0">
+            absorbiert
+          </span>
+        )}
+        {showKeepButton && onKeep && (
+          <button
+            onClick={onKeep}
+            className="glass-capsule-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/10 shrink-0"
+            title="Diesen Datensatz behalten, anderen mergen"
+          >
+            <Crown className="h-3 w-3" />
+            Diese behalten
+          </button>
+        )}
+      </div>
       {fields.map((f) => (
         <div key={f.key} className="flex items-baseline gap-2">
           <span className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 w-20 shrink-0">

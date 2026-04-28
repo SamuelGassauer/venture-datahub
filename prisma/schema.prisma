@@ -332,6 +332,8 @@ model DedupCandidate {
   leftSnapshot  Json?         @map("left_snapshot")
   rightSnapshot Json?         @map("right_snapshot")
   status      DedupStatus     @default(pending)
+  winnerKey     String?       @map("winner_key")
+  mergeSnapshot Json?         @map("merge_snapshot")
   decidedById String?         @map("decided_by_id")
   decidedBy   User?           @relation("DedupDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
   decidedAt   DateTime?       @map("decided_at")
