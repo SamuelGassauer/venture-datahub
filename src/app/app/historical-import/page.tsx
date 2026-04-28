@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download, Loader2, Search, ExternalLink, CheckCircle, XCircle, RefreshCw, Database, Scan, ArrowUpToLine } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,6 +51,11 @@ type UrlsResponse = {
   sourceCounts: Record<string, number>;
 };
 
+type IdsOnlyResponse = {
+  ids: { id: string; status: string }[];
+  total: number;
+};
+
 const EU_SOURCES = [
   "EU-Startups", "Silicon Canals", "Tech Funding News", "FINSIDER",
   "Deutsche Startups", "Trending Topics", "The Recursive", "Novobrief",
@@ -72,51 +78,155 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   error: { label: "Fehler", color: "bg-red-500/8 text-red-500" },
 };
 
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
+const DEFAULT_PAGE_SIZE = 200;
+
+const LS_KEYS = {
+  minDate: "hi:minDate",
+  crawlMode: "hi:crawlMode",
+  sitemapSources: "hi:sitemapSources",
+  waybackSources: "hi:waybackSources",
+} as const;
+
+function readLS<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLS<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* quota or disabled — ignore */
+  }
+}
+
 export default function HistoricalImportPage() {
-  const [crawling, setCrawling] = useState(false);
-  const [crawlResult, setCrawlResult] = useState<CrawlResponse | null>(null);
-  const [minDate, setMinDate] = useState("2024-01-01");
+  const router = useRouter();
+  const pathname = usePathname();
+  const rawSearchParams = useSearchParams();
+  const searchParams = useMemo(
+    () => rawSearchParams ?? new URLSearchParams(),
+    [rawSearchParams]
+  );
+
+  // ---- URL-derived filter state ----
+  const filterStatus = searchParams.get("status") || "";
+  const filterSource = searchParams.get("source") || "";
+  const filterSearch = searchParams.get("q") || "";
+  const filterMinDate = searchParams.get("from") || "";
+  const filterMaxDate = searchParams.get("to") || "";
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1") || 1);
+  const limit = (() => {
+    const parsed = parseInt(searchParams.get("limit") || "");
+    if (PAGE_SIZE_OPTIONS.includes(parsed)) return parsed;
+    return DEFAULT_PAGE_SIZE;
+  })();
+
+  const setQuery = useCallback(
+    (updates: Record<string, string | null | undefined>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const FILTER_KEYS = ["status", "source", "q", "from", "to", "limit"];
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === null || v === undefined || v === "") params.delete(k);
+        else params.set(k, v);
+      }
+      const changedFilter = Object.keys(updates).some((k) => FILTER_KEYS.includes(k));
+      if (changedFilter && !("page" in updates)) {
+        params.delete("page");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  // ---- Search input (debounced into URL) ----
+  const [searchInput, setSearchInput] = useState(filterSearch);
+  const debounceTouched = useRef(false);
+  useEffect(() => {
+    if (!debounceTouched.current) return;
+    const t = setTimeout(() => setQuery({ q: searchInput || null }), 300);
+    return () => clearTimeout(t);
+  }, [searchInput, setQuery]);
+  // If URL search is cleared externally, reflect it in the input
+  useEffect(() => {
+    if (!debounceTouched.current && filterSearch !== searchInput) {
+      setSearchInput(filterSearch);
+    }
+  }, [filterSearch, searchInput]);
+
+  // ---- Crawl config (localStorage-persisted) ----
+  const [minDate, setMinDate] = useState<string>("2024-01-01");
   const [crawlMode, setCrawlMode] = useState<"sitemap" | "wayback">("sitemap");
   const [selectedSources, setSelectedSources] = useState<string[]>(EU_SOURCES);
   const [selectedWaybackSources, setSelectedWaybackSources] = useState<string[]>(WAYBACK_SOURCES);
+
+  // Hydrate from localStorage once on mount
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    setMinDate(readLS(LS_KEYS.minDate, "2024-01-01"));
+    const mode = readLS<"sitemap" | "wayback">(LS_KEYS.crawlMode, "sitemap");
+    setCrawlMode(mode === "wayback" ? "wayback" : "sitemap");
+    setSelectedSources(readLS<string[]>(LS_KEYS.sitemapSources, EU_SOURCES));
+    setSelectedWaybackSources(readLS<string[]>(LS_KEYS.waybackSources, WAYBACK_SOURCES));
+  }, []);
+
+  useEffect(() => { if (hydrated.current) writeLS(LS_KEYS.minDate, minDate); }, [minDate]);
+  useEffect(() => { if (hydrated.current) writeLS(LS_KEYS.crawlMode, crawlMode); }, [crawlMode]);
+  useEffect(() => { if (hydrated.current) writeLS(LS_KEYS.sitemapSources, selectedSources); }, [selectedSources]);
+  useEffect(() => { if (hydrated.current) writeLS(LS_KEYS.waybackSources, selectedWaybackSources); }, [selectedWaybackSources]);
+
+  const [crawling, setCrawling] = useState(false);
+  const [crawlResult, setCrawlResult] = useState<CrawlResponse | null>(null);
 
   const activeSourceList = crawlMode === "sitemap" ? EU_SOURCES : WAYBACK_SOURCES;
   const activeSelected = crawlMode === "sitemap" ? selectedSources : selectedWaybackSources;
   const setActiveSelected = crawlMode === "sitemap" ? setSelectedSources : setSelectedWaybackSources;
 
-  // DB state
+  // ---- DB state ----
   const [urlsData, setUrlsData] = useState<UrlsResponse | null>(null);
   const [loadingUrls, setLoadingUrls] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterSource, setFilterSource] = useState<string>("");
-  const [filterSearch, setFilterSearch] = useState<string>("");
-  const [filterMinDate, setFilterMinDate] = useState<string>("");
-  const [filterMaxDate, setFilterMaxDate] = useState<string>("");
-  const [page, setPage] = useState(1);
   const [scrapingId, setScrapingId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [lastScrapeResult, setLastScrapeResult] = useState<Record<string, unknown> | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // ---- Selection: id -> status (works across pages) ----
+  const [selection, setSelection] = useState<Map<string, string>>(new Map());
+  const [selectingAll, setSelectingAll] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0, success: 0, skipped: 0, errors: 0 });
 
+  const buildFilterParams = useCallback(() => {
+    const p = new URLSearchParams();
+    if (filterStatus) p.set("status", filterStatus);
+    if (filterSource) p.set("source", filterSource);
+    if (filterSearch) p.set("search", filterSearch);
+    if (filterMinDate) p.set("minDate", filterMinDate);
+    if (filterMaxDate) p.set("maxDate", filterMaxDate);
+    return p;
+  }, [filterStatus, filterSource, filterSearch, filterMinDate, filterMaxDate]);
+
   const loadUrls = useCallback(async () => {
     setLoadingUrls(true);
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterSource) params.set("source", filterSource);
-    if (filterSearch) params.set("search", filterSearch);
-    if (filterMinDate) params.set("minDate", filterMinDate);
-    if (filterMaxDate) params.set("maxDate", filterMaxDate);
+    const params = buildFilterParams();
     params.set("page", String(page));
-    params.set("limit", "50");
+    params.set("limit", String(limit));
 
     const res = await fetch(`/api/historical-import/urls?${params}`);
     if (res.ok) {
       setUrlsData(await res.json());
     }
     setLoadingUrls(false);
-  }, [filterStatus, filterSource, filterSearch, filterMinDate, filterMaxDate, page]);
+  }, [buildFilterParams, page, limit]);
 
   useEffect(() => {
     loadUrls();
@@ -162,11 +272,7 @@ export default function HistoricalImportPage() {
 
   function downloadCsv() {
     if (!urlsData) return;
-    // Fetch all URLs (not just current page) for export
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterSource) params.set("source", filterSource);
-    if (filterSearch) params.set("search", filterSearch);
+    const params = buildFilterParams();
     params.set("limit", "10000");
     params.set("page", "1");
 
@@ -245,35 +351,80 @@ export default function HistoricalImportPage() {
     }
   }
 
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+  function toggleSelect(id: string, status: string) {
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, status);
       return next;
     });
   }
 
-  function toggleSelectAll() {
+  function toggleSelectAllOnPage() {
     if (!urlsData) return;
-    const pageIds = urlsData.urls.map((u) => u.id);
-    setSelectedIds((prev) => {
-      const allSelected = pageIds.every((id) => prev.has(id));
-      const next = new Set(prev);
-      if (allSelected) {
-        pageIds.forEach((id) => next.delete(id));
+    const rows = urlsData.urls;
+    setSelection((prev) => {
+      const next = new Map(prev);
+      const allOnPageSelected = rows.every((u) => next.has(u.id));
+      if (allOnPageSelected) {
+        rows.forEach((u) => next.delete(u.id));
       } else {
-        pageIds.forEach((id) => next.add(id));
+        rows.forEach((u) => next.set(u.id, u.status));
       }
       return next;
     });
   }
 
-  const selectedUrls = urlsData?.urls.filter((u) => selectedIds.has(u.id)) || [];
-  const selectedDiscovered = selectedUrls.filter((u) => u.status === "discovered");
-  const selectedProcessed = selectedUrls.filter((u) => u.status === "processed");
+  function clearSelection() {
+    setSelection(new Map());
+  }
+
+  async function handleSelectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const params = buildFilterParams();
+      params.set("idsOnly", "1");
+      const res = await fetch(`/api/historical-import/urls?${params}`);
+      if (!res.ok) {
+        toast.error("Konnte passende URLs nicht laden");
+        return;
+      }
+      const data = (await res.json()) as IdsOnlyResponse;
+      setSelection((prev) => {
+        const next = new Map(prev);
+        for (const { id, status } of data.ids) next.set(id, status);
+        return next;
+      });
+      toast.success(`${data.total.toLocaleString("de-DE")} URLs ausgewaehlt`);
+    } catch {
+      toast.error("Auswahl fehlgeschlagen");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
+  // Selection-derived counts (across pages)
+  const selectionCounts = useMemo(() => {
+    let discovered = 0;
+    let processed = 0;
+    for (const status of selection.values()) {
+      if (status === "discovered") discovered++;
+      else if (status === "processed") processed++;
+    }
+    return { discovered, processed };
+  }, [selection]);
+
+  const selectedDiscoveredIds = useMemo(
+    () => [...selection.entries()].filter(([, s]) => s === "discovered").map(([id]) => id),
+    [selection]
+  );
+  const selectedProcessedIds = useMemo(
+    () => [...selection.entries()].filter(([, s]) => s === "processed").map(([id]) => id),
+    [selection]
+  );
 
   async function handleBatchScan() {
-    const ids = selectedDiscovered.map((u) => u.id);
+    const ids = selectedDiscoveredIds;
     if (ids.length === 0) return;
     setBatchRunning(true);
     setBatchProgress({ done: 0, total: ids.length, success: 0, skipped: 0, errors: 0 });
@@ -297,13 +448,13 @@ export default function HistoricalImportPage() {
     }
 
     toast.success(`Batch-Scan: ${success} Funding, ${skipped} uebersprungen, ${errors} Fehler`);
-    setSelectedIds(new Set());
+    clearSelection();
     setBatchRunning(false);
     loadUrls();
   }
 
   async function handleBatchImport() {
-    const ids = selectedProcessed.map((u) => u.id);
+    const ids = selectedProcessedIds;
     if (ids.length === 0) return;
     setBatchRunning(true);
     setBatchProgress({ done: 0, total: ids.length, success: 0, skipped: 0, errors: 0 });
@@ -327,12 +478,19 @@ export default function HistoricalImportPage() {
     }
 
     toast.success(`Batch-Import: ${success} importiert, ${skipped} uebersprungen, ${errors} Fehler`);
-    setSelectedIds(new Set());
+    clearSelection();
     setBatchRunning(false);
     loadUrls();
   }
 
   const totalUrls = urlsData ? Object.values(urlsData.statusCounts).reduce((a, b) => a + b, 0) : 0;
+  const allOnPageSelected =
+    !!urlsData && urlsData.urls.length > 0 && urlsData.urls.every((u) => selection.has(u.id));
+  const showSelectAllMatchingBanner =
+    !!urlsData &&
+    allOnPageSelected &&
+    urlsData.total > urlsData.urls.length &&
+    selection.size < urlsData.total;
 
   return (
     <div className="flex flex-col h-full">
@@ -514,7 +672,7 @@ export default function HistoricalImportPage() {
         {urlsData && (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => { setFilterStatus(""); setPage(1); }}
+              onClick={() => setQuery({ status: null })}
               className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
                 !filterStatus ? "bg-foreground/[0.08] text-foreground/85" : "bg-foreground/[0.03] text-foreground/40"
               }`}
@@ -526,7 +684,7 @@ export default function HistoricalImportPage() {
               return (
                 <button
                   key={status}
-                  onClick={() => { setFilterStatus(status); setPage(1); }}
+                  onClick={() => setQuery({ status })}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
                     filterStatus === status ? info.color : "bg-foreground/[0.03] text-foreground/40"
                   }`}
@@ -538,11 +696,11 @@ export default function HistoricalImportPage() {
           </div>
         )}
 
-        {/* Source + Date + Search Filter */}
-        <div className="flex items-center gap-2">
+        {/* Source + Date + Search Filter + Page Size */}
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={filterSource}
-            onChange={(e) => { setFilterSource(e.target.value); setPage(1); }}
+            onChange={(e) => setQuery({ source: e.target.value || null })}
             className="glass-search-input px-3 py-1.5 text-[13px]"
           >
             <option value="">Alle Quellen</option>
@@ -557,7 +715,7 @@ export default function HistoricalImportPage() {
             <input
               type="date"
               value={filterMinDate}
-              onChange={(e) => { setFilterMinDate(e.target.value); setPage(1); }}
+              onChange={(e) => setQuery({ from: e.target.value || null })}
               className="glass-search-input px-2 py-1.5 text-[13px]"
             />
           </div>
@@ -566,17 +724,29 @@ export default function HistoricalImportPage() {
             <input
               type="date"
               value={filterMaxDate}
-              onChange={(e) => { setFilterMaxDate(e.target.value); setPage(1); }}
+              onChange={(e) => setQuery({ to: e.target.value || null })}
               className="glass-search-input px-2 py-1.5 text-[13px]"
             />
           </div>
           <input
             type="text"
             placeholder="URL suchen..."
-            value={filterSearch}
-            onChange={(e) => { setFilterSearch(e.target.value); setPage(1); }}
-            className="glass-search-input px-3 py-1.5 text-[13px] flex-1"
+            value={searchInput}
+            onChange={(e) => { debounceTouched.current = true; setSearchInput(e.target.value); }}
+            className="glass-search-input px-3 py-1.5 text-[13px] flex-1 min-w-[200px]"
           />
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] text-foreground/35">Pro Seite</span>
+            <select
+              value={limit}
+              onChange={(e) => setQuery({ limit: e.target.value })}
+              className="glass-search-input px-2 py-1.5 text-[13px]"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Scrape Result Detail */}
@@ -592,34 +762,54 @@ export default function HistoricalImportPage() {
           </div>
         )}
 
-        {/* Batch Action Bar */}
-        {selectedIds.size > 0 && (
-          <div className="glass-status-bar rounded-[14px] px-4 py-2.5 flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-foreground/85">
-              {selectedIds.size} ausgewaehlt
+        {/* Select-all-matching banner */}
+        {showSelectAllMatchingBanner && (
+          <div className="lg-inset rounded-[14px] px-4 py-2.5 flex items-center gap-3">
+            <span className="text-[13px] text-foreground/70">
+              {urlsData!.urls.length} auf dieser Seite ausgewaehlt.
             </span>
-            {selectedDiscovered.length > 0 && (
+            <button
+              onClick={handleSelectAllMatching}
+              disabled={selectingAll}
+              className="glass-capsule-btn px-3 py-1 text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-30"
+            >
+              {selectingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Alle {urlsData!.total.toLocaleString("de-DE")} passenden auswaehlen
+            </button>
+            <span className="text-[11px] text-foreground/35">
+              (max. 10.000 — quer ueber alle Seiten)
+            </span>
+          </div>
+        )}
+
+        {/* Batch Action Bar */}
+        {selection.size > 0 && (
+          <div className="glass-status-bar rounded-[14px] px-4 py-2.5 flex items-center gap-3 flex-wrap">
+            <span className="text-[13px] font-semibold text-foreground/85">
+              {selection.size.toLocaleString("de-DE")} ausgewaehlt
+            </span>
+            {selectionCounts.discovered > 0 && (
               <button
                 onClick={handleBatchScan}
                 disabled={batchRunning}
                 className="glass-capsule-btn px-3 py-1.5 text-[12px] flex items-center gap-1.5 disabled:opacity-30"
               >
                 {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Scan className="h-3 w-3" />}
-                {selectedDiscovered.length} scannen
+                {selectionCounts.discovered.toLocaleString("de-DE")} scannen
               </button>
             )}
-            {selectedProcessed.length > 0 && (
+            {selectionCounts.processed > 0 && (
               <button
                 onClick={handleBatchImport}
                 disabled={batchRunning}
                 className="apple-btn-blue px-3 py-1.5 text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-30"
               >
                 {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpToLine className="h-3 w-3" />}
-                {selectedProcessed.length} importieren
+                {selectionCounts.processed.toLocaleString("de-DE")} importieren
               </button>
             )}
             <button
-              onClick={() => setSelectedIds(new Set())}
+              onClick={clearSelection}
               className="text-[12px] text-foreground/40 hover:text-foreground/70 ml-auto"
             >
               Auswahl aufheben
@@ -646,8 +836,8 @@ export default function HistoricalImportPage() {
             <div className="glass-table-header px-4 py-2 grid grid-cols-[auto_2.5fr_2fr_0.8fr_1fr_0.8fr_0.5fr] gap-2 items-center">
               <input
                 type="checkbox"
-                checked={urlsData.urls.length > 0 && urlsData.urls.every((u) => selectedIds.has(u.id))}
-                onChange={toggleSelectAll}
+                checked={allOnPageSelected}
+                onChange={toggleSelectAllOnPage}
                 className="h-3.5 w-3.5 rounded accent-blue-500"
               />
               <span className="text-[11px] tracking-[0.04em] uppercase font-medium text-foreground/35">URL</span>
@@ -664,8 +854,8 @@ export default function HistoricalImportPage() {
                 <div key={u.id} className="lg-inset-table-row px-4 py-2 grid grid-cols-[auto_2.5fr_2fr_0.8fr_1fr_0.8fr_0.5fr] gap-2 items-center">
                   <input
                     type="checkbox"
-                    checked={selectedIds.has(u.id)}
-                    onChange={() => toggleSelect(u.id)}
+                    checked={selection.has(u.id)}
+                    onChange={() => toggleSelect(u.id, u.status)}
                     className="h-3.5 w-3.5 rounded accent-blue-500"
                   />
                   <a
@@ -724,14 +914,14 @@ export default function HistoricalImportPage() {
             <div className="flex items-center gap-1.5">
               <button
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => setQuery({ page: String(page - 1) })}
                 className="glass-capsule-btn px-3 py-1 text-[12px] disabled:opacity-30"
               >
                 Zurueck
               </button>
               <button
                 disabled={page >= urlsData.totalPages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setQuery({ page: String(page + 1) })}
                 className="glass-capsule-btn px-3 py-1 text-[12px] disabled:opacity-30"
               >
                 Weiter
@@ -763,7 +953,7 @@ export default function HistoricalImportPage() {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Loader2 className="h-10 w-10 text-foreground/30 animate-spin mb-4" />
             <p className="text-[15px] font-semibold text-foreground/55">
-              Crawle {selectedSources.length} Sitemaps...
+              Crawle {activeSelected.length} Quellen...
             </p>
             <p className="text-[13px] text-foreground/40 mt-1">
               Das kann 1-2 Minuten dauern
