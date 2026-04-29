@@ -182,7 +182,7 @@ describe("/api/v1/sectors/:sector/intel", () => {
     expect(res.timeline.granularity).toBe("month");
   });
 
-  it("rounds are sorted by date descending and capped at 50", async () => {
+  it("rounds are sorted by date descending and capped at 50 by default", async () => {
     if (!sampleSector) return;
     const res = await fetchIntel(sampleSector);
     expect(res.rounds.length).toBeLessThanOrEqual(50);
@@ -191,6 +191,29 @@ describe("/api/v1/sectors/:sector/intel", () => {
       const curr = res.rounds[i].date;
       if (prev && curr) expect(prev >= curr).toBe(true);
     }
+  });
+
+  it("?full_rounds=1 returns rounds.length === totals.roundCount and preserves other fields", async () => {
+    if (!sampleSector) return;
+    const base = await fetchIntel(sampleSector, { window_days: "180" });
+    const full = await fetchIntel(sampleSector, { window_days: "180", full_rounds: "1" });
+
+    expect(full.rounds.length).toBe(full.totals.roundCount);
+    expect(full.rounds.length).toBeGreaterThanOrEqual(base.rounds.length);
+
+    for (let i = 1; i < full.rounds.length; i++) {
+      const prev = full.rounds[i - 1].date;
+      const curr = full.rounds[i].date;
+      if (prev && curr) expect(prev >= curr).toBe(true);
+    }
+
+    // Other fields must be byte-for-byte unchanged vs. the un-flagged call.
+    expect(full.totals).toEqual(base.totals);
+    expect(full.timeline).toEqual(base.timeline);
+    expect(full.stageMix).toEqual(base.stageMix);
+    expect(full.topInvestors).toEqual(base.topInvestors);
+    expect(full.subsectors).toEqual(base.subsectors);
+    expect(full.biggestRounds).toEqual(base.biggestRounds);
   });
 
   it("biggestRounds are the top <=5 amounts, nulls excluded", async () => {

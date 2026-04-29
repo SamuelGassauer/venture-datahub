@@ -196,6 +196,12 @@ export async function GET(
 
   const country = searchParams.get("country");
 
+  // When set, `rounds[]` returns every round in the window (matching
+  // totals.roundCount) instead of the recent-50 cap. `biggestRounds` is
+  // unaffected and continues to be computed from the recent-50 sample.
+  const fullRoundsParam = searchParams.get("full_rounds");
+  const fullRounds = fullRoundsParam === "1" || fullRoundsParam === "true";
+
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
   const sinceYmd = ymdUtc(since);
 
@@ -460,8 +466,11 @@ export async function GET(
         leadCount: e.leadCount,
       }));
 
-    // ── rounds (cap 50, sorted by date desc) ──────────────────────────
-    const rounds = rawRounds.slice(0, 50).map((r) => {
+    // ── rounds (sorted by date desc) ──────────────────────────────────
+    // Default: cap at 50 (back-compat). With ?full_rounds=1: return every
+    // round in the window so `rounds.length === totals.roundCount` and
+    // consumers can apply their own client-side stage/etc. filters.
+    const allRounds = rawRounds.map((r) => {
       const leadInv = r.investors.find((i) => i.role === "LEAD" || i.role === "BOTH");
       const participants = r.investors.filter((i) => i.role !== "LEAD" && i.role !== "BOTH");
       return {
@@ -479,9 +488,12 @@ export async function GET(
         participantIds: participants.map((p) => p.uuid).filter((id): id is string => !!id),
       };
     });
+    const rounds = fullRounds ? allRounds : allRounds.slice(0, 50);
 
-    // ── biggestRounds (top 5 of rounds by amountUsd desc, nulls excluded) ─
-    const biggestRounds = [...rounds]
+    // ── biggestRounds (top 5 by amountUsd desc, nulls excluded) ───────
+    // Always computed from the recent-50 sample to keep byte-for-byte
+    // identical output regardless of full_rounds.
+    const biggestRounds = allRounds.slice(0, 50)
       .filter((r) => r.amountUsd != null)
       .sort((a, b) => (b.amountUsd! - a.amountUsd!))
       .slice(0, 5);
