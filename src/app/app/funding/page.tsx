@@ -209,7 +209,6 @@ export default function FundingPage() {
       }
       if (json.pipeline) {
         setIngestResults((prev) => new Map(prev).set(round.key, json.pipeline as PipelineResult));
-        setExpanded((prev) => new Set(prev).add(round.key));
       }
       setRounds((prev) =>
         prev.map((r) =>
