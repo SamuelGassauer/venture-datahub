@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
@@ -9,6 +11,10 @@ import {
   Users,
   ExternalLink,
   Linkedin,
+  Sparkles,
+  RefreshCw,
+  Copy,
+  Loader2,
 } from "lucide-react";
 import {
   Table,
@@ -31,6 +37,7 @@ type Overview = {
 type RoundRow = {
   uuid: string;
   companyName: string | null;
+  companyKey: string | null;
   companyLogoUrl: string | null;
   amountUsd: number | null;
   stage: string | null;
@@ -39,6 +46,7 @@ type RoundRow = {
   confidence: number | null;
   sourceCount: number;
   investorCount: number;
+  articleIds: string[];
   effectiveDate: string | null;
   score: number;
   tier: Tier;
@@ -126,7 +134,13 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-function IssuePills({ issues }: { issues: string[] }) {
+function IssuePills({
+  issues,
+  dedupHref,
+}: {
+  issues: string[];
+  dedupHref?: string;
+}) {
   if (issues.length === 0) {
     return <span className="text-[11px] text-emerald-600/70">clean</span>;
   }
@@ -134,18 +148,61 @@ function IssuePills({ issues }: { issues: string[] }) {
   const more = issues.length - visible.length;
   return (
     <div className="flex flex-wrap gap-1">
-      {visible.map((iss) => (
-        <span
-          key={iss}
-          className="inline-flex items-center rounded-full bg-foreground/[0.04] px-1.5 py-px text-[10px] font-medium text-foreground/55"
-        >
-          {iss}
-        </span>
-      ))}
+      {visible.map((iss) => {
+        if (iss === "dedup-pending" && dedupHref) {
+          return (
+            <Link
+              key={iss}
+              href={dedupHref}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-600 hover:bg-amber-500/15"
+            >
+              <Copy className="h-2.5 w-2.5" />
+              {iss}
+            </Link>
+          );
+        }
+        return (
+          <span
+            key={iss}
+            className="inline-flex items-center rounded-full bg-foreground/[0.04] px-1.5 py-px text-[10px] font-medium text-foreground/55"
+          >
+            {iss}
+          </span>
+        );
+      })}
       {more > 0 && (
         <span className="text-[10px] text-foreground/40">+{more}</span>
       )}
     </div>
+  );
+}
+
+function ActionButton({
+  busy,
+  onClick,
+  children,
+  title,
+  disabled,
+}: {
+  busy: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  title: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!busy && !disabled) onClick();
+      }}
+      disabled={busy || disabled}
+      title={title}
+      className="glass-capsule-btn flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-foreground/70 hover:text-foreground/85 disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : children}
+    </button>
   );
 }
 
@@ -232,6 +289,37 @@ function TierFilter({
   );
 }
 
+async function consumeSSE(url: string, body: object): Promise<{ ok: boolean; lastStage: string }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok || !res.body) return { ok: false, lastStage: `HTTP ${res.status}` };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let lastStage = "";
+  let errored = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const evt = JSON.parse(line.slice(6));
+        if (evt.stage === "error") errored = true;
+        if (evt.stage) lastStage = evt.stage;
+      } catch { /* ignore */ }
+    }
+  }
+  return { ok: !errored, lastStage };
+}
+
 export default function QualityPage() {
   const [tab, setTab] = useState<TabKey>("rounds");
   const [tier, setTier] = useState<Tier | null>(null);
@@ -239,28 +327,111 @@ export default function QualityPage() {
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
   const [companies, setCompanies] = useState<CompanyRow[] | null>(null);
   const [investors, setInvestors] = useState<InvestorRow[] | null>(null);
+  const [busy, setBusy] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const setRowBusy = useCallback((key: string, on: boolean) => {
+    setBusy((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key); else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const reloadOverview = useCallback(() => {
     fetch("/api/v1/quality/overview")
       .then((r) => r.json())
       .then(setOverview)
       .catch((e) => console.error("overview", e));
   }, []);
 
-  useEffect(() => {
-    const url = `/api/v1/quality/${tab}${tier ? `?tier=${tier}` : ""}`;
-    if (tab === "rounds") setRounds(null);
-    if (tab === "companies") setCompanies(null);
-    if (tab === "investors") setInvestors(null);
+  const reloadTab = useCallback((which: TabKey, currentTier: Tier | null) => {
+    const url = `/api/v1/quality/${which}${currentTier ? `?tier=${currentTier}` : ""}`;
     fetch(url)
       .then((r) => r.json())
       .then((j) => {
-        if (tab === "rounds") setRounds(j.data || []);
-        else if (tab === "companies") setCompanies(j.data || []);
-        else if (tab === "investors") setInvestors(j.data || []);
+        if (which === "rounds") setRounds(j.data || []);
+        else if (which === "companies") setCompanies(j.data || []);
+        else if (which === "investors") setInvestors(j.data || []);
       })
-      .catch((e) => console.error(tab, e));
-  }, [tab, tier]);
+      .catch((e) => console.error(which, e));
+  }, []);
+
+  useEffect(() => {
+    reloadOverview();
+  }, [reloadOverview]);
+
+  useEffect(() => {
+    if (tab === "rounds") setRounds(null);
+    if (tab === "companies") setCompanies(null);
+    if (tab === "investors") setInvestors(null);
+    reloadTab(tab, tier);
+  }, [tab, tier, reloadTab]);
+
+  const reExtractRound = useCallback(async (row: RoundRow) => {
+    if (!row.articleIds.length) {
+      toast.error("No source articles linked — can't re-extract");
+      return;
+    }
+    const key = `round:${row.uuid}`;
+    setRowBusy(key, true);
+    try {
+      const res = await fetch("/api/funding/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: row.companyName ?? row.uuid, articleIds: row.articleIds }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`${row.companyName}: ${json.error ?? `HTTP ${res.status}`}`);
+        return;
+      }
+      toast.success(`${row.companyName}: re-extracted`);
+      reloadTab("rounds", tier);
+      reloadOverview();
+    } catch (e) {
+      toast.error(`${row.companyName}: ${e instanceof Error ? e.message : "failed"}`);
+    } finally {
+      setRowBusy(key, false);
+    }
+  }, [setRowBusy, reloadTab, tier, reloadOverview]);
+
+  const reEnrichCompany = useCallback(async (row: CompanyRow) => {
+    if (!row.name) return;
+    const key = `company:${row.normalizedName}`;
+    setRowBusy(key, true);
+    const t = toast.loading(`Enriching ${row.name}…`);
+    try {
+      const r = await consumeSSE("/api/enrich-company", { companyName: row.name, force: true });
+      if (r.ok) {
+        toast.success(`${row.name} enriched`, { id: t });
+        reloadTab("companies", tier);
+        reloadOverview();
+      } else {
+        toast.error(`${row.name}: ${r.lastStage || "failed"}`, { id: t });
+      }
+    } finally {
+      setRowBusy(key, false);
+    }
+  }, [setRowBusy, reloadTab, tier, reloadOverview]);
+
+  const reEnrichInvestor = useCallback(async (row: InvestorRow) => {
+    if (!row.name) return;
+    const key = `investor:${row.normalizedName}`;
+    setRowBusy(key, true);
+    const t = toast.loading(`Enriching ${row.name}…`);
+    try {
+      const r = await consumeSSE("/api/enrich-investor", { investorName: row.name, force: true });
+      if (r.ok) {
+        toast.success(`${row.name} enriched`, { id: t });
+        reloadTab("investors", tier);
+        reloadOverview();
+      } else {
+        toast.error(`${row.name}: ${r.lastStage || "failed"}`, { id: t });
+      }
+    } finally {
+      setRowBusy(key, false);
+    }
+  }, [setRowBusy, reloadTab, tier, reloadOverview]);
 
   return (
     <div className="flex h-[calc(100vh-1.5rem)] flex-col">
@@ -333,9 +504,15 @@ export default function QualityPage() {
       {/* Tier 3: Table */}
       <div className="flex-1 overflow-auto p-4">
         <div className="lg-inset rounded-[16px] overflow-hidden">
-          {tab === "rounds" && <RoundsTable rows={rounds} />}
-          {tab === "companies" && <CompaniesTable rows={companies} />}
-          {tab === "investors" && <InvestorsTable rows={investors} />}
+          {tab === "rounds" && (
+            <RoundsTable rows={rounds} busy={busy} onReExtract={reExtractRound} />
+          )}
+          {tab === "companies" && (
+            <CompaniesTable rows={companies} busy={busy} onReEnrich={reEnrichCompany} />
+          )}
+          {tab === "investors" && (
+            <InvestorsTable rows={investors} busy={busy} onReEnrich={reEnrichInvestor} />
+          )}
         </div>
       </div>
     </div>
@@ -370,7 +547,15 @@ function Th({ children, className = "" }: { children: React.ReactNode; className
   );
 }
 
-function RoundsTable({ rows }: { rows: RoundRow[] | null }) {
+function RoundsTable({
+  rows,
+  busy,
+  onReExtract,
+}: {
+  rows: RoundRow[] | null;
+  busy: Set<string>;
+  onReExtract: (row: RoundRow) => void;
+}) {
   if (rows == null) return <Loading />;
   if (rows.length === 0) return <Empty label="No rounds match this filter." />;
   return (
@@ -386,38 +571,82 @@ function RoundsTable({ rows }: { rows: RoundRow[] | null }) {
           <Th className="w-[55px] text-center">Src</Th>
           <Th className="w-[60px] text-right">Conf</Th>
           <Th>Issues</Th>
+          <Th className="w-[140px] text-right">Actions</Th>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.uuid} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
-            <TableCell><ScoreBar score={r.score} /></TableCell>
-            <TableCell className="font-semibold text-foreground/85">
-              <div className="flex items-center gap-2">
-                {r.companyLogoUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={r.companyLogoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
-                ) : null}
-                <span className="truncate">{r.companyName ?? "—"}</span>
-              </div>
-            </TableCell>
-            <TableCell className="text-right tabular-nums text-foreground/70">{fmtAmt(r.amountUsd)}</TableCell>
-            <TableCell className="text-foreground/70">{r.stage ?? "—"}</TableCell>
-            <TableCell className="text-foreground/70">{r.country ?? "—"}</TableCell>
-            <TableCell className="text-foreground/70 truncate max-w-[160px]">{r.leadName ?? "—"}</TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{r.sourceCount}</TableCell>
-            <TableCell className="text-right tabular-nums text-foreground/70">
-              {r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : "—"}
-            </TableCell>
-            <TableCell><IssuePills issues={r.issues} /></TableCell>
-          </TableRow>
-        ))}
+        {rows.map((r) => {
+          const isBusy = busy.has(`round:${r.uuid}`);
+          return (
+            <TableRow key={r.uuid} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
+              <TableCell><ScoreBar score={r.score} /></TableCell>
+              <TableCell className="font-semibold text-foreground/85">
+                <div className="flex items-center gap-2">
+                  {r.companyLogoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={r.companyLogoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
+                  ) : null}
+                  <span className="truncate">{r.companyName ?? "—"}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-foreground/70">{fmtAmt(r.amountUsd)}</TableCell>
+              <TableCell className="text-foreground/70">{r.stage ?? "—"}</TableCell>
+              <TableCell className="text-foreground/70">{r.country ?? "—"}</TableCell>
+              <TableCell className="text-foreground/70 truncate max-w-[160px]">{r.leadName ?? "—"}</TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{r.sourceCount}</TableCell>
+              <TableCell className="text-right tabular-nums text-foreground/70">
+                {r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : "—"}
+              </TableCell>
+              <TableCell>
+                <IssuePills
+                  issues={r.issues}
+                  dedupHref="/app/admin/dedup?type=round&status=pending"
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center justify-end gap-1">
+                  <ActionButton
+                    busy={isBusy}
+                    disabled={r.articleIds.length === 0}
+                    onClick={() => onReExtract(r)}
+                    title={
+                      r.articleIds.length === 0
+                        ? "No source articles linked"
+                        : "Re-run LLM extraction with fresh content"
+                    }
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Re-extract
+                  </ActionButton>
+                  {r.companyName && (
+                    <Link
+                      href={`/app/funding?search=${encodeURIComponent(r.companyName)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="Open in Deal Flow"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
 }
 
-function CompaniesTable({ rows }: { rows: CompanyRow[] | null }) {
+function CompaniesTable({
+  rows,
+  busy,
+  onReEnrich,
+}: {
+  rows: CompanyRow[] | null;
+  busy: Set<string>;
+  onReEnrich: (row: CompanyRow) => void;
+}) {
   if (rows == null) return <Loading />;
   if (rows.length === 0) return <Empty label="No companies match this filter." />;
   return (
@@ -433,51 +662,99 @@ function CompaniesTable({ rows }: { rows: CompanyRow[] | null }) {
           <Th className="w-[60px] text-center">Enrich</Th>
           <Th className="w-[60px]">Last</Th>
           <Th>Issues</Th>
-          <Th className="w-[50px] text-center">Links</Th>
+          <Th className="w-[140px] text-right">Actions</Th>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((c) => (
-          <TableRow key={c.normalizedName} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
-            <TableCell><ScoreBar score={c.score} /></TableCell>
-            <TableCell className="font-semibold text-foreground/85">
-              <div className="flex items-center gap-2">
-                {c.logoUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={c.logoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
-                ) : null}
-                <span className="truncate">{c.name ?? "—"}</span>
-              </div>
-            </TableCell>
-            <TableCell className="text-foreground/70">{c.country ?? "—"}</TableCell>
-            <TableCell className="text-foreground/70 truncate">{c.sector ?? "—"}</TableCell>
-            <TableCell className="text-right tabular-nums text-foreground/70">{fmtAmt(c.totalFunding)}</TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{c.roundCount}</TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{c.enrichScore}/9</TableCell>
-            <TableCell className="text-foreground/55">{fmtDate(c.enrichedAt)}</TableCell>
-            <TableCell><IssuePills issues={c.issues} /></TableCell>
-            <TableCell>
-              <div className="flex items-center justify-center gap-1">
-                {c.website && (
-                  <a href={c.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                    <ExternalLink className="h-3 w-3 text-foreground/40 hover:text-foreground/70" />
-                  </a>
-                )}
-                {c.linkedinUrl && (
-                  <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                    <Linkedin className="h-3 w-3 text-foreground/40 hover:text-foreground/70" />
-                  </a>
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+        {rows.map((c) => {
+          const isBusy = busy.has(`company:${c.normalizedName}`);
+          return (
+            <TableRow key={c.normalizedName} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
+              <TableCell><ScoreBar score={c.score} /></TableCell>
+              <TableCell className="font-semibold text-foreground/85">
+                <div className="flex items-center gap-2">
+                  {c.logoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={c.logoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
+                  ) : null}
+                  <span className="truncate">{c.name ?? "—"}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-foreground/70">{c.country ?? "—"}</TableCell>
+              <TableCell className="text-foreground/70 truncate">{c.sector ?? "—"}</TableCell>
+              <TableCell className="text-right tabular-nums text-foreground/70">{fmtAmt(c.totalFunding)}</TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{c.roundCount}</TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{c.enrichScore}/9</TableCell>
+              <TableCell className="text-foreground/55">{fmtDate(c.enrichedAt)}</TableCell>
+              <TableCell>
+                <IssuePills
+                  issues={c.issues}
+                  dedupHref="/app/admin/dedup?type=company&status=pending"
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center justify-end gap-1">
+                  <ActionButton
+                    busy={isBusy}
+                    onClick={() => onReEnrich(c)}
+                    title="Re-run LLM enrichment (overrides unlocked fields)"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Enrich
+                  </ActionButton>
+                  {c.name && (
+                    <Link
+                      href={`/app/companies/${encodeURIComponent(c.name)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="Open detail page"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                  {c.website && (
+                    <a
+                      href={c.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="Website"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {c.linkedinUrl && (
+                    <a
+                      href={c.linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="LinkedIn"
+                    >
+                      <Linkedin className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
 }
 
-function InvestorsTable({ rows }: { rows: InvestorRow[] | null }) {
+function InvestorsTable({
+  rows,
+  busy,
+  onReEnrich,
+}: {
+  rows: InvestorRow[] | null;
+  busy: Set<string>;
+  onReEnrich: (row: InvestorRow) => void;
+}) {
   if (rows == null) return <Loading />;
   if (rows.length === 0) return <Empty label="No investors match this filter." />;
   return (
@@ -494,41 +771,86 @@ function InvestorsTable({ rows }: { rows: InvestorRow[] | null }) {
           <Th className="w-[60px] text-center">Enrich</Th>
           <Th className="w-[60px]">Last</Th>
           <Th>Issues</Th>
+          <Th className="w-[140px] text-right">Actions</Th>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((iv) => (
-          <TableRow key={iv.normalizedName} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
-            <TableCell><ScoreBar score={iv.score} /></TableCell>
-            <TableCell className="font-semibold text-foreground/85">
-              <div className="flex items-center gap-2">
-                {iv.logoUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={iv.logoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
-                ) : null}
-                <span className="truncate">{iv.name ?? "—"}</span>
-              </div>
-            </TableCell>
-            <TableCell className="text-foreground/70 truncate">{iv.type ?? "—"}</TableCell>
-            <TableCell className="text-foreground/70 truncate">
-              {[iv.hqCity, iv.hqCountry].filter(Boolean).join(", ") || "—"}
-            </TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{iv.dealCount}</TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{iv.leadCount}</TableCell>
-            <TableCell className="text-foreground/55 text-[11px]">
-              {[
-                iv.stageFocus.length > 0 ? "S" : null,
-                iv.sectorFocus.length > 0 ? "Sec" : null,
-                iv.geoFocus.length > 0 ? "G" : null,
-              ]
-                .filter(Boolean)
-                .join("·") || "—"}
-            </TableCell>
-            <TableCell className="text-center tabular-nums text-foreground/70">{iv.enrichScore}/13</TableCell>
-            <TableCell className="text-foreground/55">{fmtDate(iv.enrichedAt)}</TableCell>
-            <TableCell><IssuePills issues={iv.issues} /></TableCell>
-          </TableRow>
-        ))}
+        {rows.map((iv) => {
+          const isBusy = busy.has(`investor:${iv.normalizedName}`);
+          return (
+            <TableRow key={iv.normalizedName} className="lg-inset-table-row text-[13px] tracking-[-0.01em]">
+              <TableCell><ScoreBar score={iv.score} /></TableCell>
+              <TableCell className="font-semibold text-foreground/85">
+                <div className="flex items-center gap-2">
+                  {iv.logoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={iv.logoUrl} alt="" className="h-4 w-4 rounded-[3px] object-contain" />
+                  ) : null}
+                  <span className="truncate">{iv.name ?? "—"}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-foreground/70 truncate">{iv.type ?? "—"}</TableCell>
+              <TableCell className="text-foreground/70 truncate">
+                {[iv.hqCity, iv.hqCountry].filter(Boolean).join(", ") || "—"}
+              </TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{iv.dealCount}</TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{iv.leadCount}</TableCell>
+              <TableCell className="text-foreground/55 text-[11px]">
+                {[
+                  iv.stageFocus.length > 0 ? "S" : null,
+                  iv.sectorFocus.length > 0 ? "Sec" : null,
+                  iv.geoFocus.length > 0 ? "G" : null,
+                ]
+                  .filter(Boolean)
+                  .join("·") || "—"}
+              </TableCell>
+              <TableCell className="text-center tabular-nums text-foreground/70">{iv.enrichScore}/13</TableCell>
+              <TableCell className="text-foreground/55">{fmtDate(iv.enrichedAt)}</TableCell>
+              <TableCell>
+                <IssuePills
+                  issues={iv.issues}
+                  dedupHref="/app/admin/dedup?type=investor&status=pending"
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center justify-end gap-1">
+                  <ActionButton
+                    busy={isBusy}
+                    onClick={() => onReEnrich(iv)}
+                    title="Re-run LLM enrichment (overrides unlocked fields)"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Enrich
+                  </ActionButton>
+                  {iv.website && (
+                    <a
+                      href={iv.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="Website"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {iv.linkedinUrl && (
+                    <a
+                      href={iv.linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="glass-capsule-btn flex items-center px-2 py-1 text-foreground/55 hover:text-foreground/85"
+                      title="LinkedIn"
+                    >
+                      <Linkedin className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

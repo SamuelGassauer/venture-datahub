@@ -22,11 +22,13 @@ export async function GET(request: NextRequest) {
       MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
       WHERE c.country IN ${EUROPE_CYPHER_LIST}
       OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
-      WITH fr, c, count(DISTINCT a) AS sourceCount,
-           min(a.publishedAt) AS articleDate
+      WITH fr, c,
+           count(DISTINCT a) AS sourceCount,
+           min(a.publishedAt) AS articleDate,
+           collect(DISTINCT a.id) AS articleIds
       OPTIONAL MATCH (lead:InvestorOrg)-[:PARTICIPATED_IN {role:'lead'}]->(fr)
       OPTIONAL MATCH (allInv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
-      WITH fr, c, sourceCount, articleDate,
+      WITH fr, c, sourceCount, articleDate, articleIds,
            count(DISTINCT lead) AS leadCount,
            count(DISTINCT allInv) AS investorCount,
            collect(DISTINCT lead.name)[0] AS leadName
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest) {
              leadCount,
              investorCount,
              leadName,
+             articleIds,
              COALESCE(fr.announcedDate, articleDate) AS effectiveDate
       LIMIT toInteger($limit)
     `, { limit });
@@ -83,6 +86,9 @@ export async function GET(request: NextRequest) {
       if (investorCount === 0) issues.push("no-investors");
       if (dedupKeys.has(uuid)) issues.push("dedup-pending");
 
+      const articleIds = ((r.get("articleIds") as (string | null)[] | null) ?? [])
+        .filter((id): id is string => !!id);
+
       return {
         uuid,
         companyName: r.get("companyName") as string | null,
@@ -95,6 +101,7 @@ export async function GET(request: NextRequest) {
         confidence: conf,
         sourceCount,
         investorCount,
+        articleIds,
         effectiveDate: r.get("effectiveDate") ? String(r.get("effectiveDate")) : null,
         score,
         tier: tierOf(score),
