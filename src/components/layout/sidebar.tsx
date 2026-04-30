@@ -22,6 +22,7 @@ import {
   BarChart3,
   Flame,
   Activity,
+  Gauge,
   History,
   ChevronRight,
   ChevronDown,
@@ -66,6 +67,7 @@ const navGroups: NavGroup[] = [
       { href: "/app/funding", label: "Deal Flow", icon: Flame },
       { href: "/app/fund-events", label: "Fund Activity", icon: Landmark },
       { href: "/app/company-value-indicator", label: "KPI Signals", icon: Activity },
+      { href: "/app/quality", label: "Data Quality", icon: Gauge },
     ],
   },
   {
