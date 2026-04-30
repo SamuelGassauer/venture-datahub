@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
-import { mergeCompany, mergeInvestor, type MergeSnapshot } from "@/lib/dedup/merge";
+import {
+  mergeCompany,
+  mergeInvestor,
+  AlreadyMergedError,
+  type MergeSnapshot,
+} from "@/lib/dedup/merge";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -70,7 +75,8 @@ export async function POST(
     }
     const loserKey = winnerKey === candidate.leftKey ? candidate.rightKey : candidate.leftKey;
 
-    let snapshot: MergeSnapshot;
+    let snapshot: MergeSnapshot | null = null;
+    let alreadyMerged = false;
     try {
       if (candidate.entityType === "company") {
         snapshot = await mergeCompany(loserKey, winnerKey);
@@ -78,22 +84,40 @@ export async function POST(
         snapshot = await mergeInvestor(loserKey, winnerKey);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return NextResponse.json({ error: `Merge failed: ${message}` }, { status: 500 });
+      if (err instanceof AlreadyMergedError) {
+        // Previous attempt committed in Neo4j+Postgres but the API call
+        // timed out before flipping status to confirmed. Loser node is
+        // gone — record the decision, no snapshot (undo not possible).
+        alreadyMerged = true;
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        return NextResponse.json({ error: `Merge failed: ${message}` }, { status: 500 });
+      }
     }
+
+    const recoveryNote = "[Auto-recovered: loser node was already merged in a previous attempt; undo not available]";
+    const note = alreadyMerged
+      ? body.note
+        ? `${body.note}\n${recoveryNote}`
+        : recoveryNote
+      : body.note ?? undefined;
 
     const updated = await prisma.dedupCandidate.update({
       where: { id: params.id },
       data: {
         status: "confirmed",
         winnerKey,
-        mergeSnapshot: snapshot as unknown as object,
+        mergeSnapshot: snapshot ? (snapshot as unknown as object) : undefined,
         decidedById: session.user.id,
         decidedAt: new Date(),
-        note: body.note ?? undefined,
+        note,
       },
     });
-    return NextResponse.json({ candidate: serialize(updated), merged: true });
+    return NextResponse.json({
+      candidate: serialize(updated),
+      merged: !alreadyMerged,
+      alreadyMerged,
+    });
   }
 
   // Non-merge actions: just status update.

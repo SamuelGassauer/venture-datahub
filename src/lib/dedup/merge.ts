@@ -58,6 +58,22 @@ export type MergeSnapshot = {
   postgres: PostgresChange[];
 };
 
+/**
+ * Thrown when the loser node is missing but the winner still exists.
+ *
+ * Almost always means a previous merge attempt committed in Neo4j+Postgres
+ * but the request timed out before `dedup_candidates.status` could be
+ * flipped to `confirmed`. The caller should treat this as success: the
+ * graph is already in the desired post-merge state, just record the
+ * decision and move on. Undo is no longer possible (no snapshot).
+ */
+export class AlreadyMergedError extends Error {
+  constructor(public label: "Company" | "InvestorOrg", public loserUuid: string) {
+    super(`${label} ${loserUuid} no longer exists — already merged in a previous attempt`);
+    this.name = "AlreadyMergedError";
+  }
+}
+
 // ============================================================================
 // SNAPSHOT BUILDER
 // ============================================================================
@@ -126,6 +142,19 @@ export async function mergeCompany(
   const mergeMarker = `${loserUuid}->${winnerUuid}@${mergedAt}`;
 
   try {
+    // OPTIONAL MATCH so we can distinguish "winner missing" (real error) from
+    // "loser missing" (previous attempt likely committed past the API timeout).
+    const presence = await session.run(
+      `OPTIONAL MATCH (l:Company {uuid: $loserUuid})
+       OPTIONAL MATCH (w:Company {uuid: $winnerUuid})
+       RETURN l IS NOT NULL AS loserExists, w IS NOT NULL AS winnerExists`,
+      { loserUuid, winnerUuid },
+    );
+    const loserExists = presence.records[0]?.get("loserExists") as boolean;
+    const winnerExists = presence.records[0]?.get("winnerExists") as boolean;
+    if (!winnerExists) throw new Error("Winner Company not found");
+    if (!loserExists) throw new AlreadyMergedError("Company", loserUuid);
+
     const both = await session.run(
       `MATCH (l:Company {uuid: $loserUuid}), (w:Company {uuid: $winnerUuid})
        RETURN l.name AS loserName, l.normalizedName AS loserNorm,
@@ -285,6 +314,17 @@ export async function mergeInvestor(
   const mergeMarker = `${loserUuid}->${winnerUuid}@${mergedAt}`;
 
   try {
+    const presence = await session.run(
+      `OPTIONAL MATCH (l:InvestorOrg {uuid: $loserUuid})
+       OPTIONAL MATCH (w:InvestorOrg {uuid: $winnerUuid})
+       RETURN l IS NOT NULL AS loserExists, w IS NOT NULL AS winnerExists`,
+      { loserUuid, winnerUuid },
+    );
+    const loserExists = presence.records[0]?.get("loserExists") as boolean;
+    const winnerExists = presence.records[0]?.get("winnerExists") as boolean;
+    if (!winnerExists) throw new Error("Winner InvestorOrg not found");
+    if (!loserExists) throw new AlreadyMergedError("InvestorOrg", loserUuid);
+
     const both = await session.run(
       `MATCH (l:InvestorOrg {uuid: $loserUuid}), (w:InvestorOrg {uuid: $winnerUuid})
        RETURN l.name AS loserName, l.normalizedName AS loserNorm,
