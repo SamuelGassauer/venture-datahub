@@ -56,6 +56,14 @@ export type MergeSnapshot = {
   mergeMarker: string;
   neo4j: Neo4jLoserSnapshot;
   postgres: PostgresChange[];
+  /**
+   * Winner's properties as they were *before* the merge wrote loser-derived
+   * values into them (COALESCE on scalars, union on arrays). On undo, every
+   * key listed here is reset to its pre-merge value — including back to NULL
+   * for fields that didn't exist before. Old snapshots without this field
+   * still undo on a best-effort basis (rels + loser node only).
+   */
+  winnerPropsBefore?: Record<string, unknown>;
 };
 
 /**
@@ -230,6 +238,34 @@ export async function mergeCompany(
       }
     });
 
+    // Capture winner's properties before merge — needed for correct undo, since
+    // any COALESCE that fills a previously-NULL field on the winner has to be
+    // resettable. We snapshot the keys we know we may write below.
+    const COMPANY_MERGED_KEYS = [
+      "description",
+      "website",
+      "linkedinUrl",
+      "foundedYear",
+      "employeeRange",
+      "country",
+      "sector",
+      "subsector",
+      "status",
+      "logoUrl",
+      "totalFundingUsd",
+    ] as const;
+    const winnerPropsRes = await session.run(
+      `MATCH (w:Company {uuid: $winnerUuid}) RETURN properties(w) AS props`,
+      { winnerUuid },
+    );
+    const winnerAllProps =
+      (winnerPropsRes.records[0]?.get("props") as Record<string, unknown>) ?? {};
+    const winnerPropsBefore: Record<string, unknown> = {};
+    for (const k of COMPANY_MERGED_KEYS) {
+      // Capture explicit nulls too, so undo can clear fields back to absent.
+      winnerPropsBefore[k] = winnerAllProps[k] ?? null;
+    }
+
     try {
       await session.executeWrite(async (tx: ManagedTransaction) => {
         await tx.run(
@@ -255,15 +291,19 @@ export async function mergeCompany(
            DETACH DELETE fr`,
           { loserUuid },
         );
+        // Best-of-both: winner wins on conflict, loser fills NULLs.
         await tx.run(
           `MATCH (l:Company {uuid: $loserUuid}), (w:Company {uuid: $winnerUuid})
-           SET w.description   = COALESCE(w.description,   l.description),
-               w.website       = COALESCE(w.website,       l.website),
-               w.linkedinUrl   = COALESCE(w.linkedinUrl,   l.linkedinUrl),
-               w.foundedYear   = COALESCE(w.foundedYear,   l.foundedYear),
-               w.employeeRange = COALESCE(w.employeeRange, l.employeeRange),
-               w.country       = COALESCE(w.country,       l.country),
-               w.sector        = COALESCE(w.sector,        l.sector),
+           SET w.description     = COALESCE(w.description,     l.description),
+               w.website         = COALESCE(w.website,         l.website),
+               w.linkedinUrl     = COALESCE(w.linkedinUrl,     l.linkedinUrl),
+               w.foundedYear     = COALESCE(w.foundedYear,     l.foundedYear),
+               w.employeeRange   = COALESCE(w.employeeRange,   l.employeeRange),
+               w.country         = COALESCE(w.country,         l.country),
+               w.sector          = COALESCE(w.sector,          l.sector),
+               w.subsector       = COALESCE(w.subsector,       l.subsector),
+               w.status          = COALESCE(w.status,          l.status),
+               w.logoUrl         = COALESCE(w.logoUrl,         l.logoUrl),
                w.totalFundingUsd = COALESCE(w.totalFundingUsd, l.totalFundingUsd)`,
           { loserUuid, winnerUuid },
         );
@@ -293,6 +333,7 @@ export async function mergeCompany(
       mergeMarker,
       neo4j: neo4jSnapshot,
       postgres: postgresChanges,
+      winnerPropsBefore,
     };
   } finally {
     await session.close();
@@ -417,6 +458,55 @@ export async function mergeInvestor(
       }
     });
 
+    // Capture winner properties (scalars + arrays) before merge for undo.
+    const INVESTOR_MERGED_KEYS = [
+      "type",
+      "website",
+      "linkedinUrl",
+      "logoUrl",
+      "foundedYear",
+      "aum",
+      "hqCity",
+      "hqCountry",
+      "country",
+      "checkSizeMinUsd",
+      "checkSizeMaxUsd",
+      "stageFocus",
+      "sectorFocus",
+      "geoFocus",
+    ] as const;
+    const propsRes = await session.run(
+      `MATCH (l:InvestorOrg {uuid: $loserUuid}), (w:InvestorOrg {uuid: $winnerUuid})
+       RETURN properties(w) AS winnerProps,
+              l.stageFocus AS lStage, l.sectorFocus AS lSector, l.geoFocus AS lGeo,
+              w.stageFocus AS wStage, w.sectorFocus AS wSector, w.geoFocus AS wGeo`,
+      { loserUuid, winnerUuid },
+    );
+    const winnerAllProps =
+      (propsRes.records[0]?.get("winnerProps") as Record<string, unknown>) ?? {};
+    const winnerPropsBefore: Record<string, unknown> = {};
+    for (const k of INVESTOR_MERGED_KEYS) {
+      winnerPropsBefore[k] = winnerAllProps[k] ?? null;
+    }
+
+    const asStrArr = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    const unionDedup = (a: unknown, b: unknown): string[] =>
+      Array.from(new Set([...asStrArr(a), ...asStrArr(b)]));
+
+    const stageFocusUnion = unionDedup(
+      propsRes.records[0]?.get("wStage"),
+      propsRes.records[0]?.get("lStage"),
+    );
+    const sectorFocusUnion = unionDedup(
+      propsRes.records[0]?.get("wSector"),
+      propsRes.records[0]?.get("lSector"),
+    );
+    const geoFocusUnion = unionDedup(
+      propsRes.records[0]?.get("wGeo"),
+      propsRes.records[0]?.get("lGeo"),
+    );
+
     try {
       await session.executeWrite(async (tx: ManagedTransaction) => {
         // PARTICIPATED_IN with role merge: lead beats participant on conflict
@@ -448,10 +538,34 @@ export async function mergeInvestor(
            DELETE r`,
           { loserUuid, winnerUuid, mergeMarker },
         );
+        // Best-of-both: winner wins on conflict, loser fills NULLs.
         await tx.run(
           `MATCH (l:InvestorOrg {uuid: $loserUuid}), (w:InvestorOrg {uuid: $winnerUuid})
-           SET w.country = COALESCE(w.country, l.country)`,
+           SET w.type            = COALESCE(w.type,            l.type),
+               w.website         = COALESCE(w.website,         l.website),
+               w.linkedinUrl     = COALESCE(w.linkedinUrl,     l.linkedinUrl),
+               w.logoUrl         = COALESCE(w.logoUrl,         l.logoUrl),
+               w.foundedYear     = COALESCE(w.foundedYear,     l.foundedYear),
+               w.aum             = COALESCE(w.aum,             l.aum),
+               w.hqCity          = COALESCE(w.hqCity,          l.hqCity),
+               w.hqCountry       = COALESCE(w.hqCountry,       l.hqCountry),
+               w.country         = COALESCE(w.country,         l.country),
+               w.checkSizeMinUsd = COALESCE(w.checkSizeMinUsd, l.checkSizeMinUsd),
+               w.checkSizeMaxUsd = COALESCE(w.checkSizeMaxUsd, l.checkSizeMaxUsd)`,
           { loserUuid, winnerUuid },
+        );
+        // Arrays: union (computed in JS, written here)
+        await tx.run(
+          `MATCH (w:InvestorOrg {uuid: $winnerUuid})
+           SET w.stageFocus  = $stageFocus,
+               w.sectorFocus = $sectorFocus,
+               w.geoFocus    = $geoFocus`,
+          {
+            winnerUuid,
+            stageFocus: stageFocusUnion,
+            sectorFocus: sectorFocusUnion,
+            geoFocus: geoFocusUnion,
+          },
         );
         await tx.run(
           `MATCH (l:InvestorOrg {uuid: $loserUuid}) DETACH DELETE l`,
@@ -475,6 +589,7 @@ export async function mergeInvestor(
       mergeMarker,
       neo4j: neo4jSnapshot,
       postgres: postgresChanges,
+      winnerPropsBefore,
     };
   } finally {
     await session.close();
@@ -574,6 +689,24 @@ export async function unmergeFromSnapshot(snap: MergeSnapshot): Promise<void> {
          DELETE r`,
         { mergeMarker: snap.mergeMarker },
       );
+
+      // Reset winner properties to their pre-merge values, including back to
+      // NULL for fields that were filled from the loser via COALESCE/union.
+      // Older snapshots without winnerPropsBefore skip this (best-effort undo).
+      if (snap.winnerPropsBefore) {
+        const label = snap.type === "company" ? "Company" : "InvestorOrg";
+        // SET key = $val with val = null effectively removes the property in Cypher.
+        // We build the SET clause dynamically so we can pass the whole object.
+        const setClauses = Object.keys(snap.winnerPropsBefore)
+          .map((k) => `w.${k} = $props.${k}`)
+          .join(", ");
+        if (setClauses) {
+          await tx.run(
+            `MATCH (w:${label} {uuid: $winnerUuid}) SET ${setClauses}`,
+            { winnerUuid: snap.winnerUuid, props: snap.winnerPropsBefore },
+          );
+        }
+      }
     });
 
     // For Company unmerge, trigger sync to rebuild FundingRounds the loser had
