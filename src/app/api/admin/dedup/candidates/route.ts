@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { enrichCompanies, enrichInvestors, enrichRounds } from "@/lib/dedup/enrich";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +58,52 @@ export async function GET(request: NextRequest) {
     summary[t][c.status] = c._count._all;
   }
 
+  // Live-enrich each side with rich profile data from Neo4j so the user
+  // can actually decide whether two records are the same. Snapshots stay
+  // as fallback if the node was already merged or removed.
+  const companyUuids: string[] = [];
+  const investorUuids: string[] = [];
+  const roundUuids: string[] = [];
+  for (const i of items) {
+    if (i.entityType === "company") {
+      companyUuids.push(i.leftKey, i.rightKey);
+    } else if (i.entityType === "investor") {
+      investorUuids.push(i.leftKey, i.rightKey);
+    } else if (i.entityType === "round") {
+      roundUuids.push(i.leftKey, i.rightKey);
+    }
+  }
+
+  const [companyMap, investorMap, roundMap] = await Promise.all([
+    enrichCompanies(companyUuids).catch((err) => {
+      console.error("dedup enrichCompanies failed:", err);
+      return new Map<string, ReturnType<typeof JSON.parse>>();
+    }),
+    enrichInvestors(investorUuids).catch((err) => {
+      console.error("dedup enrichInvestors failed:", err);
+      return new Map<string, ReturnType<typeof JSON.parse>>();
+    }),
+    enrichRounds(roundUuids).catch((err) => {
+      console.error("dedup enrichRounds failed:", err);
+      return new Map<string, ReturnType<typeof JSON.parse>>();
+    }),
+  ]);
+
+  const enrichedFor = (entityType: string, key: string) => {
+    if (entityType === "company") return companyMap.get(key) ?? null;
+    if (entityType === "investor") return investorMap.get(key) ?? null;
+    if (entityType === "round") return roundMap.get(key) ?? null;
+    return null;
+  };
+
   return NextResponse.json({
     items: items.map((i) => ({
       ...i,
       createdAt: i.createdAt.toISOString(),
       updatedAt: i.updatedAt.toISOString(),
       decidedAt: i.decidedAt?.toISOString() ?? null,
+      leftEnriched: enrichedFor(i.entityType, i.leftKey),
+      rightEnriched: enrichedFor(i.entityType, i.rightKey),
     })),
     total,
     limit,

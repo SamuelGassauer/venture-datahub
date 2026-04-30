@@ -22,6 +22,63 @@ import {
 type EntityType = "company" | "investor" | "round";
 type Status = "pending" | "confirmed" | "rejected" | "skipped";
 
+type EnrichedInvestor = {
+  uuid: string;
+  name: string | null;
+  logoUrl: string | null;
+  type: string | null;
+  hqCity: string | null;
+  hqCountry: string | null;
+  website: string | null;
+  linkedinUrl: string | null;
+  foundedYear: number | null;
+  aum: string | null;
+  stageFocus: string[];
+  sectorFocus: string[];
+  geoFocus: string[];
+  dealCount: number;
+  leadCount: number;
+  totalDeployedUsd: number | null;
+  topPortfolio: string[];
+};
+
+type EnrichedCompany = {
+  uuid: string;
+  name: string | null;
+  logoUrl: string | null;
+  country: string | null;
+  sector: string | null;
+  status: string | null;
+  website: string | null;
+  linkedinUrl: string | null;
+  foundedYear: number | null;
+  employeeRange: string | null;
+  description: string | null;
+  location: string | null;
+  roundCount: number;
+  totalFundingUsd: number | null;
+  firstRoundDate: string | null;
+  latestStage: string | null;
+  topLeadInvestors: string[];
+};
+
+type EnrichedRound = {
+  uuid: string;
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  amountUsd: number | null;
+  currency: string | null;
+  stage: string | null;
+  country: string | null;
+  announcedDate: string | null;
+  confidence: number | null;
+  leadInvestor: string | null;
+  investors: string[];
+  sourceArticles: { title: string; url: string; publishedAt: string | null }[];
+};
+
+type Enriched = EnrichedInvestor | EnrichedCompany | EnrichedRound;
+
 type Candidate = {
   id: string;
   entityType: EntityType;
@@ -32,6 +89,8 @@ type Candidate = {
   reasons: Record<string, unknown>;
   leftSnapshot: Record<string, unknown> | null;
   rightSnapshot: Record<string, unknown> | null;
+  leftEnriched: Enriched | null;
+  rightEnriched: Enriched | null;
   status: Status;
   winnerKey: string | null;
   mergeSnapshot: Record<string, unknown> | null;
@@ -468,17 +527,23 @@ function CandidateCard({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <SnapshotPanel
+        <EntityProfile
+          enriched={candidate.leftEnriched}
           snapshot={candidate.leftSnapshot}
           entityType={candidate.entityType}
+          uuid={candidate.leftKey}
+          other={candidate.rightEnriched}
           isWinner={winnerIsLeft}
           isLoser={isDecided && winnerIsRight}
           showKeepButton={!isDecided && !isRound}
           onKeep={() => onDecide("confirm", candidate.leftKey)}
         />
-        <SnapshotPanel
+        <EntityProfile
+          enriched={candidate.rightEnriched}
           snapshot={candidate.rightSnapshot}
           entityType={candidate.entityType}
+          uuid={candidate.rightKey}
+          other={candidate.leftEnriched}
           isWinner={winnerIsRight}
           isLoser={isDecided && winnerIsLeft}
           showKeepButton={!isDecided && !isRound}
@@ -486,16 +551,13 @@ function CandidateCard({
         />
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {Object.entries(candidate.reasons).map(([k, v]) => (
-          <span
-            key={k}
-            className="rounded-full bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-medium text-foreground/55"
-          >
-            <span className="text-foreground/35">{k}:</span> {String(v)}
-          </span>
-        ))}
-      </div>
+      <SharedSignals
+        entityType={candidate.entityType}
+        left={candidate.leftEnriched}
+        right={candidate.rightEnriched}
+      />
+
+      <Reasons reasons={candidate.reasons} />
     </div>
   );
 }
@@ -596,4 +658,592 @@ function SnapshotPanel({
       ))}
     </div>
   );
+}
+
+// ── Rich entity profile (live from Neo4j) ───────────────────────────────
+
+function fmtAmt(n: number | null | undefined): string {
+  if (!n) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function hostOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function diffClass(left: unknown, right: unknown): string {
+  if (left == null && right == null) return "text-foreground/45";
+  if (left == null || right == null) return "text-amber-600/90";
+  if (String(left).toLowerCase() === String(right).toLowerCase()) return "text-emerald-600/85";
+  return "text-amber-600/90";
+}
+
+function FieldRow({
+  label,
+  value,
+  cmp,
+  mono,
+  href,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  cmp?: unknown;
+  mono?: boolean;
+  href?: string | null;
+}) {
+  const display = value == null || value === "" ? "—" : String(value);
+  const colorClass = cmp !== undefined ? diffClass(value, cmp) : "text-foreground/85";
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 w-20 shrink-0">
+        {label}
+      </span>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`text-[12px] truncate hover:underline ${colorClass} ${mono ? "font-mono" : ""}`}
+        >
+          {display}
+        </a>
+      ) : (
+        <span className={`text-[12px] truncate ${colorClass} ${mono ? "font-mono" : ""}`}>{display}</span>
+      )}
+    </div>
+  );
+}
+
+function ChipList({ items }: { items: string[] }) {
+  if (items.length === 0) return <span className="text-[11px] text-foreground/35">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map((s, i) => (
+        <span
+          key={`${s}-${i}`}
+          className="rounded-full bg-foreground/[0.05] px-1.5 py-px text-[10px] font-medium text-foreground/70"
+        >
+          {s}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function isInvestor(entityType: EntityType, e: Enriched | null): e is EnrichedInvestor {
+  return entityType === "investor" && !!e;
+}
+function isCompany(entityType: EntityType, e: Enriched | null): e is EnrichedCompany {
+  return entityType === "company" && !!e;
+}
+function isRound(entityType: EntityType, e: Enriched | null): e is EnrichedRound {
+  return entityType === "round" && !!e;
+}
+
+function EntityProfile({
+  enriched,
+  snapshot,
+  entityType,
+  uuid,
+  other,
+  isWinner,
+  isLoser,
+  showKeepButton,
+  onKeep,
+}: {
+  enriched: Enriched | null;
+  snapshot: Record<string, unknown> | null;
+  entityType: EntityType;
+  uuid: string;
+  other: Enriched | null;
+  isWinner?: boolean;
+  isLoser?: boolean;
+  showKeepButton?: boolean;
+  onKeep?: () => void;
+}) {
+  const containerClass = isWinner
+    ? "ring-1 ring-emerald-500/40 bg-emerald-500/[0.05]"
+    : isLoser
+      ? "bg-foreground/[0.02] opacity-60"
+      : "bg-foreground/[0.02]";
+
+  // Fallback to snapshot if node was already merged / removed
+  if (!enriched) {
+    return (
+      <div className={`rounded-[10px] p-3 space-y-1.5 ${containerClass}`}>
+        <ProfileHeader
+          uuid={uuid}
+          isWinner={isWinner}
+          isLoser={isLoser}
+          showKeepButton={showKeepButton}
+          onKeep={onKeep}
+        />
+        <p className="text-[11px] text-amber-600/85">
+          Knoten in Neo4j nicht gefunden — vermutlich bereits gemerged. Snapshot vom Run-Zeitpunkt:
+        </p>
+        <SnapshotPanel
+          snapshot={snapshot}
+          entityType={entityType}
+          isWinner={false}
+          isLoser={false}
+          showKeepButton={false}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-[10px] p-3 space-y-2 ${containerClass}`}>
+      <ProfileHeader
+        uuid={uuid}
+        isWinner={isWinner}
+        isLoser={isLoser}
+        showKeepButton={showKeepButton}
+        onKeep={onKeep}
+      />
+      {isInvestor(entityType, enriched) && (
+        <InvestorBody self={enriched} other={isInvestor(entityType, other) ? other : null} />
+      )}
+      {isCompany(entityType, enriched) && (
+        <CompanyBody self={enriched} other={isCompany(entityType, other) ? other : null} />
+      )}
+      {isRound(entityType, enriched) && (
+        <RoundBody self={enriched} other={isRound(entityType, other) ? other : null} />
+      )}
+    </div>
+  );
+}
+
+function ProfileHeader({
+  uuid,
+  isWinner,
+  isLoser,
+  showKeepButton,
+  onKeep,
+}: {
+  uuid: string;
+  isWinner?: boolean;
+  isLoser?: boolean;
+  showKeepButton?: boolean;
+  onKeep?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <p className="font-mono text-[10px] text-foreground/30 truncate flex-1">{uuid}</p>
+      {isWinner && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400 shrink-0">
+          <Crown className="h-3 w-3" />
+          Master
+        </span>
+      )}
+      {isLoser && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[10px] font-medium text-foreground/55 shrink-0">
+          absorbiert
+        </span>
+      )}
+      {showKeepButton && onKeep && (
+        <button
+          onClick={onKeep}
+          className="glass-capsule-btn inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/10 shrink-0"
+          title="Diesen Datensatz behalten, anderen mergen"
+        >
+          <Crown className="h-3 w-3" />
+          Diese behalten
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InvestorBody({ self, other }: { self: EnrichedInvestor; other: EnrichedInvestor | null }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 pb-1">
+        {self.logoUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={self.logoUrl} alt="" className="h-7 w-7 rounded-[6px] object-contain bg-foreground/[0.04]" />
+        ) : (
+          <div className="h-7 w-7 rounded-[6px] bg-foreground/[0.04]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold tracking-[-0.01em] text-foreground/85 truncate">
+            {self.name ?? "—"}
+          </p>
+          <p className="text-[11px] text-foreground/45 truncate">
+            {self.type ?? "—"}
+            {self.foundedYear ? ` · seit ${self.foundedYear}` : ""}
+            {self.aum ? ` · AUM ${self.aum}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <FieldRow
+          label="HQ"
+          value={[self.hqCity, self.hqCountry].filter(Boolean).join(", ") || null}
+          cmp={other ? [other.hqCity, other.hqCountry].filter(Boolean).join(", ") : undefined}
+        />
+        <FieldRow
+          label="Web"
+          value={hostOf(self.website)}
+          cmp={other ? hostOf(other.website) : undefined}
+          href={self.website}
+          mono
+        />
+        <FieldRow
+          label="LinkedIn"
+          value={hostOf(self.linkedinUrl)?.replace(/^.*?(?=linkedin)/, "")}
+          cmp={other ? hostOf(other.linkedinUrl) : undefined}
+          href={self.linkedinUrl}
+          mono
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-2 pt-1">
+        <Stat label="Deals" value={self.dealCount} />
+        <Stat label="Lead" value={self.leadCount} />
+        <Stat label="Deployed" value={fmtAmt(self.totalDeployedUsd)} />
+      </div>
+      <div className="space-y-1 pt-1">
+        <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30">Stage Focus</p>
+        <ChipList items={self.stageFocus} />
+        <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pt-1">Sector Focus</p>
+        <ChipList items={self.sectorFocus} />
+        <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pt-1">Geo Focus</p>
+        <ChipList items={self.geoFocus} />
+      </div>
+      {self.topPortfolio.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pb-1">
+            Top Portfolio
+          </p>
+          <ul className="text-[12px] text-foreground/70 space-y-0.5 list-disc list-inside">
+            {self.topPortfolio.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CompanyBody({ self, other }: { self: EnrichedCompany; other: EnrichedCompany | null }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 pb-1">
+        {self.logoUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={self.logoUrl} alt="" className="h-7 w-7 rounded-[6px] object-contain bg-foreground/[0.04]" />
+        ) : (
+          <div className="h-7 w-7 rounded-[6px] bg-foreground/[0.04]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold tracking-[-0.01em] text-foreground/85 truncate">
+            {self.name ?? "—"}
+          </p>
+          <p className="text-[11px] text-foreground/45 truncate">
+            {[self.sector, self.country, self.status].filter(Boolean).join(" · ") || "—"}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <FieldRow
+          label="Founded"
+          value={self.foundedYear}
+          cmp={other?.foundedYear}
+        />
+        <FieldRow label="Size" value={self.employeeRange} cmp={other?.employeeRange} />
+        <FieldRow
+          label="Location"
+          value={self.location}
+          cmp={other?.location}
+        />
+        <FieldRow
+          label="Web"
+          value={hostOf(self.website)}
+          cmp={other ? hostOf(other.website) : undefined}
+          href={self.website}
+          mono
+        />
+        <FieldRow
+          label="LinkedIn"
+          value={hostOf(self.linkedinUrl)}
+          cmp={other ? hostOf(other.linkedinUrl) : undefined}
+          href={self.linkedinUrl}
+          mono
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-2 pt-1">
+        <Stat label="Rounds" value={self.roundCount} />
+        <Stat label="Total" value={fmtAmt(self.totalFundingUsd)} />
+        <Stat label="Stage" value={self.latestStage ?? "—"} />
+      </div>
+      {self.firstRoundDate && (
+        <p className="text-[11px] text-foreground/45 pt-1">
+          Erste Runde: {self.firstRoundDate.substring(0, 10)}
+        </p>
+      )}
+      {self.topLeadInvestors.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pb-1">
+            Top Leads
+          </p>
+          <ChipList items={self.topLeadInvestors} />
+        </div>
+      )}
+      {self.description && (
+        <p className="text-[11px] text-foreground/55 pt-1 leading-relaxed">{self.description}</p>
+      )}
+    </>
+  );
+}
+
+function RoundBody({ self, other }: { self: EnrichedRound; other: EnrichedRound | null }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 pb-1">
+        {self.companyLogoUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={self.companyLogoUrl} alt="" className="h-7 w-7 rounded-[6px] object-contain bg-foreground/[0.04]" />
+        ) : (
+          <div className="h-7 w-7 rounded-[6px] bg-foreground/[0.04]" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold tracking-[-0.01em] text-foreground/85 truncate">
+            {self.companyName ?? "—"}
+          </p>
+          <p className="text-[11px] text-foreground/45 truncate">
+            {fmtAmt(self.amountUsd)}
+            {self.stage ? ` · ${self.stage}` : ""}
+            {self.announcedDate ? ` · ${self.announcedDate.substring(0, 10)}` : ""}
+            {self.country ? ` · ${self.country}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <FieldRow label="Lead" value={self.leadInvestor} cmp={other?.leadInvestor} />
+        <FieldRow
+          label="Confidence"
+          value={self.confidence != null ? `${(self.confidence * 100).toFixed(0)}%` : null}
+          cmp={other?.confidence != null ? `${(other.confidence * 100).toFixed(0)}%` : undefined}
+        />
+      </div>
+      {self.investors.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pb-1">
+            Investors ({self.investors.length})
+          </p>
+          <ChipList items={self.investors} />
+        </div>
+      )}
+      {self.sourceArticles.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/30 pb-1">
+            Sources ({self.sourceArticles.length})
+          </p>
+          <ul className="space-y-1">
+            {self.sourceArticles.map((a, i) => (
+              <li key={`${a.url}-${i}`} className="text-[11px] leading-snug">
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground/70 hover:text-foreground/85 hover:underline"
+                  title={a.url}
+                >
+                  {a.title || a.url}
+                </a>
+                {a.publishedAt && (
+                  <span className="text-foreground/35"> · {a.publishedAt.substring(0, 10)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[8px] bg-foreground/[0.04] px-2 py-1.5">
+      <p className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/35">{label}</p>
+      <p className="text-[13px] font-semibold tabular-nums text-foreground/85">{value}</p>
+    </div>
+  );
+}
+
+// ── Shared signals (overlap hints between left and right) ───────────────
+
+function SharedSignals({
+  entityType,
+  left,
+  right,
+}: {
+  entityType: EntityType;
+  left: Enriched | null;
+  right: Enriched | null;
+}) {
+  if (!left || !right) return null;
+
+  const signals: { label: string; value: string; positive: boolean }[] = [];
+
+  if (entityType === "investor" && isInvestor(entityType, left) && isInvestor(entityType, right)) {
+    const leftDom = hostOf(left.website);
+    const rightDom = hostOf(right.website);
+    if (leftDom && rightDom) {
+      signals.push({
+        label: "Website",
+        value: leftDom === rightDom ? `gleich (${leftDom})` : `unterschiedlich (${leftDom} ↔ ${rightDom})`,
+        positive: leftDom === rightDom,
+      });
+    }
+    const leftLi = hostOf(left.linkedinUrl);
+    const rightLi = hostOf(right.linkedinUrl);
+    if (left.linkedinUrl && right.linkedinUrl) {
+      signals.push({
+        label: "LinkedIn",
+        value: leftLi === rightLi && left.linkedinUrl === right.linkedinUrl ? "gleiche URL" : "unterschiedlich",
+        positive: left.linkedinUrl === right.linkedinUrl,
+      });
+    }
+    const sharedPortfolio = left.topPortfolio.filter((p) => right.topPortfolio.includes(p));
+    if (sharedPortfolio.length > 0) {
+      signals.push({
+        label: "Shared portfolio",
+        value: sharedPortfolio.slice(0, 3).join(", ") + (sharedPortfolio.length > 3 ? `, +${sharedPortfolio.length - 3}` : ""),
+        positive: true,
+      });
+    }
+    if (left.hqCountry && right.hqCountry) {
+      signals.push({
+        label: "HQ-Country",
+        value: left.hqCountry === right.hqCountry ? `gleich (${left.hqCountry})` : `≠ (${left.hqCountry} / ${right.hqCountry})`,
+        positive: left.hqCountry === right.hqCountry,
+      });
+    }
+  }
+  if (entityType === "company" && isCompany(entityType, left) && isCompany(entityType, right)) {
+    const leftDom = hostOf(left.website);
+    const rightDom = hostOf(right.website);
+    if (leftDom && rightDom) {
+      signals.push({
+        label: "Website",
+        value: leftDom === rightDom ? `gleich (${leftDom})` : `≠ (${leftDom} / ${rightDom})`,
+        positive: leftDom === rightDom,
+      });
+    }
+    const sharedLeads = left.topLeadInvestors.filter((l) => right.topLeadInvestors.includes(l));
+    if (sharedLeads.length > 0) {
+      signals.push({ label: "Shared lead", value: sharedLeads.join(", "), positive: true });
+    }
+    if (left.foundedYear && right.foundedYear) {
+      signals.push({
+        label: "Founded",
+        value: left.foundedYear === right.foundedYear
+          ? `gleich (${left.foundedYear})`
+          : `≠ (${left.foundedYear} / ${right.foundedYear})`,
+        positive: left.foundedYear === right.foundedYear,
+      });
+    }
+  }
+  if (entityType === "round" && isRound(entityType, left) && isRound(entityType, right)) {
+    const sharedInv = left.investors.filter((i) => right.investors.includes(i));
+    if (sharedInv.length > 0) {
+      signals.push({
+        label: "Shared investors",
+        value: sharedInv.slice(0, 4).join(", ") + (sharedInv.length > 4 ? `, +${sharedInv.length - 4}` : ""),
+        positive: true,
+      });
+    }
+    if (left.companyName && right.companyName) {
+      signals.push({
+        label: "Company",
+        value: left.companyName === right.companyName
+          ? "exakt gleich"
+          : `≠ "${left.companyName}" vs "${right.companyName}"`,
+        positive: left.companyName === right.companyName,
+      });
+    }
+  }
+
+  if (signals.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-[8px] bg-foreground/[0.02] px-2 py-1.5">
+      <span className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/35">
+        Signale
+      </span>
+      {signals.map((s, i) => (
+        <span
+          key={i}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            s.positive
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "bg-amber-500/10 text-amber-600"
+          }`}
+        >
+          <span className="opacity-70">{s.label}:</span> {s.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Reasons (matcher output, human-readable) ────────────────────────────
+
+function Reasons({ reasons }: { reasons: Record<string, unknown> }) {
+  const formatted = Object.entries(reasons).map(([k, v]) => {
+    if (typeof v === "number") {
+      // Scoring metrics: render as percentages
+      if (["levenshtein", "jaccard", "nameSimilarity", "amountSimilarity", "companyNameScore"].includes(k)) {
+        return { key: k, label: humanLabel(k), value: `${(v * 100).toFixed(0)}%` };
+      }
+      return { key: k, label: humanLabel(k), value: v.toString() };
+    }
+    return { key: k, label: humanLabel(k), value: String(v) };
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] uppercase tracking-[0.04em] font-medium text-foreground/35">
+        Match-Grund
+      </span>
+      {formatted.map((r) => (
+        <span
+          key={r.key}
+          className="rounded-full bg-foreground/[0.04] px-2 py-0.5 text-[10px] font-medium text-foreground/55"
+          title={`${r.key}: ${String(reasons[r.key])}`}
+        >
+          <span className="text-foreground/35">{r.label}:</span> {r.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function humanLabel(key: string): string {
+  const map: Record<string, string> = {
+    match: "Methode",
+    domain: "Domain",
+    slug: "Slug",
+    nameSimilarity: "Name-Sim",
+    levenshtein: "Levenshtein",
+    jaccard: "Jaccard",
+    sameCountry: "Country",
+    sameStage: "Stage",
+    amountSimilarity: "Amount-Sim",
+    companyNameScore: "Company-Name",
+    fuzzy_name: "Fuzzy-Name",
+    fuzzy_round: "Fuzzy-Round",
+  };
+  return map[key] ?? key;
 }
