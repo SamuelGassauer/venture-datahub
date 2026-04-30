@@ -19,11 +19,20 @@ export async function GET() {
   const authError = await requireAuth();
   if (authError instanceof NextResponse) return authError;
 
-  const session = driver().session({ defaultAccessMode: "READ" });
+  // One Neo4j session per concurrent query — sharing a session across
+  // Promise.all triggers 50N42 (see v1/funding-rounds/route.ts:92).
+  const runRead = async (cypher: string) => {
+    const s = driver().session({ defaultAccessMode: "READ" });
+    try {
+      return await s.run(cypher);
+    } finally {
+      await s.close();
+    }
+  };
 
   try {
     const [roundsRes, companiesRes, investorsRes, dedupPending] = await Promise.all([
-      session.run(`
+      runRead(`
         MATCH (fr:FundingRound)<-[:RAISED]-(c:Company)
         WHERE c.country IN ${EUROPE_CYPHER_LIST}
         OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
@@ -41,7 +50,7 @@ export async function GET() {
                investorCount,
                COALESCE(fr.announcedDate, articleDate) AS effectiveDate
       `),
-      session.run(`
+      runRead(`
         MATCH (c:Company)
         WHERE c.country IN ${EUROPE_CYPHER_LIST}
         OPTIONAL MATCH (c)-[:RAISED]->(fr:FundingRound)
@@ -65,7 +74,7 @@ export async function GET() {
                c.sector AS sector,
                c.website AS website
       `),
-      session.run(`
+      runRead(`
         MATCH (inv:InvestorOrg)
         OPTIONAL MATCH (inv)-[p:PARTICIPATED_IN]->(fr:FundingRound)
         WITH inv, count(DISTINCT fr) AS dealCount,
@@ -244,7 +253,5 @@ export async function GET() {
       { error: error instanceof Error ? error.message : "Failed to compute overview" },
       { status: 500 }
     );
-  } finally {
-    await session.close();
   }
 }
