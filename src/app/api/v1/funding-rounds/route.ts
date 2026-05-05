@@ -3,7 +3,7 @@ import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
-import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
+import { getPostedRoundsMap, parsePostedMode } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +53,10 @@ export async function GET(request: NextRequest) {
   const conditions: string[] = [];
   const params: Record<string, unknown> = { skip: neo4j.int(skip), limit: neo4j.int(limit + 1) };
 
+  const postsMap = await getPostedRoundsMap();
+
   if (postedMode === "posted") {
-    const postedIds = await getPostedRoundIds();
+    const postedIds = Array.from(postsMap.keys());
     if (postedIds.length === 0) {
       return NextResponse.json({
         data: [],
@@ -105,16 +107,17 @@ export async function GET(request: NextRequest) {
         OPTIONAL MATCH (fr)-[:SOURCED_FROM]->(a:Article)
         WITH fr, c, min(a.publishedAt) AS articleDate
         OPTIONAL MATCH (allInv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
-        WITH fr.uuid AS roundUuid, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
+        WITH fr.uuid AS roundUuid, id(fr) AS roundNeo4jId, fr.amount AS originalAmount, fr.amountUsd AS amountUsd,
              fr.currency AS currency, fr.fxRate AS fxRate,
              fr.stage AS stage, fr.confidence AS confidence,
              fr.announcedDate AS announcedDate,
              c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+             c.logoUrl AS startupLogoUrl,
              COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
              articleDate,
-             collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role }) AS investors
+             collect({ uuid: allInv.uuid, name: allInv.name, role: rel.role, logoUrl: allInv.logoUrl }) AS investors
         ${investorCondition}
-        RETURN roundUuid, startupUuid, startupName, startupNormalizedName,
+        RETURN roundUuid, roundNeo4jId, startupUuid, startupName, startupNormalizedName, startupLogoUrl,
                originalAmount, amountUsd, currency, fxRate, stage, confidence,
                announcedDate, articleDate, effectiveDate, investors
         ORDER BY ${sortField} ${sortDir}
@@ -145,12 +148,15 @@ export async function GET(request: NextRequest) {
       const announcedDate = toStr(r.get("announcedDate"));
       const articleDate = toStr(r.get("articleDate"));
       const effectiveDate = announcedDate || (articleDate ? articleDate.substring(0, 10) : null);
-      const rawInvestors = r.get("investors") as { uuid: string | null; name: string | null; role: string | null }[];
+      const rawInvestors = r.get("investors") as { uuid: string | null; name: string | null; role: string | null; logoUrl: string | null }[];
+      const neoId = toNum(r.get("roundNeo4jId"));
+      const postData = neoId != null ? (postsMap.get(neoId) ?? null) : null;
 
       return {
         roundExternalId: roundUuid,
         startupExternalId: startupId,
         startupName: toStr(r.get("startupName")),
+        startupLogoUrl: toStr(r.get("startupLogoUrl")),
         investmentDate: effectiveDate,
         originalAmount: toNum(r.get("originalAmount")) || null,
         totalRoundSizeUsd: toNum(r.get("amountUsd")),
@@ -164,8 +170,10 @@ export async function GET(request: NextRequest) {
             externalId: toStr(i.uuid),
             name: toStr(i.name),
             role: mapRole(i.role),
+            logoUrl: toStr(i.logoUrl),
           })),
         updatedAt: effectiveDate || new Date().toISOString(),
+        post: postData,
       };
     });
 

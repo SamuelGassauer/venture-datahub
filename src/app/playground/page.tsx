@@ -81,7 +81,7 @@ const ENDPOINTS: Endpoint[] = [
     icon: Building2,
     color: "emerald",
     description: "Venture-funded companies",
-    fields: ["externalId", "name", "hq", "sector", "stage", "fundingRounds", "foundedAt", "website"],
+    fields: ["externalId", "name", "logoUrl", "hq", "sector", "stage", "fundingRounds", "foundedAt", "website"],
   },
   {
     id: "investments",
@@ -90,7 +90,7 @@ const ENDPOINTS: Endpoint[] = [
     icon: Handshake,
     color: "violet",
     description: "1 record per fund participation",
-    fields: ["fundName", "startupName", "stage", "totalRoundSizeUsd", "role", "coInvestors", "investmentDate"],
+    fields: ["fundName", "fundLogoUrl", "startupName", "startupLogoUrl", "stage", "totalRoundSizeUsd", "role", "coInvestors", "investmentDate"],
   },
   {
     id: "funding-rounds",
@@ -99,7 +99,7 @@ const ENDPOINTS: Endpoint[] = [
     icon: CircleDollarSign,
     color: "amber",
     description: "Round-based with all investors",
-    fields: ["roundExternalId", "startupName", "stage", "totalRoundSizeUsd", "investors", "investmentDate"],
+    fields: ["roundExternalId", "startupName", "startupLogoUrl", "stage", "totalRoundSizeUsd", "investors", "investmentDate", "post"],
   },
   {
     id: "stats-funding-rounds",
@@ -1232,7 +1232,8 @@ export default function PlaygroundPage() {
                               const val = record[field];
                               const isUsd = usdFields.includes(field);
                               const isId = field === "externalId" || field.endsWith("ExternalId");
-                              const isLogo = field === "logoUrl";
+                              const isLogo = field === "logoUrl" || field === "startupLogoUrl" || field === "fundLogoUrl";
+                              const isPost = field === "post" && val != null && typeof val === "object";
                               const isInvestors = field === "investors" && Array.isArray(val);
                               const isCoInvestors = field === "coInvestors" && Array.isArray(val);
                               const isFundingRounds = field === "fundingRounds" && Array.isArray(val);
@@ -1246,7 +1247,7 @@ export default function PlaygroundPage() {
                                   } ${
                                     isId ? "text-white/20" : isUsd ? "text-emerald-400/70" : "text-white/50"
                                   }`}
-                                  title={isLogo || isChips ? undefined : formatValue(val)}
+                                  title={isLogo || isChips || isPost ? undefined : formatValue(val)}
                                 >
                                   {isLogo ? (
                                     val ? (
@@ -1254,6 +1255,10 @@ export default function PlaygroundPage() {
                                     ) : (
                                       <span className="text-white/15">—</span>
                                     )
+                                  ) : isPost ? (
+                                    <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-emerald-500/12 text-emerald-400">
+                                      ✓ Post
+                                    </span>
                                   ) : isFundingRounds ? (
                                     <div className="flex flex-wrap gap-1">
                                       {(val as { stage: string | null; amountUsd: number | null; investors: { name: string; role: string }[] }[]).map((round, j) => (
@@ -1322,10 +1327,22 @@ export default function PlaygroundPage() {
                                 <div className="px-6 py-3">
                                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
                                     {Object.entries(record).map(([key, val]) => (
-                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" || key === "fundingRounds" || key === "coInvestors" || key === "portfolioCompanies" ? "col-span-2 lg:col-span-3" : ""}`}>
+                                      <div key={key} className={`flex flex-col gap-0.5 ${key === "investors" || key === "fundingRounds" || key === "coInvestors" || key === "portfolioCompanies" || key === "post" ? "col-span-2 lg:col-span-3" : ""}`}>
                                         <span className="text-[9px] uppercase tracking-[0.06em] font-medium text-white/15">{key}</span>
-                                        {key === "logoUrl" && val ? (
+                                        {(key === "logoUrl" || key === "startupLogoUrl" || key === "fundLogoUrl") && val ? (
                                           <img src={String(val)} alt="" className="h-8 w-8 rounded-[6px] object-contain bg-white/10" />
+                                        ) : key === "post" ? (
+                                          val && typeof val === "object" ? (
+                                            <div className="rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-3 py-2 mt-0.5">
+                                              <div className="flex items-center gap-2 mb-1.5">
+                                                <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-emerald-500/12 text-emerald-400">✓ Veröffentlicht</span>
+                                                <span className="text-[10px] text-white/25 ml-auto">{String((val as { publishedAt: string }).publishedAt).substring(0, 10)}</span>
+                                              </div>
+                                              <p className="text-[11px] text-white/45 leading-relaxed line-clamp-3">{String((val as { content: string }).content)}</p>
+                                            </div>
+                                          ) : (
+                                            <span className="text-[11px] text-white/15 italic">null</span>
+                                          )
                                         ) : key === "fundingRounds" && Array.isArray(val) ? (
                                           <div className="flex flex-col gap-2 mt-1">
                                             {(val as { roundExternalId?: string; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId?: string; name: string; role: string }[] }[]).map((round, j) => (
@@ -1370,15 +1387,18 @@ export default function PlaygroundPage() {
                                           </div>
                                         ) : key === "investors" && Array.isArray(val) ? (
                                           <div className="flex flex-wrap gap-1.5 mt-0.5">
-                                            {(val as { externalId?: string; name: string; role: string }[]).map((inv, j) => (
+                                            {(val as { externalId?: string; name: string; role: string; logoUrl?: string | null }[]).map((inv, j) => (
                                               <span
                                                 key={j}
-                                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                                                   inv.role === "LEAD"
                                                     ? "bg-amber-500/15 text-amber-400"
                                                     : "bg-white/[0.06] text-white/45"
                                                 }`}
                                               >
+                                                {inv.logoUrl && (
+                                                  <img src={inv.logoUrl} alt="" className="h-3.5 w-3.5 rounded-[3px] object-contain bg-white/10 shrink-0" />
+                                                )}
                                                 {inv.name}
                                                 {inv.role === "LEAD" && (
                                                   <span className="text-[9px] uppercase tracking-wider text-amber-500/60">Lead</span>

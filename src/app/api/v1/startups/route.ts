@@ -3,7 +3,7 @@ import neo4j from "neo4j-driver";
 import driver from "@/lib/neo4j";
 import { requireApiKey } from "@/lib/api-auth";
 import { EUROPE_CYPHER_LIST } from "@/lib/european-countries";
-import { getPostedRoundIds, parsePostedMode } from "@/lib/posted-rounds";
+import { getPostedRoundsMap, parsePostedMode, type PostData } from "@/lib/posted-rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
   const sortDir = searchParams.get("dir") === "desc" ? "DESC" : "ASC";
 
   const postedMode = parsePostedMode(searchParams);
-  const postedIds = postedMode === "posted" ? await getPostedRoundIds() : null;
+  const postsMap = await getPostedRoundsMap();
+  const postedIds = postedMode === "posted" ? Array.from(postsMap.keys()) : null;
   if (postedIds && postedIds.length === 0) {
     return NextResponse.json({
       data: [],
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
 
     const companyNames = companyRecords.map((r) => toStr(r.get("c").properties.name)).filter(Boolean) as string[];
 
-    const roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[] }[]> = {};
+    const roundsByCompany: Record<string, { roundExternalId: string | null; stage: string | null; amountUsd: number | null; date: string | null; investors: { externalId: string | null; name: string | null; role: string | null }[]; post: PostData | null }[]> = {};
 
     if (companyNames.length > 0) {
       const roundsParams: Record<string, unknown> = { companyNames };
@@ -152,7 +153,8 @@ export async function GET(request: NextRequest) {
         OPTIONAL MATCH (inv:InvestorOrg)-[rel:PARTICIPATED_IN]->(fr)
         WITH c.name AS companyName, fr,
              collect(CASE WHEN inv.name IS NOT NULL THEN { uuid: inv.uuid, name: inv.name, role: rel.role } ELSE NULL END) AS rawInvestors
-        RETURN companyName, fr.uuid AS roundUuid, fr.stage AS stage, fr.amountUsd AS amountUsd,
+        RETURN companyName, fr.uuid AS roundUuid, id(fr) AS roundNeo4jId,
+               fr.stage AS stage, fr.amountUsd AS amountUsd,
                COALESCE(fr.date, fr.announcedDate) AS date,
                [i IN rawInvestors WHERE i IS NOT NULL] AS investors
         ORDER BY date DESC
@@ -168,12 +170,17 @@ export async function GET(request: NextRequest) {
             role: i.role ? toStr(i.role) : "participant",
           }));
         const amountRaw = r.get("amountUsd");
+        const neoIdRaw = r.get("roundNeo4jId");
+        const neoId = neoIdRaw != null && typeof neoIdRaw === "object" && "toNumber" in neoIdRaw
+          ? (neoIdRaw as { toNumber: () => number }).toNumber()
+          : typeof neoIdRaw === "number" ? neoIdRaw : null;
         roundsByCompany[name].push({
           roundExternalId: toStr(r.get("roundUuid")),
           stage: toStr(r.get("stage")),
           amountUsd: amountRaw != null ? (typeof amountRaw === "object" && "toNumber" in amountRaw ? (amountRaw as { toNumber: () => number }).toNumber() : Number(amountRaw)) : null,
           date: toStr(r.get("date")),
           investors: invs,
+          post: neoId != null ? (postsMap.get(neoId) ?? null) : null,
         });
       }
     }
@@ -189,6 +196,7 @@ export async function GET(request: NextRequest) {
         externalId: toStr(c.uuid) || toStr(c.normalizedName),
         name,
         website: toStr(c.website),
+        logoUrl: toStr(c.logoUrl),
         hq: toStr(r.get("hq")) || toStr(c.country),
         description: toStr(c.description),
         foundedAt: c.foundedYear ? `${c.foundedYear}-01-01` : null,

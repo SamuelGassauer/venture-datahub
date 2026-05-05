@@ -8,6 +8,11 @@ type InvestorInRound = {
   role: string;
 };
 
+type FundingRoundPost = {
+  content: string;
+  publishedAt: string;
+};
+
 type FundingRoundRecord = {
   roundExternalId: string | null;
   startupExternalId: string | null;
@@ -19,6 +24,7 @@ type FundingRoundRecord = {
   confidence: number | null;
   investors: InvestorInRound[];
   updatedAt: string;
+  post: FundingRoundPost | null;
 };
 
 type ApiResponse = {
@@ -154,6 +160,30 @@ describe("/api/v1/funding-rounds", () => {
   it("does NOT have coInvestors (that's investments)", () => {
     for (const fr of firstResponse.data) {
       expect(fr).not.toHaveProperty("coInvestors");
+    }
+  });
+
+  // ── Post field (round narrative) ────────────────────────────────────
+
+  it("every record has a post field (object or null)", () => {
+    for (const fr of firstResponse.data) {
+      expect(fr).toHaveProperty("post");
+      if (fr.post !== null) {
+        expect(typeof fr.post).toBe("object");
+        expect(typeof fr.post.content).toBe("string");
+        expect(typeof fr.post.publishedAt).toBe("string");
+        // ISO 8601 datetime
+        expect(fr.post.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      }
+    }
+  });
+
+  it("default scope (posted-only) returns only rounds with non-null post", async () => {
+    const res = await fetchRounds({ limit: "20", posted: "true" });
+    if (res.data.length === 0) return; // dev env with no posts
+    for (const fr of res.data) {
+      expect(fr.post).not.toBeNull();
+      expect(typeof fr.post!.content).toBe("string");
     }
   });
 });

@@ -100,17 +100,18 @@ export async function GET(request: NextRequest) {
         WITH inv, rel, fr, c, min(a.publishedAt) AS articleDate
         OPTIONAL MATCH (coInv:InvestorOrg)-[:PARTICIPATED_IN]->(fr)
         WHERE coInv.name <> inv.name
-        WITH inv.uuid AS fundUuid, inv.name AS fundName,
+        WITH inv.uuid AS fundUuid, inv.name AS fundName, inv.logoUrl AS fundLogoUrl,
              rel.role AS role,
              fr.uuid AS roundUuid, fr.amountUsd AS amountUsd, fr.currency AS currency,
              fr.stage AS stage, fr.confidence AS confidence,
              fr.announcedDate AS announcedDate,
              c.uuid AS startupUuid, c.name AS startupName, c.normalizedName AS startupNormalizedName,
+             c.logoUrl AS startupLogoUrl,
              COALESCE(fr.announcedDate, articleDate) AS effectiveDate,
              articleDate,
              collect(DISTINCT coInv.name) AS coInvestorNames
-        RETURN fundUuid, fundName, role, roundUuid, startupUuid, startupName, startupNormalizedName,
-               amountUsd, currency, stage, confidence, announcedDate, articleDate, effectiveDate, coInvestorNames
+        RETURN fundUuid, fundName, fundLogoUrl, role, roundUuid, startupUuid, startupName, startupNormalizedName,
+               startupLogoUrl, amountUsd, currency, stage, confidence, announcedDate, articleDate, effectiveDate, coInvestorNames
         ORDER BY ${sortField} ${sortDir}
         SKIP $skip LIMIT $limit
       `, params),
@@ -139,8 +140,10 @@ export async function GET(request: NextRequest) {
         externalId: fundUuid && roundUuid ? `${fundUuid}__${roundUuid}` : null,
         fundExternalId: fundUuid,
         fundName: toStr(r.get("fundName")),
+        fundLogoUrl: toStr(r.get("fundLogoUrl")),
         startupExternalId: startupId,
         startupName: toStr(r.get("startupName")),
+        startupLogoUrl: toStr(r.get("startupLogoUrl")),
         investmentDate: effectiveDate,
         investmentAmountUsd: null,
         totalRoundSizeUsd: toNum(r.get("amountUsd")),

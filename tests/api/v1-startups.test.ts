@@ -2,12 +2,18 @@ import { describe, it, expect, beforeAll } from "vitest";
 
 const BASE = process.env.TEST_API_URL || "http://localhost:3000";
 
+type FundingRoundPost = {
+  content: string;
+  publishedAt: string;
+};
+
 type FundingRound = {
   roundExternalId: string | null;
   stage: string | null;
   amountUsd: number | null;
   date: string | null;
   investors: { externalId: string | null; name: string | null; role: string | null }[];
+  post: FundingRoundPost | null;
 };
 
 type StartupRecord = {
@@ -109,6 +115,29 @@ describe("/api/v1/startups", () => {
           expect(inv).toHaveProperty("name");
           expect(inv).toHaveProperty("role");
         }
+      }
+    }
+  });
+
+  it("each nested funding round has a post field (object or null)", () => {
+    for (const s of firstResponse.data) {
+      for (const fr of s.fundingRounds) {
+        expect(fr).toHaveProperty("post");
+        if (fr.post !== null) {
+          expect(typeof fr.post.content).toBe("string");
+          expect(typeof fr.post.publishedAt).toBe("string");
+          expect(fr.post.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        }
+      }
+    }
+  });
+
+  it("nested rounds in default scope (posted-only) all have non-null post", async () => {
+    const res = await fetchStartups({ limit: "10", posted: "true" });
+    if (res.data.length === 0) return;
+    for (const s of res.data) {
+      for (const fr of s.fundingRounds) {
+        expect(fr.post).not.toBeNull();
       }
     }
   });
